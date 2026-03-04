@@ -31,19 +31,19 @@ func (h *AuthHandler) Login(c echo.Context) error {
 		return apiPkg.BadRequest(c, "invalid request body")
 	}
 	if req.Username == "" || req.Password == "" {
-		return apiPkg.BadRequest(c, "username and password are required")
+		return apiPkg.BadRequest(c, "Benutzername und Passwort sind erforderlich")
 	}
 
 	resp, err := h.authService.Login(c.Request().Context(), req)
 	if err != nil {
 		if errors.Is(err, auth.ErrInvalidCredentials) {
-			return apiPkg.Unauthorized(c, "invalid username or password")
+			return apiPkg.Unauthorized(c, "Benutzername oder Passwort ist falsch")
 		}
 		if errors.Is(err, auth.ErrUserInactive) {
-			return apiPkg.Forbidden(c, "account is inactive")
+			return apiPkg.Forbidden(c, "Dieses Konto ist deaktiviert")
 		}
 		slog.Error("login failed", slog.Any("error", err))
-		return apiPkg.InternalError(c, "login failed")
+		return apiPkg.InternalError(c, "Anmeldung fehlgeschlagen – interner Serverfehler. Bitte Backend-Logs pruefen.")
 	}
 
 	return apiPkg.Success(c, resp)

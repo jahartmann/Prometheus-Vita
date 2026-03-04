@@ -17,7 +17,13 @@ api.interceptors.request.use((config) => {
 });
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Unwrap { success, data } envelope from backend
+    if (response.data && typeof response.data === "object" && "success" in response.data && "data" in response.data) {
+      response.data = response.data.data;
+    }
+    return response;
+  },
   async (error) => {
     const originalRequest = error.config;
 
@@ -35,7 +41,8 @@ api.interceptors.response.use(
           refresh_token: refreshToken,
         });
 
-        const { access_token, refresh_token } = response.data;
+        const responseData = response.data?.data ?? response.data;
+        const { access_token, refresh_token } = responseData;
         useAuthStore.getState().setAccessToken(access_token);
         if (refresh_token) {
           useAuthStore.getState().setRefreshToken(refresh_token);

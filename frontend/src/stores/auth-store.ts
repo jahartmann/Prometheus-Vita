@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import axios from "axios";
 import type { User, LoginRequest, LoginResponse } from "@/types/api";
 import api from "@/lib/api";
 
@@ -43,10 +44,14 @@ export const useAuthStore = create<AuthState>()(
             isLoading: false,
           });
         } catch (err: unknown) {
-          const message =
-            err instanceof Error ? err.message : "Login fehlgeschlagen";
+          let message = "Login fehlgeschlagen";
+          if (axios.isAxiosError(err) && err.response?.data?.error) {
+            message = err.response.data.error;
+          } else if (err instanceof Error) {
+            message = err.message;
+          }
           set({ error: message, isLoading: false });
-          throw err;
+          throw new Error(message);
         }
       },
 

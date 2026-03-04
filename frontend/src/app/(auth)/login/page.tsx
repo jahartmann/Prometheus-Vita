@@ -29,8 +29,8 @@ export default function LoginPage() {
     try {
       await login({ username, password });
       router.push("/");
-    } catch {
-      setError("Benutzername oder Passwort ist falsch.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Login fehlgeschlagen. Bitte versuchen Sie es ernaet.");
     }
   };
 
