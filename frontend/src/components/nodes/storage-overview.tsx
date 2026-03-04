@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Database, HardDrive, ChevronDown, ChevronRight } from "lucide-react";
+import { Database, HardDrive, ChevronDown, ChevronRight, Layers } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatBytes, getUsageBgColor } from "@/lib/utils";
 import type { NodeStatus } from "@/types/api";
@@ -24,9 +25,34 @@ interface StorageItem {
   active: boolean;
 }
 
+const storageTypeLabels: Record<string, string> = {
+  zfspool: "ZFS Pool",
+  dir: "Verzeichnis",
+  lvm: "LVM",
+  lvmthin: "LVM-Thin",
+  nfs: "NFS",
+  cifs: "CIFS/SMB",
+  cephfs: "CephFS",
+  rbd: "Ceph RBD",
+  btrfs: "BTRFS",
+  zfs: "ZFS (Dataset)",
+  iscsi: "iSCSI",
+  iscsidirect: "iSCSI Direct",
+  glusterfs: "GlusterFS",
+  pbs: "PBS",
+};
+
+function getStorageTypeLabel(type: string): string {
+  return storageTypeLabels[type] || type.toUpperCase();
+}
+
+function isZfsType(type: string): boolean {
+  return type === "zfspool" || type === "zfs";
+}
+
 export function StorageOverview({ nodeId, status }: StorageOverviewProps) {
   const [storages, setStorages] = useState<StorageItem[]>([]);
-  const [showDetails, setShowDetails] = useState(false);
+  const [showDetails, setShowDetails] = useState(true);
 
   useEffect(() => {
     api
@@ -42,6 +68,9 @@ export function StorageOverview({ nodeId, status }: StorageOverviewProps) {
   const freeSpace = totalSpace - usedSpace;
   const overallPercent = totalSpace > 0 ? (usedSpace / totalSpace) * 100 : 0;
 
+  const zfsPools = storages.filter((s) => isZfsType(s.type));
+  const otherStorages = storages.filter((s) => !isZfsType(s.type));
+
   return (
     <div className="space-y-4">
       {/* Summary Cards */}
@@ -55,6 +84,7 @@ export function StorageOverview({ nodeId, status }: StorageOverviewProps) {
               <div>
                 <p className="text-sm text-muted-foreground">Gesamt-Speicher</p>
                 <p className="text-xl font-bold">{formatBytes(totalSpace)}</p>
+                <p className="text-xs text-muted-foreground">{storages.length} Storage(s)</p>
               </div>
             </div>
           </CardContent>
@@ -123,7 +153,55 @@ export function StorageOverview({ nodeId, status }: StorageOverviewProps) {
         </Card>
       )}
 
-      {/* Expandable Detail Table */}
+      {/* ZFS Pools - prominent display */}
+      {zfsPools.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <Layers className="h-4 w-4 text-primary" />
+              <CardTitle className="text-base">ZFS Pools</CardTitle>
+              <Badge variant="outline" className="text-xs">{zfsPools.length} Pool(s)</Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {zfsPools.map((pool) => (
+              <div key={pool.storage} className="rounded-lg border p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Layers className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-medium">{pool.storage}</span>
+                    <Badge variant="outline" className="text-xs">
+                      {getStorageTypeLabel(pool.type)}
+                    </Badge>
+                    <Badge variant={pool.active ? "success" : "secondary"} className="text-xs">
+                      {pool.active ? "Aktiv" : "Inaktiv"}
+                    </Badge>
+                  </div>
+                  <span className="text-sm font-mono">
+                    {pool.usage_percent.toFixed(1)}%
+                  </span>
+                </div>
+                <div className="h-2.5 w-full rounded-full bg-secondary">
+                  <div
+                    className={`h-2.5 rounded-full transition-all ${getUsageBgColor(pool.usage_percent)}`}
+                    style={{ width: `${Math.min(pool.usage_percent, 100)}%` }}
+                  />
+                </div>
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>Belegt: {formatBytes(pool.used)}</span>
+                  <span>Verfuegbar: {formatBytes(pool.available)}</span>
+                  <span>Gesamt: {formatBytes(pool.total)}</span>
+                </div>
+                {pool.content && (
+                  <p className="text-xs text-muted-foreground">Inhalt: {pool.content}</p>
+                )}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* All Storage Details Table */}
       {storages.length > 0 && (
         <Card>
           <CardHeader className="py-3 px-4">
@@ -133,7 +211,7 @@ export function StorageOverview({ nodeId, status }: StorageOverviewProps) {
               onClick={() => setShowDetails(!showDetails)}
             >
               <CardTitle className="text-base">
-                Storage-Details ({storages.length})
+                Alle Storage-Pools ({storages.length})
               </CardTitle>
               {showDetails ? (
                 <ChevronDown className="h-4 w-4 text-muted-foreground" />
@@ -150,6 +228,7 @@ export function StorageOverview({ nodeId, status }: StorageOverviewProps) {
                     <th className="p-3 text-left font-medium">Name</th>
                     <th className="p-3 text-left font-medium">Typ</th>
                     <th className="p-3 text-left font-medium">Inhalt</th>
+                    <th className="p-3 text-left font-medium">Status</th>
                     <th className="p-3 text-right font-medium">Belegt</th>
                     <th className="p-3 text-right font-medium">Gesamt</th>
                     <th className="p-3 text-right font-medium">Nutzung</th>
@@ -160,12 +239,25 @@ export function StorageOverview({ nodeId, status }: StorageOverviewProps) {
                     <tr key={s.storage} className="border-b last:border-0">
                       <td className="p-3">
                         <div className="flex items-center gap-2">
-                          <Database className="h-4 w-4 text-muted-foreground" />
+                          {isZfsType(s.type) ? (
+                            <Layers className="h-4 w-4 text-primary" />
+                          ) : (
+                            <Database className="h-4 w-4 text-muted-foreground" />
+                          )}
                           <span className="font-medium">{s.storage}</span>
                         </div>
                       </td>
-                      <td className="p-3 text-muted-foreground">{s.type}</td>
+                      <td className="p-3">
+                        <Badge variant={isZfsType(s.type) ? "default" : "outline"} className="text-xs">
+                          {getStorageTypeLabel(s.type)}
+                        </Badge>
+                      </td>
                       <td className="p-3 text-muted-foreground">{s.content}</td>
+                      <td className="p-3">
+                        <Badge variant={s.active ? "success" : "secondary"} className="text-xs">
+                          {s.active ? "Aktiv" : "Inaktiv"}
+                        </Badge>
+                      </td>
                       <td className="p-3 text-right">{formatBytes(s.used)}</td>
                       <td className="p-3 text-right">{formatBytes(s.total)}</td>
                       <td className="p-3 text-right">

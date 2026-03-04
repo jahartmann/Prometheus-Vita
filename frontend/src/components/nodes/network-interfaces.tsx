@@ -17,7 +17,7 @@ interface NetworkInterfacesProps {
 export function NetworkInterfaces({ nodeId, interfaces, onRefresh }: NetworkInterfacesProps) {
   const [editingIface, setEditingIface] = useState<string | null>(null);
   const [aliasName, setAliasName] = useState("");
-  const [showDetails, setShowDetails] = useState(false);
+  const [showDetails, setShowDetails] = useState(true);
 
   const handleSaveAlias = async (iface: string) => {
     await networkApi.setAlias(nodeId, iface, { display_name: aliasName });

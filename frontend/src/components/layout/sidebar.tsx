@@ -8,7 +8,6 @@ import {
   Server,
   Settings,
   Flame,
-  MessageSquare,
   ChevronDown,
   ChevronRight,
   Monitor,
@@ -19,6 +18,9 @@ import {
   Plus,
   Brain,
   Zap,
+  Archive,
+  Shield,
+  Disc,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -35,16 +37,28 @@ interface NavItem {
   href: string;
   icon: React.ComponentType<{ className?: string }>;
   matchPrefix?: string;
+  excludePrefix?: string[];
 }
 
-const navItems: NavItem[] = [
+const mainNavItems: NavItem[] = [
   { label: "Dashboard", href: "/", icon: LayoutDashboard },
+];
+
+const featureNavItems: NavItem[] = [
+  { label: "Backups", href: "/backups", icon: Archive, matchPrefix: "/backups" },
+  { label: "Disaster Recovery", href: "/disaster-recovery", icon: Shield, matchPrefix: "/disaster-recovery" },
 ];
 
 const bottomNavItems: NavItem[] = [
   { label: "Automatisierung", href: "/settings/notifications", icon: Zap, matchPrefix: "/settings/notifications" },
   { label: "KI-Assistent", href: "/chat", icon: Brain, matchPrefix: "/chat" },
-  { label: "Einstellungen", href: "/settings/nodes", icon: Settings, matchPrefix: "/settings" },
+  {
+    label: "Einstellungen",
+    href: "/settings/nodes",
+    icon: Settings,
+    matchPrefix: "/settings",
+    excludePrefix: ["/settings/notifications"],
+  },
 ];
 
 interface NodeSubItem {
@@ -55,9 +69,10 @@ interface NodeSubItem {
 
 const nodeSubItems: NodeSubItem[] = [
   { label: "VMs & Container", path: "vms", icon: Monitor },
-  { label: "Netzwerk", path: "network", icon: Network },
   { label: "Storage", path: "storage", icon: HardDrive },
+  { label: "Netzwerk", path: "network", icon: Network },
   { label: "Backups", path: "backups", icon: FolderArchive },
+  { label: "ISOs & Templates", path: "iso-templates", icon: Disc },
   { label: "Monitoring", path: "monitoring", icon: BarChart3 },
 ];
 
@@ -87,8 +102,11 @@ export function Sidebar({ collapsed = false }: SidebarProps) {
     }
   }, [pathname]);
 
-  const isActive = (href: string, matchPrefix?: string) => {
+  const isActive = (href: string, matchPrefix?: string, excludePrefix?: string[]) => {
     if (matchPrefix) {
+      if (excludePrefix?.some((ex) => pathname.startsWith(ex))) {
+        return false;
+      }
       return pathname.startsWith(matchPrefix);
     }
     return pathname === href;
@@ -107,7 +125,7 @@ export function Sidebar({ collapsed = false }: SidebarProps) {
   };
 
   const renderNavLink = (item: NavItem) => {
-    const active = isActive(item.href, item.matchPrefix);
+    const active = isActive(item.href, item.matchPrefix, item.excludePrefix);
     const Icon = item.icon;
 
     const link = (
@@ -140,8 +158,9 @@ export function Sidebar({ collapsed = false }: SidebarProps) {
 
   if (collapsed) {
     const allCollapsedItems: NavItem[] = [
-      ...navItems,
+      ...mainNavItems,
       { label: "Server", href: "/nodes", icon: Server, matchPrefix: "/nodes" },
+      ...featureNavItems,
       ...bottomNavItems,
     ];
 
@@ -169,7 +188,7 @@ export function Sidebar({ collapsed = false }: SidebarProps) {
         </div>
 
         <nav className="flex-1 space-y-1 overflow-y-auto p-2">
-          {navItems.map((item) => renderNavLink(item))}
+          {mainNavItems.map((item) => renderNavLink(item))}
 
           {/* Server (Nodes) Tree */}
           <Collapsible open={nodesOpen} onOpenChange={setNodesOpen}>
@@ -253,8 +272,12 @@ export function Sidebar({ collapsed = false }: SidebarProps) {
             </CollapsibleContent>
           </Collapsible>
 
+          {/* Feature Nav Items */}
+          {featureNavItems.map((item) => renderNavLink(item))}
+
           <div className="my-2 border-t border-border" />
 
+          {/* Bottom Nav Items */}
           {bottomNavItems.map((item) => renderNavLink(item))}
         </nav>
       </aside>
