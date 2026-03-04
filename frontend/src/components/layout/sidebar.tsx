@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/tooltip";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useNodeStore } from "@/stores/node-store";
+import { useAuthStore } from "@/stores/auth-store";
 import { OnboardNodeDialog } from "@/components/nodes/onboard-node-dialog";
 
 interface NavItem {
@@ -88,7 +89,16 @@ export function Sidebar({ collapsed = false }: SidebarProps) {
   const [onboardOpen, setOnboardOpen] = useState(false);
 
   useEffect(() => {
-    fetchNodes();
+    const token = useAuthStore.getState().accessToken;
+    if (token) {
+      fetchNodes();
+    }
+    const unsub = useAuthStore.subscribe((state) => {
+      if (state.accessToken) {
+        fetchNodes();
+      }
+    });
+    return () => unsub();
   }, [fetchNodes]);
 
   useEffect(() => {

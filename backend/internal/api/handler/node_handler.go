@@ -12,6 +12,17 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
+// handleNodeError maps service-layer errors to the appropriate HTTP response.
+func handleNodeError(c echo.Context, err error, fallbackMsg string) error {
+	if errors.Is(err, repository.ErrNotFound) {
+		return apiPkg.NotFound(c, "node not found")
+	}
+	if errors.Is(err, nodeService.ErrNodeUnreachable) {
+		return apiPkg.ServiceUnavailable(c, "node is unreachable: "+err.Error())
+	}
+	return apiPkg.InternalError(c, fallbackMsg)
+}
+
 type NodeHandler struct {
 	service *nodeService.Service
 }
@@ -62,10 +73,7 @@ func (h *NodeHandler) Get(c echo.Context) error {
 
 	node, err := h.service.GetByID(c.Request().Context(), id)
 	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			return apiPkg.NotFound(c, "node not found")
-		}
-		return apiPkg.InternalError(c, "failed to get node")
+		return handleNodeError(c, err, "failed to get node")
 	}
 
 	return apiPkg.Success(c, node.ToResponse())
@@ -84,10 +92,7 @@ func (h *NodeHandler) Update(c echo.Context) error {
 
 	node, err := h.service.Update(c.Request().Context(), id, req)
 	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			return apiPkg.NotFound(c, "node not found")
-		}
-		return apiPkg.InternalError(c, "failed to update node")
+		return handleNodeError(c, err, "failed to update node")
 	}
 
 	return apiPkg.Success(c, node.ToResponse())
@@ -100,10 +105,7 @@ func (h *NodeHandler) Delete(c echo.Context) error {
 	}
 
 	if err := h.service.Delete(c.Request().Context(), id); err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			return apiPkg.NotFound(c, "node not found")
-		}
-		return apiPkg.InternalError(c, "failed to delete node")
+		return handleNodeError(c, err, "failed to delete node")
 	}
 
 	return apiPkg.NoContent(c)
@@ -117,10 +119,7 @@ func (h *NodeHandler) GetStatus(c echo.Context) error {
 
 	status, err := h.service.GetStatus(c.Request().Context(), id)
 	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			return apiPkg.NotFound(c, "node not found")
-		}
-		return apiPkg.InternalError(c, "failed to get node status")
+		return handleNodeError(c, err, "failed to get node status")
 	}
 
 	return apiPkg.Success(c, status)
@@ -134,10 +133,7 @@ func (h *NodeHandler) GetVMs(c echo.Context) error {
 
 	vms, err := h.service.GetVMs(c.Request().Context(), id)
 	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			return apiPkg.NotFound(c, "node not found")
-		}
-		return apiPkg.InternalError(c, "failed to get VMs")
+		return handleNodeError(c, err, "failed to get VMs")
 	}
 
 	return apiPkg.Success(c, vms)
@@ -151,10 +147,7 @@ func (h *NodeHandler) GetStorage(c echo.Context) error {
 
 	storage, err := h.service.GetStorage(c.Request().Context(), id)
 	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			return apiPkg.NotFound(c, "node not found")
-		}
-		return apiPkg.InternalError(c, "failed to get storage")
+		return handleNodeError(c, err, "failed to get storage")
 	}
 
 	return apiPkg.Success(c, storage)
@@ -184,10 +177,7 @@ func (h *NodeHandler) GetNetworkInterfaces(c echo.Context) error {
 
 	ifaces, err := h.service.GetNetworkInterfaces(c.Request().Context(), id)
 	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			return apiPkg.NotFound(c, "node not found")
-		}
-		return apiPkg.InternalError(c, "failed to get network interfaces")
+		return handleNodeError(c, err, "failed to get network interfaces")
 	}
 
 	return apiPkg.Success(c, ifaces)
@@ -213,10 +203,7 @@ func (h *NodeHandler) SetNetworkAlias(c echo.Context) error {
 	}
 
 	if err := h.service.SetAlias(c.Request().Context(), id, iface, req); err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			return apiPkg.NotFound(c, "node not found")
-		}
-		return apiPkg.InternalError(c, "failed to set network alias")
+		return handleNodeError(c, err, "failed to set network alias")
 	}
 
 	return apiPkg.Success(c, map[string]string{"status": "ok"})
@@ -250,10 +237,7 @@ func (h *NodeHandler) GetDisks(c echo.Context) error {
 
 	disks, err := h.service.GetDisks(c.Request().Context(), id)
 	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			return apiPkg.NotFound(c, "node not found")
-		}
-		return apiPkg.InternalError(c, "failed to get disks")
+		return handleNodeError(c, err, "failed to get disks")
 	}
 
 	return apiPkg.Success(c, disks)
@@ -287,10 +271,7 @@ func (h *NodeHandler) StartVM(c echo.Context) error {
 
 	upid, err := h.service.StartVM(c.Request().Context(), id, vmid, vmType)
 	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			return apiPkg.NotFound(c, "node not found")
-		}
-		return apiPkg.InternalError(c, "failed to start VM")
+		return handleNodeError(c, err, "failed to start VM")
 	}
 
 	return apiPkg.Success(c, map[string]string{"upid": upid})
@@ -304,10 +285,7 @@ func (h *NodeHandler) StopVM(c echo.Context) error {
 
 	upid, err := h.service.StopVM(c.Request().Context(), id, vmid, vmType)
 	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			return apiPkg.NotFound(c, "node not found")
-		}
-		return apiPkg.InternalError(c, "failed to stop VM")
+		return handleNodeError(c, err, "failed to stop VM")
 	}
 
 	return apiPkg.Success(c, map[string]string{"upid": upid})
@@ -321,10 +299,7 @@ func (h *NodeHandler) ShutdownVM(c echo.Context) error {
 
 	upid, err := h.service.ShutdownVM(c.Request().Context(), id, vmid, vmType)
 	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			return apiPkg.NotFound(c, "node not found")
-		}
-		return apiPkg.InternalError(c, "failed to shutdown VM")
+		return handleNodeError(c, err, "failed to shutdown VM")
 	}
 
 	return apiPkg.Success(c, map[string]string{"upid": upid})
@@ -343,10 +318,7 @@ func (h *NodeHandler) SuspendVM(c echo.Context) error {
 
 	upid, err := h.service.SuspendVM(c.Request().Context(), id, vmid)
 	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			return apiPkg.NotFound(c, "node not found")
-		}
-		return apiPkg.InternalError(c, "failed to suspend VM")
+		return handleNodeError(c, err, "failed to suspend VM")
 	}
 
 	return apiPkg.Success(c, map[string]string{"upid": upid})
@@ -365,10 +337,7 @@ func (h *NodeHandler) ResumeVM(c echo.Context) error {
 
 	upid, err := h.service.ResumeVM(c.Request().Context(), id, vmid)
 	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			return apiPkg.NotFound(c, "node not found")
-		}
-		return apiPkg.InternalError(c, "failed to resume VM")
+		return handleNodeError(c, err, "failed to resume VM")
 	}
 
 	return apiPkg.Success(c, map[string]string{"upid": upid})
@@ -382,10 +351,7 @@ func (h *NodeHandler) ListSnapshots(c echo.Context) error {
 
 	snapshots, err := h.service.ListSnapshots(c.Request().Context(), id, vmid, vmType)
 	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			return apiPkg.NotFound(c, "node not found")
-		}
-		return apiPkg.InternalError(c, "failed to list snapshots")
+		return handleNodeError(c, err, "failed to list snapshots")
 	}
 
 	return apiPkg.Success(c, snapshots)
@@ -411,10 +377,7 @@ func (h *NodeHandler) CreateSnapshot(c echo.Context) error {
 
 	upid, err := h.service.CreateSnapshot(c.Request().Context(), id, vmid, vmType, req.Name, req.Description, req.IncludeRAM)
 	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			return apiPkg.NotFound(c, "node not found")
-		}
-		return apiPkg.InternalError(c, "failed to create snapshot")
+		return handleNodeError(c, err, "failed to create snapshot")
 	}
 
 	return apiPkg.Success(c, map[string]string{"upid": upid})
@@ -433,10 +396,7 @@ func (h *NodeHandler) DeleteSnapshot(c echo.Context) error {
 
 	upid, err := h.service.DeleteSnapshot(c.Request().Context(), id, vmid, vmType, snapname)
 	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			return apiPkg.NotFound(c, "node not found")
-		}
-		return apiPkg.InternalError(c, "failed to delete snapshot")
+		return handleNodeError(c, err, "failed to delete snapshot")
 	}
 
 	return apiPkg.Success(c, map[string]string{"upid": upid})
@@ -455,10 +415,7 @@ func (h *NodeHandler) RollbackSnapshot(c echo.Context) error {
 
 	upid, err := h.service.RollbackSnapshot(c.Request().Context(), id, vmid, vmType, snapname)
 	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			return apiPkg.NotFound(c, "node not found")
-		}
-		return apiPkg.InternalError(c, "failed to rollback snapshot")
+		return handleNodeError(c, err, "failed to rollback snapshot")
 	}
 
 	return apiPkg.Success(c, map[string]string{"upid": upid})
@@ -483,10 +440,7 @@ func (h *NodeHandler) BulkVMAction(c echo.Context) error {
 
 	results, err := h.service.BulkVMAction(c.Request().Context(), id, req)
 	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			return apiPkg.NotFound(c, "node not found")
-		}
-		return apiPkg.InternalError(c, "failed to execute bulk VM action")
+		return handleNodeError(c, err, "failed to execute bulk VM action")
 	}
 
 	return apiPkg.Success(c, results)
@@ -500,10 +454,7 @@ func (h *NodeHandler) SyncTags(c echo.Context) error {
 
 	count, err := h.service.SyncTagsFromProxmox(c.Request().Context(), id)
 	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			return apiPkg.NotFound(c, "node not found")
-		}
-		return apiPkg.InternalError(c, "failed to sync tags")
+		return handleNodeError(c, err, "failed to sync tags")
 	}
 
 	return apiPkg.Success(c, map[string]int{"imported": count})
@@ -517,10 +468,7 @@ func (h *NodeHandler) ListISOs(c echo.Context) error {
 
 	isos, err := h.service.ListISOs(c.Request().Context(), id)
 	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			return apiPkg.NotFound(c, "node not found")
-		}
-		return apiPkg.InternalError(c, "failed to list ISOs")
+		return handleNodeError(c, err, "failed to list ISOs")
 	}
 
 	return apiPkg.Success(c, isos)
@@ -534,10 +482,7 @@ func (h *NodeHandler) ListTemplates(c echo.Context) error {
 
 	templates, err := h.service.ListTemplates(c.Request().Context(), id)
 	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			return apiPkg.NotFound(c, "node not found")
-		}
-		return apiPkg.InternalError(c, "failed to list templates")
+		return handleNodeError(c, err, "failed to list templates")
 	}
 
 	return apiPkg.Success(c, templates)
@@ -559,10 +504,7 @@ func (h *NodeHandler) SyncContent(c echo.Context) error {
 
 	upid, err := h.service.SyncContent(c.Request().Context(), id, req)
 	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			return apiPkg.NotFound(c, "node not found")
-		}
-		return apiPkg.InternalError(c, "failed to sync content")
+		return handleNodeError(c, err, "failed to sync content")
 	}
 
 	return apiPkg.Success(c, map[string]string{"upid": upid})
@@ -576,10 +518,7 @@ func (h *NodeHandler) GetVNCProxy(c echo.Context) error {
 
 	proxy, err := h.service.GetVNCProxy(c.Request().Context(), id, vmid, vmType)
 	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			return apiPkg.NotFound(c, "node not found")
-		}
-		return apiPkg.InternalError(c, "failed to get VNC proxy")
+		return handleNodeError(c, err, "failed to get VNC proxy")
 	}
 
 	return apiPkg.Success(c, proxy)

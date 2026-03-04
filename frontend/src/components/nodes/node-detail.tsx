@@ -128,11 +128,11 @@ export function NodeDetail({ node }: NodeDetailProps) {
       .catch(() => {});
   }, [node.id, fetchBackups, fetchSchedules]);
 
-  const cpuUsage = status ? status.cpu_usage : 0;
-  const memUsage = status
+  const cpuUsage = status?.cpu_usage ?? 0;
+  const memUsage = status && status.memory_total
     ? (status.memory_used / status.memory_total) * 100
     : 0;
-  const diskUsage = status
+  const diskUsage = status && status.disk_total
     ? (status.disk_used / status.disk_total) * 100
     : 0;
 

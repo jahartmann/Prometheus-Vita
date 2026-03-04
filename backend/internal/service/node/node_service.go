@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -20,6 +21,9 @@ import (
 	"github.com/google/uuid"
 	gossh "golang.org/x/crypto/ssh"
 )
+
+// ErrNodeUnreachable indicates that the Proxmox node could not be reached.
+var ErrNodeUnreachable = errors.New("node unreachable")
 
 type NetworkInterfaceWithAlias struct {
 	proxmox.NetworkInterface
@@ -251,6 +255,32 @@ func generateEd25519KeyPair() (publicKey, privateKey string, err error) {
 	return pubKeyStr, privKeyStr, nil
 }
 
+// getClientAndNode retrieves the node from the DB, creates a Proxmox client,
+// and resolves the first PVE node name. It wraps connection errors with
+// ErrNodeUnreachable so handlers can return 503 instead of 500.
+func (s *Service) getClientAndNode(ctx context.Context, id uuid.UUID) (*model.Node, *proxmox.Client, string, error) {
+	node, err := s.nodeRepo.GetByID(ctx, id)
+	if err != nil {
+		return nil, nil, "", err
+	}
+
+	client, err := s.clientFactory.CreateClient(node)
+	if err != nil {
+		return nil, nil, "", fmt.Errorf("%w: create proxmox client: %v", ErrNodeUnreachable, err)
+	}
+
+	nodes, err := client.GetNodes(ctx)
+	if err != nil {
+		return nil, nil, "", fmt.Errorf("%w: %v", ErrNodeUnreachable, err)
+	}
+
+	if len(nodes) == 0 {
+		return nil, nil, "", fmt.Errorf("%w: no nodes found in cluster", ErrNodeUnreachable)
+	}
+
+	return node, client, nodes[0], nil
+}
+
 func (s *Service) GetByID(ctx context.Context, id uuid.UUID) (*model.Node, error) {
 	return s.nodeRepo.GetByID(ctx, id)
 }
@@ -350,95 +380,54 @@ func (s *Service) TestConnection(ctx context.Context, req model.TestConnectionRe
 }
 
 func (s *Service) GetStatus(ctx context.Context, id uuid.UUID) (*proxmox.NodeStatus, error) {
-	node, err := s.nodeRepo.GetByID(ctx, id)
+	_, client, pveNode, err := s.getClientAndNode(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 
-	client, err := s.clientFactory.CreateClient(node)
+	status, err := client.GetNodeStatus(ctx, pveNode)
 	if err != nil {
-		return nil, fmt.Errorf("create proxmox client: %w", err)
+		return nil, fmt.Errorf("%w: get node status: %v", ErrNodeUnreachable, err)
 	}
 
-	nodes, err := client.GetNodes(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("get nodes: %w", err)
-	}
-
-	if len(nodes) == 0 {
-		return nil, fmt.Errorf("no nodes found")
-	}
-
-	return client.GetNodeStatus(ctx, nodes[0])
+	return status, nil
 }
 
 func (s *Service) GetVMs(ctx context.Context, id uuid.UUID) ([]proxmox.VMInfo, error) {
-	node, err := s.nodeRepo.GetByID(ctx, id)
+	_, client, pveNode, err := s.getClientAndNode(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 
-	client, err := s.clientFactory.CreateClient(node)
+	vms, err := client.GetVMs(ctx, pveNode)
 	if err != nil {
-		return nil, fmt.Errorf("create proxmox client: %w", err)
+		return nil, fmt.Errorf("%w: get VMs: %v", ErrNodeUnreachable, err)
 	}
 
-	nodes, err := client.GetNodes(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("get nodes: %w", err)
-	}
-
-	if len(nodes) == 0 {
-		return nil, fmt.Errorf("no nodes found")
-	}
-
-	return client.GetVMs(ctx, nodes[0])
+	return vms, nil
 }
 
 func (s *Service) GetStorage(ctx context.Context, id uuid.UUID) ([]proxmox.StorageInfo, error) {
-	node, err := s.nodeRepo.GetByID(ctx, id)
+	_, client, pveNode, err := s.getClientAndNode(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 
-	client, err := s.clientFactory.CreateClient(node)
+	storage, err := client.GetStorage(ctx, pveNode)
 	if err != nil {
-		return nil, fmt.Errorf("create proxmox client: %w", err)
+		return nil, fmt.Errorf("%w: get storage: %v", ErrNodeUnreachable, err)
 	}
 
-	nodes, err := client.GetNodes(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("get nodes: %w", err)
-	}
-
-	if len(nodes) == 0 {
-		return nil, fmt.Errorf("no nodes found")
-	}
-
-	return client.GetStorage(ctx, nodes[0])
+	return storage, nil
 }
 
 func (s *Service) GetNetworkInterfaces(ctx context.Context, id uuid.UUID) ([]NetworkInterfaceWithAlias, error) {
-	node, err := s.nodeRepo.GetByID(ctx, id)
+	_, client, pveNode, err := s.getClientAndNode(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 
-	client, err := s.clientFactory.CreateClient(node)
-	if err != nil {
-		return nil, fmt.Errorf("create proxmox client: %w", err)
-	}
-
-	pveNodes, err := client.GetNodes(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("get nodes: %w", err)
-	}
-
-	if len(pveNodes) == 0 {
-		return nil, fmt.Errorf("no nodes found")
-	}
-
-	ifaces, err := client.GetNetworkInterfaces(ctx, pveNodes[0])
+	ifaces, err := client.GetNetworkInterfaces(ctx, pveNode)
 	if err != nil {
 		return nil, fmt.Errorf("get network interfaces: %w", err)
 	}
@@ -490,279 +479,116 @@ func (s *Service) SetAlias(ctx context.Context, nodeID uuid.UUID, ifaceName stri
 }
 
 func (s *Service) GetDisks(ctx context.Context, id uuid.UUID) ([]proxmox.DiskInfo, error) {
-	node, err := s.nodeRepo.GetByID(ctx, id)
+	_, client, pveNode, err := s.getClientAndNode(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 
-	client, err := s.clientFactory.CreateClient(node)
+	disks, err := client.GetDisks(ctx, pveNode)
 	if err != nil {
-		return nil, fmt.Errorf("create proxmox client: %w", err)
+		return nil, fmt.Errorf("%w: get disks: %v", ErrNodeUnreachable, err)
 	}
 
-	pveNodes, err := client.GetNodes(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("get nodes: %w", err)
-	}
-
-	if len(pveNodes) == 0 {
-		return nil, fmt.Errorf("no nodes found")
-	}
-
-	return client.GetDisks(ctx, pveNodes[0])
+	return disks, nil
 }
 
 func (s *Service) StartVM(ctx context.Context, nodeID uuid.UUID, vmid int, vmType string) (string, error) {
-	node, err := s.nodeRepo.GetByID(ctx, nodeID)
+	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
 	if err != nil {
 		return "", err
 	}
 
-	client, err := s.clientFactory.CreateClient(node)
-	if err != nil {
-		return "", fmt.Errorf("create proxmox client: %w", err)
-	}
-
-	nodes, err := client.GetNodes(ctx)
-	if err != nil {
-		return "", fmt.Errorf("get nodes: %w", err)
-	}
-
-	if len(nodes) == 0 {
-		return "", fmt.Errorf("no nodes found")
-	}
-
-	return client.StartVM(ctx, nodes[0], vmid, vmType)
+	return client.StartVM(ctx, pveNode, vmid, vmType)
 }
 
 func (s *Service) StopVM(ctx context.Context, nodeID uuid.UUID, vmid int, vmType string) (string, error) {
-	node, err := s.nodeRepo.GetByID(ctx, nodeID)
+	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
 	if err != nil {
 		return "", err
 	}
 
-	client, err := s.clientFactory.CreateClient(node)
-	if err != nil {
-		return "", fmt.Errorf("create proxmox client: %w", err)
-	}
-
-	nodes, err := client.GetNodes(ctx)
-	if err != nil {
-		return "", fmt.Errorf("get nodes: %w", err)
-	}
-
-	if len(nodes) == 0 {
-		return "", fmt.Errorf("no nodes found")
-	}
-
-	return client.StopVM(ctx, nodes[0], vmid, vmType)
+	return client.StopVM(ctx, pveNode, vmid, vmType)
 }
 
 func (s *Service) ShutdownVM(ctx context.Context, nodeID uuid.UUID, vmid int, vmType string) (string, error) {
-	node, err := s.nodeRepo.GetByID(ctx, nodeID)
+	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
 	if err != nil {
 		return "", err
 	}
 
-	client, err := s.clientFactory.CreateClient(node)
-	if err != nil {
-		return "", fmt.Errorf("create proxmox client: %w", err)
-	}
-
-	nodes, err := client.GetNodes(ctx)
-	if err != nil {
-		return "", fmt.Errorf("get nodes: %w", err)
-	}
-
-	if len(nodes) == 0 {
-		return "", fmt.Errorf("no nodes found")
-	}
-
-	return client.ShutdownVM(ctx, nodes[0], vmid, vmType)
+	return client.ShutdownVM(ctx, pveNode, vmid, vmType)
 }
 
 func (s *Service) SuspendVM(ctx context.Context, nodeID uuid.UUID, vmid int) (string, error) {
-	node, err := s.nodeRepo.GetByID(ctx, nodeID)
+	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
 	if err != nil {
 		return "", err
 	}
 
-	client, err := s.clientFactory.CreateClient(node)
-	if err != nil {
-		return "", fmt.Errorf("create proxmox client: %w", err)
-	}
-
-	nodes, err := client.GetNodes(ctx)
-	if err != nil {
-		return "", fmt.Errorf("get nodes: %w", err)
-	}
-
-	if len(nodes) == 0 {
-		return "", fmt.Errorf("no nodes found")
-	}
-
-	return client.SuspendVM(ctx, nodes[0], vmid)
+	return client.SuspendVM(ctx, pveNode, vmid)
 }
 
 func (s *Service) ResumeVM(ctx context.Context, nodeID uuid.UUID, vmid int) (string, error) {
-	node, err := s.nodeRepo.GetByID(ctx, nodeID)
+	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
 	if err != nil {
 		return "", err
 	}
 
-	client, err := s.clientFactory.CreateClient(node)
-	if err != nil {
-		return "", fmt.Errorf("create proxmox client: %w", err)
-	}
-
-	nodes, err := client.GetNodes(ctx)
-	if err != nil {
-		return "", fmt.Errorf("get nodes: %w", err)
-	}
-
-	if len(nodes) == 0 {
-		return "", fmt.Errorf("no nodes found")
-	}
-
-	return client.ResumeVM(ctx, nodes[0], vmid)
+	return client.ResumeVM(ctx, pveNode, vmid)
 }
 
 func (s *Service) ListSnapshots(ctx context.Context, nodeID uuid.UUID, vmid int, vmType string) ([]proxmox.SnapshotInfo, error) {
-	node, err := s.nodeRepo.GetByID(ctx, nodeID)
+	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
 	if err != nil {
 		return nil, err
 	}
 
-	client, err := s.clientFactory.CreateClient(node)
-	if err != nil {
-		return nil, fmt.Errorf("create proxmox client: %w", err)
-	}
-
-	nodes, err := client.GetNodes(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("get nodes: %w", err)
-	}
-
-	if len(nodes) == 0 {
-		return nil, fmt.Errorf("no nodes found")
-	}
-
-	return client.ListSnapshots(ctx, nodes[0], vmid, vmType)
+	return client.ListSnapshots(ctx, pveNode, vmid, vmType)
 }
 
 func (s *Service) CreateSnapshot(ctx context.Context, nodeID uuid.UUID, vmid int, vmType string, name string, description string, includeRAM bool) (string, error) {
-	node, err := s.nodeRepo.GetByID(ctx, nodeID)
+	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
 	if err != nil {
 		return "", err
 	}
 
-	client, err := s.clientFactory.CreateClient(node)
-	if err != nil {
-		return "", fmt.Errorf("create proxmox client: %w", err)
-	}
-
-	nodes, err := client.GetNodes(ctx)
-	if err != nil {
-		return "", fmt.Errorf("get nodes: %w", err)
-	}
-
-	if len(nodes) == 0 {
-		return "", fmt.Errorf("no nodes found")
-	}
-
-	return client.CreateSnapshot(ctx, nodes[0], vmid, vmType, name, description, includeRAM)
+	return client.CreateSnapshot(ctx, pveNode, vmid, vmType, name, description, includeRAM)
 }
 
 func (s *Service) DeleteSnapshot(ctx context.Context, nodeID uuid.UUID, vmid int, vmType string, snapname string) (string, error) {
-	node, err := s.nodeRepo.GetByID(ctx, nodeID)
+	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
 	if err != nil {
 		return "", err
 	}
 
-	client, err := s.clientFactory.CreateClient(node)
-	if err != nil {
-		return "", fmt.Errorf("create proxmox client: %w", err)
-	}
-
-	nodes, err := client.GetNodes(ctx)
-	if err != nil {
-		return "", fmt.Errorf("get nodes: %w", err)
-	}
-
-	if len(nodes) == 0 {
-		return "", fmt.Errorf("no nodes found")
-	}
-
-	return client.DeleteSnapshot(ctx, nodes[0], vmid, vmType, snapname)
+	return client.DeleteSnapshot(ctx, pveNode, vmid, vmType, snapname)
 }
 
 func (s *Service) RollbackSnapshot(ctx context.Context, nodeID uuid.UUID, vmid int, vmType string, snapname string) (string, error) {
-	node, err := s.nodeRepo.GetByID(ctx, nodeID)
+	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
 	if err != nil {
 		return "", err
 	}
 
-	client, err := s.clientFactory.CreateClient(node)
-	if err != nil {
-		return "", fmt.Errorf("create proxmox client: %w", err)
-	}
-
-	nodes, err := client.GetNodes(ctx)
-	if err != nil {
-		return "", fmt.Errorf("get nodes: %w", err)
-	}
-
-	if len(nodes) == 0 {
-		return "", fmt.Errorf("no nodes found")
-	}
-
-	return client.RollbackSnapshot(ctx, nodes[0], vmid, vmType, snapname)
+	return client.RollbackSnapshot(ctx, pveNode, vmid, vmType, snapname)
 }
 
 func (s *Service) GetVNCProxy(ctx context.Context, nodeID uuid.UUID, vmid int, vmType string) (*proxmox.VNCProxyResponse, error) {
-	node, err := s.nodeRepo.GetByID(ctx, nodeID)
+	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
 	if err != nil {
 		return nil, err
 	}
 
-	client, err := s.clientFactory.CreateClient(node)
-	if err != nil {
-		return nil, fmt.Errorf("create proxmox client: %w", err)
-	}
-
-	nodes, err := client.GetNodes(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("get nodes: %w", err)
-	}
-
-	if len(nodes) == 0 {
-		return nil, fmt.Errorf("no nodes found")
-	}
-
-	return client.GetVNCProxy(ctx, nodes[0], vmid, vmType)
+	return client.GetVNCProxy(ctx, pveNode, vmid, vmType)
 }
 
 func (s *Service) CreateVzdump(ctx context.Context, nodeID uuid.UUID, vmid int, opts proxmox.VzdumpOptions) (string, error) {
-	node, err := s.nodeRepo.GetByID(ctx, nodeID)
+	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
 	if err != nil {
 		return "", err
 	}
 
-	client, err := s.clientFactory.CreateClient(node)
-	if err != nil {
-		return "", fmt.Errorf("create proxmox client: %w", err)
-	}
-
-	nodes, err := client.GetNodes(ctx)
-	if err != nil {
-		return "", fmt.Errorf("get nodes: %w", err)
-	}
-
-	if len(nodes) == 0 {
-		return "", fmt.Errorf("no nodes found")
-	}
-
-	return client.CreateVzdump(ctx, nodes[0], vmid, opts)
+	return client.CreateVzdump(ctx, pveNode, vmid, opts)
 }
 
 func (s *Service) RunSSHCommand(ctx context.Context, nodeID uuid.UUID, command string) (*ssh.CommandResult, error) {
@@ -786,24 +612,10 @@ func (s *Service) RunSSHCommand(ctx context.Context, nodeID uuid.UUID, command s
 }
 
 func (s *Service) BulkVMAction(ctx context.Context, nodeID uuid.UUID, req model.BulkVMRequest) ([]model.BulkVMResult, error) {
-	node, err := s.nodeRepo.GetByID(ctx, nodeID)
+	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
 	if err != nil {
 		return nil, err
 	}
-
-	client, err := s.clientFactory.CreateClient(node)
-	if err != nil {
-		return nil, fmt.Errorf("create proxmox client: %w", err)
-	}
-
-	nodes, err := client.GetNodes(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("get nodes: %w", err)
-	}
-	if len(nodes) == 0 {
-		return nil, fmt.Errorf("no nodes found")
-	}
-	pveNode := nodes[0]
 
 	// Get all VMs to determine types
 	vms, err := client.GetVMs(ctx, pveNode)
@@ -857,25 +669,12 @@ func (s *Service) BulkVMAction(ctx context.Context, nodeID uuid.UUID, req model.
 }
 
 func (s *Service) SyncTagsFromProxmox(ctx context.Context, nodeID uuid.UUID) (int, error) {
-	node, err := s.nodeRepo.GetByID(ctx, nodeID)
+	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
 	if err != nil {
 		return 0, err
 	}
 
-	client, err := s.clientFactory.CreateClient(node)
-	if err != nil {
-		return 0, fmt.Errorf("create proxmox client: %w", err)
-	}
-
-	pveNodes, err := client.GetNodes(ctx)
-	if err != nil {
-		return 0, fmt.Errorf("get nodes: %w", err)
-	}
-	if len(pveNodes) == 0 {
-		return 0, fmt.Errorf("no nodes found")
-	}
-
-	vms, err := client.GetVMs(ctx, pveNodes[0])
+	vms, err := client.GetVMs(ctx, pveNode)
 	if err != nil {
 		return 0, fmt.Errorf("get VMs: %w", err)
 	}

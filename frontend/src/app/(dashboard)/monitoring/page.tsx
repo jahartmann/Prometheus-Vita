@@ -188,7 +188,7 @@ export default function MonitoringPage() {
                         </div>
 
                         <div className="flex items-center justify-between text-xs text-muted-foreground">
-                          <span>Load: {status.load_average?.map((l) => l.toFixed(2)).join(", ")}</span>
+                          <span>Load: {(status.load_average || []).map((l) => (l ?? 0).toFixed(2)).join(", ")}</span>
                           <span>VMs: {status.vm_running}/{status.vm_count} &middot; CTs: {status.ct_running}/{status.ct_count}</span>
                         </div>
 

@@ -178,7 +178,7 @@ export function StorageOverview({ nodeId, status }: StorageOverviewProps) {
                     </Badge>
                   </div>
                   <span className="text-sm font-mono">
-                    {pool.usage_percent.toFixed(1)}%
+                    {(pool.usage_percent ?? 0).toFixed(1)}%
                   </span>
                 </div>
                 <div className="h-2.5 w-full rounded-full bg-secondary">
@@ -269,7 +269,7 @@ export function StorageOverview({ nodeId, status }: StorageOverviewProps) {
                             />
                           </div>
                           <span className="w-12 text-right font-mono text-xs">
-                            {s.usage_percent.toFixed(1)}%
+                            {(s.usage_percent ?? 0).toFixed(1)}%
                           </span>
                         </div>
                       </td>

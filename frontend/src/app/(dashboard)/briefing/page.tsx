@@ -101,9 +101,9 @@ export default function BriefingPage() {
                     </Badge>
                   </div>
                   <div className="flex gap-4 text-sm text-muted-foreground">
-                    <span>CPU: {ns.cpu_avg.toFixed(1)}%</span>
-                    <span>RAM: {ns.mem_pct.toFixed(1)}%</span>
-                    <span>Disk: {ns.disk_pct.toFixed(1)}%</span>
+                    <span>CPU: {(ns.cpu_avg ?? 0).toFixed(1)}%</span>
+                    <span>RAM: {(ns.mem_pct ?? 0).toFixed(1)}%</span>
+                    <span>Disk: {(ns.disk_pct ?? 0).toFixed(1)}%</span>
                   </div>
                 </div>
               ))}

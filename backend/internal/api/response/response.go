@@ -84,6 +84,10 @@ func InternalError(c echo.Context, message string) error {
 	return ErrorResponse(c, http.StatusInternalServerError, message)
 }
 
+func ServiceUnavailable(c echo.Context, message string) error {
+	return ErrorResponse(c, http.StatusServiceUnavailable, message)
+}
+
 func Paginated[T any](c echo.Context, data []T, total, page, limit int) error {
 	pages := total / limit
 	if total%limit > 0 {

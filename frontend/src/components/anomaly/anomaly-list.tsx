@@ -47,10 +47,10 @@ export function AnomalyList() {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground mb-3">
-              <div>Wert: {a.value.toFixed(2)}%</div>
-              <div>Z-Score: {a.z_score.toFixed(2)}</div>
-              <div>Mittelwert: {a.mean.toFixed(2)}%</div>
-              <div>Std.Abw.: {a.stddev.toFixed(2)}</div>
+              <div>Wert: {(a.value ?? 0).toFixed(2)}%</div>
+              <div>Z-Score: {(a.z_score ?? 0).toFixed(2)}</div>
+              <div>Mittelwert: {(a.mean ?? 0).toFixed(2)}%</div>
+              <div>Std.Abw.: {(a.stddev ?? 0).toFixed(2)}</div>
               <div className="col-span-2">
                 Erkannt: {new Date(a.detected_at).toLocaleString("de-DE")}
               </div>

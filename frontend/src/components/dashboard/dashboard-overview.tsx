@@ -21,11 +21,10 @@ export function DashboardOverview() {
   );
   const offlineNodes = nodes.length - onlineNodes;
 
-  const avgCpu =
-    Object.values(nodeStatus).length > 0
-      ? Object.values(nodeStatus).reduce((acc, s) => acc + (s?.cpu_usage ?? 0), 0) /
-        Object.values(nodeStatus).length
-      : 0;
+  const statusValues = Object.values(nodeStatus).filter(Boolean);
+  const avgCpu = statusValues.length > 0
+    ? statusValues.reduce((acc, s) => acc + (s?.cpu_usage ?? 0), 0) / statusValues.length
+    : 0;
 
   return (
     <div className="space-y-6">

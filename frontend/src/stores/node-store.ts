@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { Node, NodeStatus, VM } from "@/types/api";
 import api, { toArray } from "@/lib/api";
+import { useAuthStore } from "@/stores/auth-store";
 
 interface NodeState {
   nodes: Node[];
@@ -26,6 +27,7 @@ export const useNodeStore = create<NodeState>()((set, get) => ({
   error: null,
 
   fetchNodes: async () => {
+    if (!useAuthStore.getState().accessToken) return;
     set({ isLoading: true, error: null });
     try {
       const response = await api.get<Node[]>("/nodes");
@@ -38,6 +40,7 @@ export const useNodeStore = create<NodeState>()((set, get) => ({
   },
 
   fetchNodeStatus: async (nodeId: string) => {
+    if (!useAuthStore.getState().accessToken) return;
     try {
       const response = await api.get<NodeStatus>(`/nodes/${nodeId}/status`);
       set((state) => ({
@@ -49,6 +52,7 @@ export const useNodeStore = create<NodeState>()((set, get) => ({
   },
 
   fetchNodeVMs: async (nodeId: string) => {
+    if (!useAuthStore.getState().accessToken) return;
     try {
       const response = await api.get<VM[]>(`/nodes/${nodeId}/vms`);
       set((state) => ({

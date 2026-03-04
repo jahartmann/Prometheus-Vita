@@ -289,6 +289,9 @@ func (h *BackupHandler) CreateVzdumpBackup(c echo.Context) error {
 		if errors.Is(err, repository.ErrNotFound) {
 			return apiPkg.NotFound(c, "node not found")
 		}
+		if errors.Is(err, nodeService.ErrNodeUnreachable) {
+			return apiPkg.ServiceUnavailable(c, "node unreachable")
+		}
 		return apiPkg.InternalError(c, "failed to create vzdump backup")
 	}
 
