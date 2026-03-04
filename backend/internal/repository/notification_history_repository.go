@@ -43,7 +43,7 @@ func (r *pgNotificationHistoryRepository) Create(ctx context.Context, entry *mod
 
 func (r *pgNotificationHistoryRepository) List(ctx context.Context, limit, offset int) ([]model.NotificationHistoryEntry, error) {
 	rows, err := r.db.Query(ctx,
-		`SELECT id, channel_id, event_type, subject, body, status, error_message, metadata, created_at, sent_at
+		`SELECT id, channel_id, event_type, subject, body, status, COALESCE(error_message, ''), metadata, created_at, sent_at
 		 FROM notification_history ORDER BY created_at DESC LIMIT $1 OFFSET $2`, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("list notification history: %w", err)
@@ -64,7 +64,7 @@ func (r *pgNotificationHistoryRepository) List(ctx context.Context, limit, offse
 
 func (r *pgNotificationHistoryRepository) ListByChannel(ctx context.Context, channelID uuid.UUID) ([]model.NotificationHistoryEntry, error) {
 	rows, err := r.db.Query(ctx,
-		`SELECT id, channel_id, event_type, subject, body, status, error_message, metadata, created_at, sent_at
+		`SELECT id, channel_id, event_type, subject, body, status, COALESCE(error_message, ''), metadata, created_at, sent_at
 		 FROM notification_history WHERE channel_id = $1 ORDER BY created_at DESC`, channelID)
 	if err != nil {
 		return nil, fmt.Errorf("list notification history by channel: %w", err)

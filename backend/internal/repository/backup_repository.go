@@ -54,7 +54,7 @@ func (r *pgBackupRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.
 	var b model.ConfigBackup
 	err := r.db.QueryRow(ctx,
 		`SELECT id, node_id, version, backup_type, file_count, total_size,
-		        status, error_message, notes, recovery_guide, created_at, completed_at
+		        status, COALESCE(error_message, ''), COALESCE(notes, ''), COALESCE(recovery_guide, ''), created_at, completed_at
 		 FROM config_backups WHERE id = $1`, id,
 	).Scan(&b.ID, &b.NodeID, &b.Version, &b.BackupType,
 		&b.FileCount, &b.TotalSize, &b.Status,
@@ -71,7 +71,7 @@ func (r *pgBackupRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.
 func (r *pgBackupRepository) ListAll(ctx context.Context) ([]model.ConfigBackup, error) {
 	rows, err := r.db.Query(ctx,
 		`SELECT id, node_id, version, backup_type, file_count, total_size,
-		        status, error_message, notes, recovery_guide, created_at, completed_at
+		        status, COALESCE(error_message, ''), COALESCE(notes, ''), COALESCE(recovery_guide, ''), created_at, completed_at
 		 FROM config_backups ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, fmt.Errorf("list all backups: %w", err)
@@ -94,7 +94,7 @@ func (r *pgBackupRepository) ListAll(ctx context.Context) ([]model.ConfigBackup,
 func (r *pgBackupRepository) ListByNode(ctx context.Context, nodeID uuid.UUID) ([]model.ConfigBackup, error) {
 	rows, err := r.db.Query(ctx,
 		`SELECT id, node_id, version, backup_type, file_count, total_size,
-		        status, error_message, notes, recovery_guide, created_at, completed_at
+		        status, COALESCE(error_message, ''), COALESCE(notes, ''), COALESCE(recovery_guide, ''), created_at, completed_at
 		 FROM config_backups WHERE node_id = $1 ORDER BY created_at DESC`, nodeID)
 	if err != nil {
 		return nil, fmt.Errorf("list backups by node: %w", err)
@@ -168,7 +168,7 @@ func (r *pgBackupRepository) GetLatestByNode(ctx context.Context, nodeID uuid.UU
 	var b model.ConfigBackup
 	err := r.db.QueryRow(ctx,
 		`SELECT id, node_id, version, backup_type, file_count, total_size,
-		        status, error_message, notes, recovery_guide, created_at, completed_at
+		        status, COALESCE(error_message, ''), COALESCE(notes, ''), COALESCE(recovery_guide, ''), created_at, completed_at
 		 FROM config_backups WHERE node_id = $1 ORDER BY created_at DESC LIMIT 1`, nodeID,
 	).Scan(&b.ID, &b.NodeID, &b.Version, &b.BackupType,
 		&b.FileCount, &b.TotalSize, &b.Status,

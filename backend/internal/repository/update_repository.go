@@ -44,7 +44,7 @@ func (r *pgUpdateRepository) Create(ctx context.Context, check *model.UpdateChec
 func (r *pgUpdateRepository) GetLatestByNode(ctx context.Context, nodeID uuid.UUID) (*model.UpdateCheck, error) {
 	var c model.UpdateCheck
 	err := r.db.QueryRow(ctx,
-		`SELECT id, node_id, status, total_updates, security_updates, packages, error_message, checked_at, created_at
+		`SELECT id, node_id, status, total_updates, security_updates, packages, COALESCE(error_message, ''), checked_at, created_at
 		 FROM update_checks WHERE node_id = $1 ORDER BY checked_at DESC LIMIT 1`, nodeID,
 	).Scan(&c.ID, &c.NodeID, &c.Status, &c.TotalUpdates, &c.SecurityUpdates,
 		&c.Packages, &c.ErrorMessage, &c.CheckedAt, &c.CreatedAt)
@@ -62,7 +62,7 @@ func (r *pgUpdateRepository) ListByNode(ctx context.Context, nodeID uuid.UUID, l
 		limit = 20
 	}
 	rows, err := r.db.Query(ctx,
-		`SELECT id, node_id, status, total_updates, security_updates, packages, error_message, checked_at, created_at
+		`SELECT id, node_id, status, total_updates, security_updates, packages, COALESCE(error_message, ''), checked_at, created_at
 		 FROM update_checks WHERE node_id = $1 ORDER BY checked_at DESC LIMIT $2`, nodeID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list update checks: %w", err)
@@ -86,7 +86,7 @@ func (r *pgUpdateRepository) ListAll(ctx context.Context, limit int) ([]model.Up
 		limit = 50
 	}
 	rows, err := r.db.Query(ctx,
-		`SELECT id, node_id, status, total_updates, security_updates, packages, error_message, checked_at, created_at
+		`SELECT id, node_id, status, total_updates, security_updates, packages, COALESCE(error_message, ''), checked_at, created_at
 		 FROM update_checks ORDER BY checked_at DESC LIMIT $1`, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list all update checks: %w", err)

@@ -47,7 +47,7 @@ func (r *pgEscalationPolicyRepository) Create(ctx context.Context, policy *model
 func (r *pgEscalationPolicyRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.EscalationPolicy, error) {
 	var p model.EscalationPolicy
 	err := r.db.QueryRow(ctx,
-		`SELECT id, name, description, is_active, created_at, updated_at
+		`SELECT id, name, COALESCE(description, ''), is_active, created_at, updated_at
 		 FROM escalation_policies WHERE id = $1`, id,
 	).Scan(&p.ID, &p.Name, &p.Description, &p.IsActive, &p.CreatedAt, &p.UpdatedAt)
 	if err != nil {
@@ -68,7 +68,7 @@ func (r *pgEscalationPolicyRepository) GetByID(ctx context.Context, id uuid.UUID
 
 func (r *pgEscalationPolicyRepository) List(ctx context.Context) ([]model.EscalationPolicy, error) {
 	rows, err := r.db.Query(ctx,
-		`SELECT id, name, description, is_active, created_at, updated_at
+		`SELECT id, name, COALESCE(description, ''), is_active, created_at, updated_at
 		 FROM escalation_policies ORDER BY name ASC`)
 	if err != nil {
 		return nil, fmt.Errorf("list escalation policies: %w", err)

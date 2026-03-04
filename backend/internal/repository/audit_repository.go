@@ -44,7 +44,7 @@ func (r *pgAuditRepository) List(ctx context.Context, limit, offset int) ([]mode
 		limit = 50
 	}
 	rows, err := r.db.Query(ctx,
-		`SELECT id, user_id, api_token_id, method, path, status_code, ip_address, user_agent, request_body, duration_ms, created_at
+		`SELECT id, user_id, api_token_id, method, path, status_code, COALESCE(ip_address, ''), COALESCE(user_agent, ''), request_body, duration_ms, created_at
 		 FROM api_audit_log ORDER BY created_at DESC LIMIT $1 OFFSET $2`, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("list audit log: %w", err)
@@ -68,7 +68,7 @@ func (r *pgAuditRepository) ListByUser(ctx context.Context, userID uuid.UUID, li
 		limit = 50
 	}
 	rows, err := r.db.Query(ctx,
-		`SELECT id, user_id, api_token_id, method, path, status_code, ip_address, user_agent, request_body, duration_ms, created_at
+		`SELECT id, user_id, api_token_id, method, path, status_code, COALESCE(ip_address, ''), COALESCE(user_agent, ''), request_body, duration_ms, created_at
 		 FROM api_audit_log WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2`, userID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list audit log by user: %w", err)

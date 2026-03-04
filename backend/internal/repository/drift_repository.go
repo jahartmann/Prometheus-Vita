@@ -45,7 +45,7 @@ func (r *pgDriftRepository) Create(ctx context.Context, check *model.DriftCheck)
 func (r *pgDriftRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.DriftCheck, error) {
 	var c model.DriftCheck
 	err := r.db.QueryRow(ctx,
-		`SELECT id, node_id, status, total_files, changed_files, added_files, removed_files, details, error_message, checked_at, created_at
+		`SELECT id, node_id, status, total_files, changed_files, added_files, removed_files, details, COALESCE(error_message, ''), checked_at, created_at
 		 FROM drift_checks WHERE id = $1`, id,
 	).Scan(&c.ID, &c.NodeID, &c.Status, &c.TotalFiles, &c.ChangedFiles,
 		&c.AddedFiles, &c.RemovedFiles, &c.Details, &c.ErrorMessage, &c.CheckedAt, &c.CreatedAt)
@@ -61,7 +61,7 @@ func (r *pgDriftRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.D
 func (r *pgDriftRepository) GetLatestByNode(ctx context.Context, nodeID uuid.UUID) (*model.DriftCheck, error) {
 	var c model.DriftCheck
 	err := r.db.QueryRow(ctx,
-		`SELECT id, node_id, status, total_files, changed_files, added_files, removed_files, details, error_message, checked_at, created_at
+		`SELECT id, node_id, status, total_files, changed_files, added_files, removed_files, details, COALESCE(error_message, ''), checked_at, created_at
 		 FROM drift_checks WHERE node_id = $1 ORDER BY checked_at DESC LIMIT 1`, nodeID,
 	).Scan(&c.ID, &c.NodeID, &c.Status, &c.TotalFiles, &c.ChangedFiles,
 		&c.AddedFiles, &c.RemovedFiles, &c.Details, &c.ErrorMessage, &c.CheckedAt, &c.CreatedAt)
@@ -79,7 +79,7 @@ func (r *pgDriftRepository) ListByNode(ctx context.Context, nodeID uuid.UUID, li
 		limit = 20
 	}
 	rows, err := r.db.Query(ctx,
-		`SELECT id, node_id, status, total_files, changed_files, added_files, removed_files, details, error_message, checked_at, created_at
+		`SELECT id, node_id, status, total_files, changed_files, added_files, removed_files, details, COALESCE(error_message, ''), checked_at, created_at
 		 FROM drift_checks WHERE node_id = $1 ORDER BY checked_at DESC LIMIT $2`, nodeID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list drift checks by node: %w", err)
@@ -103,7 +103,7 @@ func (r *pgDriftRepository) ListAll(ctx context.Context, limit int) ([]model.Dri
 		limit = 50
 	}
 	rows, err := r.db.Query(ctx,
-		`SELECT id, node_id, status, total_files, changed_files, added_files, removed_files, details, error_message, checked_at, created_at
+		`SELECT id, node_id, status, total_files, changed_files, added_files, removed_files, details, COALESCE(error_message, ''), checked_at, created_at
 		 FROM drift_checks ORDER BY checked_at DESC LIMIT $1`, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list all drift checks: %w", err)

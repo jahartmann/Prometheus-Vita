@@ -54,7 +54,7 @@ func (r *pgBackupFileRepository) CreateBatch(ctx context.Context, files []model.
 func (r *pgBackupFileRepository) GetByBackupID(ctx context.Context, backupID uuid.UUID) ([]model.BackupFile, error) {
 	rows, err := r.db.Query(ctx,
 		`SELECT id, backup_id, file_path, file_hash, file_size,
-		        file_permissions, file_owner, diff_from_previous, created_at
+		        COALESCE(file_permissions, ''), COALESCE(file_owner, ''), COALESCE(diff_from_previous, ''), created_at
 		 FROM config_backup_files WHERE backup_id = $1 ORDER BY file_path`, backupID)
 	if err != nil {
 		return nil, fmt.Errorf("list backup files: %w", err)
@@ -78,7 +78,7 @@ func (r *pgBackupFileRepository) GetSingleFile(ctx context.Context, backupID uui
 	var f model.BackupFile
 	err := r.db.QueryRow(ctx,
 		`SELECT id, backup_id, file_path, file_hash, file_size,
-		        file_permissions, file_owner, content, diff_from_previous, created_at
+		        COALESCE(file_permissions, ''), COALESCE(file_owner, ''), content, COALESCE(diff_from_previous, ''), created_at
 		 FROM config_backup_files WHERE backup_id = $1 AND file_path = $2`, backupID, filePath,
 	).Scan(&f.ID, &f.BackupID, &f.FilePath, &f.FileHash,
 		&f.FileSize, &f.FilePermissions, &f.FileOwner,

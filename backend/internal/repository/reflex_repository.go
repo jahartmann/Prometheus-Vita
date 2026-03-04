@@ -50,7 +50,7 @@ func (r *pgReflexRuleRepository) Create(ctx context.Context, rule *model.ReflexR
 func (r *pgReflexRuleRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.ReflexRule, error) {
 	var rule model.ReflexRule
 	err := r.db.QueryRow(ctx,
-		`SELECT id, name, description, trigger_metric, operator, threshold,
+		`SELECT id, name, COALESCE(description, ''), trigger_metric, operator, threshold,
 		        action_type, action_config, cooldown_seconds, is_active, node_id,
 		        last_triggered_at, trigger_count, created_at, updated_at
 		 FROM reflex_rules WHERE id = $1`, id,
@@ -69,7 +69,7 @@ func (r *pgReflexRuleRepository) GetByID(ctx context.Context, id uuid.UUID) (*mo
 
 func (r *pgReflexRuleRepository) List(ctx context.Context) ([]model.ReflexRule, error) {
 	rows, err := r.db.Query(ctx,
-		`SELECT id, name, description, trigger_metric, operator, threshold,
+		`SELECT id, name, COALESCE(description, ''), trigger_metric, operator, threshold,
 		        action_type, action_config, cooldown_seconds, is_active, node_id,
 		        last_triggered_at, trigger_count, created_at, updated_at
 		 FROM reflex_rules ORDER BY name ASC`)
@@ -82,7 +82,7 @@ func (r *pgReflexRuleRepository) List(ctx context.Context) ([]model.ReflexRule, 
 
 func (r *pgReflexRuleRepository) ListActive(ctx context.Context) ([]model.ReflexRule, error) {
 	rows, err := r.db.Query(ctx,
-		`SELECT id, name, description, trigger_metric, operator, threshold,
+		`SELECT id, name, COALESCE(description, ''), trigger_metric, operator, threshold,
 		        action_type, action_config, cooldown_seconds, is_active, node_id,
 		        last_triggered_at, trigger_count, created_at, updated_at
 		 FROM reflex_rules WHERE is_active = true ORDER BY name ASC`)

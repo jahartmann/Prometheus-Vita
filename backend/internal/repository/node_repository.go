@@ -51,7 +51,7 @@ func (r *pgNodeRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.No
 	var n model.Node
 	err := r.db.QueryRow(ctx,
 		`SELECT id, name, type, hostname, port, api_token_id, api_token_secret,
-		        ssh_port, ssh_user, ssh_private_key,
+		        ssh_port, COALESCE(ssh_user, ''), COALESCE(ssh_private_key, ''),
 		        is_online, last_seen, metadata, environment_id, created_at, updated_at
 		 FROM nodes WHERE id = $1`, id,
 	).Scan(&n.ID, &n.Name, &n.Type, &n.Hostname, &n.Port,
@@ -71,7 +71,7 @@ func (r *pgNodeRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.No
 func (r *pgNodeRepository) List(ctx context.Context) ([]model.Node, error) {
 	rows, err := r.db.Query(ctx,
 		`SELECT id, name, type, hostname, port, api_token_id, api_token_secret,
-		        ssh_port, ssh_user, ssh_private_key,
+		        ssh_port, COALESCE(ssh_user, ''), COALESCE(ssh_private_key, ''),
 		        is_online, last_seen, metadata, environment_id, created_at, updated_at
 		 FROM nodes ORDER BY name ASC`)
 	if err != nil {
@@ -144,7 +144,7 @@ func (r *pgNodeRepository) UpdateEnvironment(ctx context.Context, nodeID uuid.UU
 func (r *pgNodeRepository) ListByEnvironment(ctx context.Context, envID uuid.UUID) ([]model.Node, error) {
 	rows, err := r.db.Query(ctx,
 		`SELECT id, name, type, hostname, port, api_token_id, api_token_secret,
-		        ssh_port, ssh_user, ssh_private_key,
+		        ssh_port, COALESCE(ssh_user, ''), COALESCE(ssh_private_key, ''),
 		        is_online, last_seen, metadata, environment_id, created_at, updated_at
 		 FROM nodes WHERE environment_id = $1 ORDER BY name ASC`, envID)
 	if err != nil {

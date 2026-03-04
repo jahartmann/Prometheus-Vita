@@ -44,7 +44,7 @@ func (r *pgRecommendationRepository) ListByNode(ctx context.Context, nodeID uuid
 		limit = 50
 	}
 	rows, err := r.db.Query(ctx,
-		`SELECT id, node_id, vmid, vm_name, vm_type, resource_type, current_value, recommended_value, avg_usage, max_usage, recommendation_type, reason, created_at
+		`SELECT id, node_id, vmid, vm_name, vm_type, resource_type, current_value, recommended_value, avg_usage, max_usage, recommendation_type, COALESCE(reason, ''), created_at
 		 FROM resource_recommendations WHERE node_id = $1 ORDER BY created_at DESC LIMIT $2`, nodeID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list recommendations by node: %w", err)
@@ -69,7 +69,7 @@ func (r *pgRecommendationRepository) ListAll(ctx context.Context, limit int) ([]
 		limit = 100
 	}
 	rows, err := r.db.Query(ctx,
-		`SELECT id, node_id, vmid, vm_name, vm_type, resource_type, current_value, recommended_value, avg_usage, max_usage, recommendation_type, reason, created_at
+		`SELECT id, node_id, vmid, vm_name, vm_type, resource_type, current_value, recommended_value, avg_usage, max_usage, recommendation_type, COALESCE(reason, ''), created_at
 		 FROM resource_recommendations ORDER BY created_at DESC LIMIT $1`, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list all recommendations: %w", err)
