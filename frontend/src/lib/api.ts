@@ -305,13 +305,13 @@ export const telegramApi = {
 // Chat API
 export const chatApi = {
   chat: (data: { conversation_id?: string; message: string; model?: string }) =>
-    api.post("/chat", data).then((r) => r.data.data),
+    api.post("/chat", data).then((r) => r.data?.data ?? r.data),
   listConversations: () =>
-    api.get("/chat/conversations").then((r) => r.data.data),
+    api.get("/chat/conversations").then((r) => toArray(r.data)),
   getConversation: (id: string) =>
-    api.get(`/chat/conversations/${id}`).then((r) => r.data.data),
+    api.get(`/chat/conversations/${id}`).then((r) => r.data?.data ?? r.data),
   getMessages: (id: string) =>
-    api.get(`/chat/conversations/${id}/messages`).then((r) => r.data.data),
+    api.get(`/chat/conversations/${id}/messages`).then((r) => toArray(r.data)),
   deleteConversation: (id: string) =>
     api.delete(`/chat/conversations/${id}`),
 };
@@ -350,31 +350,31 @@ export const userApi = {
 
 // Anomaly API
 export const anomalyApi = {
-  listUnresolved: () => api.get("/anomalies").then((r) => r.data.data),
+  listUnresolved: () => api.get("/anomalies").then((r) => toArray(r.data)),
   listByNode: (nodeId: string) =>
-    api.get(`/nodes/${nodeId}/anomalies`).then((r) => r.data.data),
+    api.get(`/nodes/${nodeId}/anomalies`).then((r) => toArray(r.data)),
   resolve: (id: string) => api.post(`/anomalies/${id}/resolve`),
 };
 
 // Prediction API
 export const predictionApi = {
-  listCritical: () => api.get("/predictions").then((r) => r.data.data),
+  listCritical: () => api.get("/predictions").then((r) => toArray(r.data)),
   listByNode: (nodeId: string) =>
-    api.get(`/nodes/${nodeId}/predictions`).then((r) => r.data.data),
+    api.get(`/nodes/${nodeId}/predictions`).then((r) => toArray(r.data)),
 };
 
 // Briefing API
 export const briefingApi = {
-  getLatest: () => api.get("/briefings/latest").then((r) => r.data.data),
+  getLatest: () => api.get("/briefings/latest").then((r) => r.data?.data ?? r.data),
   list: (limit?: number) => {
     const params = limit ? `?limit=${limit}` : "";
-    return api.get(`/briefings${params}`).then((r) => r.data.data);
+    return api.get(`/briefings${params}`).then((r) => toArray(r.data));
   },
 };
 
 // Approval API
 export const approvalApi = {
-  listPending: () => api.get("/approvals").then((r) => r.data.data),
+  listPending: () => api.get("/approvals").then((r) => toArray(r.data)),
   approve: (id: string) => api.post(`/approvals/${id}/approve`),
   reject: (id: string) => api.post(`/approvals/${id}/reject`),
 };

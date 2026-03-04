@@ -18,7 +18,8 @@ export const useTopologyStore = create<TopologyState>()((set) => ({
     set({ isLoading: true, error: null });
     try {
       const resp = await topologyApi.get();
-      set({ graph: resp.data?.data || resp.data || null, isLoading: false });
+      const graph = resp.data?.data ?? resp.data ?? null;
+      set({ graph, isLoading: false });
     } catch {
       set({ error: "Topologie konnte nicht geladen werden", isLoading: false });
     }
