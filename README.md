@@ -4,6 +4,21 @@ Intelligentes Proxmox Infrastructure Management mit KI-Agent-System.
 
 ## Quick Start
 
+### Automatisch (empfohlen)
+
+```bash
+./setup.sh
+```
+
+Das Setup-Skript erledigt alles automatisch:
+- Prüft ob Docker und Docker Compose installiert sind
+- Erstellt `.env` aus `.env.example` mit sicheren, zufällig generierten Secrets (JWT, Encryption Key, Passwörter)
+- Startet alle Services via Docker Compose
+- Wartet bis alle Services bereit sind
+- Zeigt die Zugangsdaten (Admin-Login) am Ende an
+
+### Manuell
+
 ```bash
 # 1. Environment konfigurieren
 cp .env.example .env
