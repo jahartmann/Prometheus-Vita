@@ -54,6 +54,14 @@ func (h *AgentConfigHandler) UpdateConfig(c echo.Context) error {
 	// Reload LLM registry with updated config
 	config, err := h.agentConfigRepo.List(ctx)
 	if err == nil {
+		// Update ollamaProvider URL if changed
+		if h.ollamaProvider != nil {
+			newURL := config["ollama_url"]
+			if newURL == "" {
+				newURL = "http://localhost:11434"
+			}
+			h.ollamaProvider.SetBaseURL(newURL)
+		}
 		h.llmRegistry.Reload(
 			config["ollama_url"],
 			config["openai_key"],
@@ -71,12 +79,12 @@ func (h *AgentConfigHandler) UpdateConfig(c echo.Context) error {
 // It discovers available models from the active Ollama instance.
 func (h *AgentConfigHandler) GetModels(c echo.Context) error {
 	if h.ollamaProvider == nil {
-		return apiPkg.InternalError(c, "ollama provider not configured")
+		return apiPkg.InternalError(c, "Ollama ist nicht konfiguriert. Bitte stelle sicher, dass Ollama laeuft.")
 	}
 
 	models, err := h.ollamaProvider.DiscoverModels(c.Request().Context())
 	if err != nil {
-		return apiPkg.InternalError(c, "failed to discover models: "+err.Error())
+		return apiPkg.InternalError(c, "Ollama nicht erreichbar unter "+h.ollamaProvider.BaseURL()+". Bitte pruefen, ob Ollama laeuft.")
 	}
 
 	return apiPkg.Success(c, models)

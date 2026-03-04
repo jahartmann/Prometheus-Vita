@@ -10,50 +10,22 @@ import (
 
 // ListISOs lists all ISO images on a node's local storage.
 func (s *Service) ListISOs(ctx context.Context, nodeID uuid.UUID) ([]proxmox.StorageContent, error) {
-	node, err := s.nodeRepo.GetByID(ctx, nodeID)
+	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
 	if err != nil {
 		return nil, err
 	}
 
-	client, err := s.clientFactory.CreateClient(node)
-	if err != nil {
-		return nil, fmt.Errorf("create proxmox client: %w", err)
-	}
-
-	nodes, err := client.GetNodes(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("get nodes: %w", err)
-	}
-
-	if len(nodes) == 0 {
-		return nil, fmt.Errorf("no nodes found")
-	}
-
-	return client.GetStorageContent(ctx, nodes[0], "local", "iso")
+	return client.GetStorageContent(ctx, pveNode, "local", "iso")
 }
 
 // ListTemplates lists all container templates on a node's local storage.
 func (s *Service) ListTemplates(ctx context.Context, nodeID uuid.UUID) ([]proxmox.StorageContent, error) {
-	node, err := s.nodeRepo.GetByID(ctx, nodeID)
+	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
 	if err != nil {
 		return nil, err
 	}
 
-	client, err := s.clientFactory.CreateClient(node)
-	if err != nil {
-		return nil, fmt.Errorf("create proxmox client: %w", err)
-	}
-
-	nodes, err := client.GetNodes(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("get nodes: %w", err)
-	}
-
-	if len(nodes) == 0 {
-		return nil, fmt.Errorf("no nodes found")
-	}
-
-	return client.GetStorageContent(ctx, nodes[0], "local", "vztmpl")
+	return client.GetStorageContent(ctx, pveNode, "local", "vztmpl")
 }
 
 // SyncContentRequest holds the parameters for syncing content between nodes.
@@ -96,10 +68,10 @@ func (s *Service) SyncContent(ctx context.Context, targetNodeID uuid.UUID, req S
 	sourceClient := s.clientFactory.CreateClientFromCredentials(sourceNode.Hostname, sourceNode.Port, sourceTokenID, sourceTokenSecret)
 	sourceNodes, err := sourceClient.GetNodes(ctx)
 	if err != nil {
-		return "", fmt.Errorf("get source nodes: %w", err)
+		return "", fmt.Errorf("%w: get source nodes: %v", ErrNodeUnreachable, err)
 	}
 	if len(sourceNodes) == 0 {
-		return "", fmt.Errorf("no source nodes found")
+		return "", fmt.Errorf("%w: no source nodes found in cluster", ErrNodeUnreachable)
 	}
 
 	// Build the download URL for the volume
@@ -117,15 +89,15 @@ func (s *Service) SyncContent(ctx context.Context, targetNodeID uuid.UUID, req S
 
 	targetClient, err := s.clientFactory.CreateClient(targetNode)
 	if err != nil {
-		return "", fmt.Errorf("create target proxmox client: %w", err)
+		return "", fmt.Errorf("%w: create target proxmox client: %v", ErrNodeUnreachable, err)
 	}
 
 	targetNodes, err := targetClient.GetNodes(ctx)
 	if err != nil {
-		return "", fmt.Errorf("get target nodes: %w", err)
+		return "", fmt.Errorf("%w: get target nodes: %v", ErrNodeUnreachable, err)
 	}
 	if len(targetNodes) == 0 {
-		return "", fmt.Errorf("no target nodes found")
+		return "", fmt.Errorf("%w: no target nodes found in cluster", ErrNodeUnreachable)
 	}
 
 	targetStorage := req.TargetStorage

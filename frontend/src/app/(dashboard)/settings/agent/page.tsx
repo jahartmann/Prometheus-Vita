@@ -136,7 +136,11 @@ export default function AgentSettingsPage() {
       }
     } catch (err: unknown) {
       setConnectionStatus("error");
-      const msg = err instanceof Error ? err.message : "Verbindung fehlgeschlagen";
+      let msg = "Verbindung fehlgeschlagen";
+      if (err && typeof err === "object") {
+        const axiosErr = err as { response?: { data?: { error?: string; message?: string } }; message?: string };
+        msg = axiosErr.response?.data?.error || axiosErr.response?.data?.message || axiosErr.message || msg;
+      }
       setConnectionError(msg);
       setOllamaModels([]);
     } finally {

@@ -17,7 +17,7 @@ import {
   BarChart3,
   Plus,
   Brain,
-  Zap,
+  Bell,
   Archive,
   Shield,
   Disc,
@@ -51,7 +51,7 @@ const featureNavItems: NavItem[] = [
 ];
 
 const bottomNavItems: NavItem[] = [
-  { label: "Automatisierung", href: "/settings/notifications", icon: Zap, matchPrefix: "/settings/notifications" },
+  { label: "Benachrichtigungen", href: "/settings/notifications", icon: Bell, matchPrefix: "/settings/notifications" },
   { label: "KI-Assistent", href: "/chat", icon: Brain, matchPrefix: "/chat" },
   {
     label: "Einstellungen",

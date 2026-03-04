@@ -188,11 +188,13 @@ func main() {
 
 	// LLM Registry
 	llmRegistry := llm.NewRegistry()
-	var ollamaProvider *llm.OllamaProvider
-	if cfg.LLM.OllamaURL != "" {
-		ollamaProvider = llm.NewOllamaProvider(cfg.LLM.OllamaURL)
-		llmRegistry.Register("ollama", ollamaProvider)
+	// Always create ollamaProvider — use configured URL or default to localhost
+	ollamaURL := cfg.LLM.OllamaURL
+	if ollamaURL == "" {
+		ollamaURL = "http://localhost:11434"
 	}
+	ollamaProvider := llm.NewOllamaProvider(ollamaURL)
+	llmRegistry.Register("ollama", ollamaProvider)
 	if cfg.LLM.OpenAIKey != "" {
 		llmRegistry.Register("openai", llm.NewOpenAIProvider(cfg.LLM.OpenAIKey, cfg.LLM.OpenAIURL))
 	}

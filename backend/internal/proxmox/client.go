@@ -93,28 +93,53 @@ func (c *Client) GetNodeStatus(ctx context.Context, node string) (*NodeStatus, e
 			Used  int64 `json:"used"`
 			Free  int64 `json:"free"`
 		} `json:"memory"`
+		Swap struct {
+			Total int64 `json:"total"`
+			Used  int64 `json:"used"`
+			Free  int64 `json:"free"`
+		} `json:"swap"`
 		RootFS struct {
 			Total int64 `json:"total"`
 			Used  int64 `json:"used"`
+			Free  int64 `json:"free"`
+			Avail int64 `json:"avail"`
 		} `json:"rootfs"`
-		Uptime  int64  `json:"uptime"`
-		KVersion string `json:"kversion"`
-		PVEVersion string `json:"pveversion"`
+		CPUInfo struct {
+			CPUs  int    `json:"cpus"`
+			Model string `json:"model"`
+		} `json:"cpuinfo"`
+		LoadAvg    []string `json:"loadavg"`
+		Uptime     int64    `json:"uptime"`
+		KVersion   string   `json:"kversion"`
+		PVEVersion string   `json:"pveversion"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return nil, fmt.Errorf("unmarshal node status: %w", err)
+	}
+
+	loadAvg := make([]float64, 0, len(raw.LoadAvg))
+	for _, s := range raw.LoadAvg {
+		var f float64
+		if _, err := fmt.Sscanf(s, "%f", &f); err == nil {
+			loadAvg = append(loadAvg, f)
+		}
 	}
 
 	return &NodeStatus{
 		Node:       node,
 		Status:     "online",
 		Uptime:     raw.Uptime,
-		CPUUsage:   raw.CPU,
+		CPUUsage:   raw.CPU * 100,
+		CPUCores:   raw.CPUInfo.CPUs,
+		CPUModel:   raw.CPUInfo.Model,
 		MemTotal:   raw.Memory.Total,
 		MemUsed:    raw.Memory.Used,
 		MemFree:    raw.Memory.Free,
+		SwapTotal:  raw.Swap.Total,
+		SwapUsed:   raw.Swap.Used,
 		DiskTotal:  raw.RootFS.Total,
 		DiskUsed:   raw.RootFS.Used,
+		LoadAvg:    loadAvg,
 		KVersion:   raw.KVersion,
 		PVEVersion: raw.PVEVersion,
 	}, nil

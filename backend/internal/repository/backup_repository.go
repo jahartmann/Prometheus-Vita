@@ -83,7 +83,7 @@ func (r *pgBackupRepository) ListAll(ctx context.Context) ([]model.ConfigBackup,
 		var b model.ConfigBackup
 		if err := rows.Scan(&b.ID, &b.NodeID, &b.Version, &b.BackupType,
 			&b.FileCount, &b.TotalSize, &b.Status,
-			&b.ErrorMessage, &b.Notes, &b.CreatedAt, &b.CompletedAt); err != nil {
+			&b.ErrorMessage, &b.Notes, &b.RecoveryGuide, &b.CreatedAt, &b.CompletedAt); err != nil {
 			return nil, fmt.Errorf("scan backup: %w", err)
 		}
 		backups = append(backups, b)
@@ -106,7 +106,7 @@ func (r *pgBackupRepository) ListByNode(ctx context.Context, nodeID uuid.UUID) (
 		var b model.ConfigBackup
 		if err := rows.Scan(&b.ID, &b.NodeID, &b.Version, &b.BackupType,
 			&b.FileCount, &b.TotalSize, &b.Status,
-			&b.ErrorMessage, &b.Notes, &b.CreatedAt, &b.CompletedAt); err != nil {
+			&b.ErrorMessage, &b.Notes, &b.RecoveryGuide, &b.CreatedAt, &b.CompletedAt); err != nil {
 			return nil, fmt.Errorf("scan backup: %w", err)
 		}
 		backups = append(backups, b)

@@ -1,17 +1,22 @@
 package proxmox
 
 type NodeStatus struct {
-	Node       string  `json:"node"`
-	Status     string  `json:"status"`
-	Uptime     int64   `json:"uptime"`
-	CPUUsage   float64 `json:"cpu_usage"`
-	MemTotal   int64   `json:"mem_total"`
-	MemUsed    int64   `json:"mem_used"`
-	MemFree    int64   `json:"mem_free"`
-	DiskTotal  int64   `json:"disk_total"`
-	DiskUsed   int64   `json:"disk_used"`
-	KVersion   string  `json:"kernel_version"`
-	PVEVersion string  `json:"pve_version"`
+	Node        string    `json:"node"`
+	Status      string    `json:"status"`
+	Uptime      int64     `json:"uptime"`
+	CPUUsage    float64   `json:"cpu_usage"`
+	CPUCores    int       `json:"cpu_cores"`
+	CPUModel    string    `json:"cpu_model"`
+	MemTotal    int64     `json:"memory_total"`
+	MemUsed     int64     `json:"memory_used"`
+	MemFree     int64     `json:"memory_free"`
+	SwapTotal   int64     `json:"swap_total"`
+	SwapUsed    int64     `json:"swap_used"`
+	DiskTotal   int64     `json:"disk_total"`
+	DiskUsed    int64     `json:"disk_used"`
+	LoadAvg     []float64 `json:"load_average"`
+	KVersion    string    `json:"kernel_version"`
+	PVEVersion  string    `json:"pve_version"`
 }
 
 type VMInfo struct {
