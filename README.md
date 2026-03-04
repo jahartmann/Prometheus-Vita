@@ -7,7 +7,7 @@ Intelligentes Proxmox Infrastructure Management mit KI-Agent-System.
 ### Automatisch (empfohlen)
 
 ```bash
-./setup.sh
+sudo ./setup.sh
 ```
 
 Das Setup-Skript erledigt alles automatisch:
