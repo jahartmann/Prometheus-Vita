@@ -8,6 +8,7 @@ import (
 
 	apiPkg "github.com/antigravity/prometheus/internal/api/response"
 	"github.com/antigravity/prometheus/internal/model"
+	"github.com/antigravity/prometheus/internal/proxmox"
 	"github.com/antigravity/prometheus/internal/repository"
 	nodeService "github.com/antigravity/prometheus/internal/service/node"
 	"github.com/google/uuid"
@@ -138,7 +139,12 @@ func (h *NodeHandler) GetVMs(c echo.Context) error {
 		return handleNodeError(c, err, "failed to get VMs")
 	}
 
-	return apiPkg.Success(c, vms)
+	responses := make([]proxmox.VMResponse, 0, len(vms))
+	for _, vm := range vms {
+		responses = append(responses, vm.ToResponse())
+	}
+
+	return apiPkg.Success(c, responses)
 }
 
 func (h *NodeHandler) GetStorage(c echo.Context) error {

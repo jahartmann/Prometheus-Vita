@@ -21,6 +21,7 @@ import {
   Archive,
   Shield,
   Disc,
+  ArrowRightLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -47,6 +48,7 @@ const mainNavItems: NavItem[] = [
 
 const featureNavItems: NavItem[] = [
   { label: "Backups", href: "/backups", icon: Archive, matchPrefix: "/backups" },
+  { label: "Migration", href: "/migrations", icon: ArrowRightLeft, matchPrefix: "/migrations" },
   { label: "Disaster Recovery", href: "/disaster-recovery", icon: Shield, matchPrefix: "/disaster-recovery" },
 ];
 

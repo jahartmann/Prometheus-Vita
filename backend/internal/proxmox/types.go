@@ -28,17 +28,50 @@ type VMInfo struct {
 	Name      string  `json:"name"`
 	Status    string  `json:"status"`
 	Type      string  `json:"type"` // qemu or lxc
+	CPU       float64 `json:"cpu"`
 	CPUs      int     `json:"cpus"`
-	MaxMem    int64   `json:"max_mem"`
+	MaxMem    int64   `json:"maxmem"`
 	Mem       int64   `json:"mem"`
-	MaxDisk   int64   `json:"max_disk"`
+	MaxDisk   int64   `json:"maxdisk"`
 	Disk      int64   `json:"disk"`
 	Uptime    int64   `json:"uptime"`
-	NetIn     int64   `json:"net_in"`
-	NetOut    int64   `json:"net_out"`
-	DiskRead  int64   `json:"disk_read"`
-	DiskWrite int64   `json:"disk_write"`
+	NetIn     int64   `json:"netin"`
+	NetOut    int64   `json:"netout"`
+	DiskRead  int64   `json:"diskread"`
+	DiskWrite int64   `json:"diskwrite"`
 	Tags      string  `json:"tags"`
+}
+
+type VMResponse struct {
+	VMID        int     `json:"vmid"`
+	Name        string  `json:"name"`
+	Type        string  `json:"type"`
+	Status      string  `json:"status"`
+	CPUUsage    float64 `json:"cpu_usage"`
+	CPUCores    int     `json:"cpu_cores"`
+	MemoryTotal int64   `json:"memory_total"`
+	MemoryUsed  int64   `json:"memory_used"`
+	DiskTotal   int64   `json:"disk_total"`
+	DiskUsed    int64   `json:"disk_used"`
+	Uptime      int64   `json:"uptime"`
+	Tags        string  `json:"tags"`
+}
+
+func (v VMInfo) ToResponse() VMResponse {
+	return VMResponse{
+		VMID:        v.VMID,
+		Name:        v.Name,
+		Type:        v.Type,
+		Status:      v.Status,
+		CPUUsage:    v.CPU * 100,
+		CPUCores:    v.CPUs,
+		MemoryTotal: v.MaxMem,
+		MemoryUsed:  v.Mem,
+		DiskTotal:   v.MaxDisk,
+		DiskUsed:    v.Disk,
+		Uptime:      v.Uptime,
+		Tags:        v.Tags,
+	}
 }
 
 type StorageInfo struct {
