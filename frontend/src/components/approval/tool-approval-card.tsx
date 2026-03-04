@@ -15,7 +15,7 @@ export function ToolApprovalCard() {
     setIsLoading(true);
     approvalApi
       .listPending()
-      .then((data) => setApprovals(data || []))
+      .then((data) => setApprovals((data || []) as AgentPendingApproval[]))
       .finally(() => setIsLoading(false));
   };
 
