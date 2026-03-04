@@ -20,6 +20,7 @@ import (
 	"github.com/antigravity/prometheus/internal/service/anomaly"
 	"github.com/antigravity/prometheus/internal/service/auth"
 	"github.com/antigravity/prometheus/internal/service/backup"
+	"github.com/antigravity/prometheus/internal/service/brain"
 	"github.com/antigravity/prometheus/internal/service/briefing"
 	"github.com/antigravity/prometheus/internal/service/crypto"
 	"github.com/antigravity/prometheus/internal/service/drift"
@@ -31,6 +32,7 @@ import (
 	"github.com/antigravity/prometheus/internal/service/notification"
 	"github.com/antigravity/prometheus/internal/service/prediction"
 	"github.com/antigravity/prometheus/internal/service/recovery"
+	"github.com/antigravity/prometheus/internal/service/reflex"
 	"github.com/antigravity/prometheus/internal/service/rightsizing"
 	topologyService "github.com/antigravity/prometheus/internal/service/topology"
 	"github.com/antigravity/prometheus/internal/service/sshkeys"
@@ -138,6 +140,11 @@ func main() {
 	apiTokenRepo := repository.NewAPITokenRepository(dbPool)
 	auditRepo := repository.NewAuditRepository(dbPool)
 
+	// Phase 7 Repositories
+	brainRepo := repository.NewBrainRepository(dbPool)
+	reflexRepo := repository.NewReflexRuleRepository(dbPool)
+	agentConfigRepo := repository.NewAgentConfigRepository(dbPool)
+
 	// Services
 	jwtSvc := auth.NewJWTService(cfg.JWT.Secret, cfg.JWT.AccessTokenExpiry, cfg.JWT.RefreshTokenExpiry)
 	authService := auth.NewService(userRepo, tokenRepo, jwtSvc)
@@ -181,8 +188,10 @@ func main() {
 
 	// LLM Registry
 	llmRegistry := llm.NewRegistry()
+	var ollamaProvider *llm.OllamaProvider
 	if cfg.LLM.OllamaURL != "" {
-		llmRegistry.Register("ollama", llm.NewOllamaProvider(cfg.LLM.OllamaURL))
+		ollamaProvider = llm.NewOllamaProvider(cfg.LLM.OllamaURL)
+		llmRegistry.Register("ollama", ollamaProvider)
 	}
 	if cfg.LLM.OpenAIKey != "" {
 		llmRegistry.Register("openai", llm.NewOpenAIProvider(cfg.LLM.OpenAIKey, cfg.LLM.OpenAIURL))
@@ -207,6 +216,10 @@ func main() {
 	sshkeySvc := sshkeys.NewService(sshKeyRepo, nodeRepo, encryptor, sshPool)
 	gatewaySvc := gateway.NewService(apiTokenRepo, userRepo)
 	topologySvc := topologyService.NewService(nodeRepo, clientFactory)
+
+	// Phase 7 Services
+	brainSvc := brain.NewService(brainRepo)
+	reflexSvc := reflex.NewService(reflexRepo, metricsRepo, nodeRepo, nodeSvc, notifSvc)
 
 	// Chat Repositories
 	chatConvRepo := repository.NewChatConversationRepository(dbPool)
@@ -233,6 +246,8 @@ func main() {
 	agentToolRegistry.Register(agent.NewCheckDriftTool(driftSvc))
 	agentToolRegistry.Register(agent.NewCheckUpdatesTool(updateSvc))
 	agentToolRegistry.Register(agent.NewRightsizingTool(rightsizingSvc))
+	agentToolRegistry.Register(agent.NewSaveKnowledgeTool(brainSvc))
+	agentToolRegistry.Register(agent.NewRecallKnowledgeTool(brainSvc))
 
 	// Agent Service
 	agentSvc := agent.NewService(llmRegistry, agentToolRegistry, chatConvRepo, chatMsgRepo, toolCallRepo, approvalRepo, userRepo)
@@ -281,6 +296,8 @@ func main() {
 	sched.AddJob(rightsizingJob)
 	keyRotationJob := scheduler.NewKeyRotationJob(sshkeySvc, 1*time.Hour)
 	sched.AddJob(keyRotationJob)
+	reflexEvalJob := scheduler.NewReflexEvaluationJob(reflexSvc, 30*time.Second)
+	sched.AddJob(reflexEvalJob)
 
 	if telegramBotEnabled && telegramBotSvc != nil {
 		pollInterval := time.Duration(cfg.Telegram.PollInterval) * time.Second
@@ -331,6 +348,9 @@ func main() {
 		SSHKey:       handler.NewSSHKeyHandler(sshkeySvc),
 		Gateway:      handler.NewGatewayHandler(gatewaySvc, auditRepo),
 		Topology:     handler.NewTopologyHandler(topologySvc),
+		Brain:        handler.NewBrainHandler(brainSvc),
+		Reflex:       handler.NewReflexHandler(reflexSvc),
+		AgentConfig:  handler.NewAgentConfigHandler(agentConfigRepo, llmRegistry, ollamaProvider),
 	}
 
 	// Setup routes

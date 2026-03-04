@@ -25,6 +25,7 @@ import {
   Newspaper,
   ArrowLeftRight,
   Map,
+  Brain,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -57,6 +58,7 @@ const bottomItems: NavItem[] = [
   { label: "Empfehlungen", href: "/recommendations", icon: TrendingDown, matchPrefix: "/recommendations" },
   { label: "Topologie", href: "/topology", icon: Map, matchPrefix: "/topology" },
   { label: "AI Chat", href: "/chat", icon: MessageSquare, matchPrefix: "/chat" },
+  { label: "Wissensbasis", href: "/settings/brain", icon: Brain, matchPrefix: "/settings/brain" },
   { label: "Einstellungen", href: "/settings/nodes", icon: Settings, matchPrefix: "/settings" },
 ];
 

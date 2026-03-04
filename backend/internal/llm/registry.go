@@ -76,3 +76,21 @@ func (r *Registry) ListModels() []string {
 	}
 	return models
 }
+
+func (r *Registry) Reload(ollamaURL, openaiKey, anthropicKey string) {
+	if ollamaURL != "" {
+		if p, ok := r.providers["ollama"]; ok {
+			if op, ok := p.(*OllamaProvider); ok {
+				op.SetBaseURL(ollamaURL)
+			}
+		} else {
+			r.providers["ollama"] = NewOllamaProvider(ollamaURL)
+		}
+	}
+	if openaiKey != "" {
+		r.providers["openai"] = NewOpenAIProvider(openaiKey, "")
+	}
+	if anthropicKey != "" {
+		r.providers["anthropic"] = NewAnthropicProvider(anthropicKey)
+	}
+}

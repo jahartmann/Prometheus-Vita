@@ -18,6 +18,7 @@ type BackupRepository interface {
 	ListByNode(ctx context.Context, nodeID uuid.UUID) ([]model.ConfigBackup, error)
 	UpdateStatus(ctx context.Context, id uuid.UUID, status model.BackupStatus, errorMsg string) error
 	UpdateCompleted(ctx context.Context, id uuid.UUID, fileCount int, totalSize int64) error
+	UpdateRecoveryGuide(ctx context.Context, id uuid.UUID, guide string) error
 	Delete(ctx context.Context, id uuid.UUID) error
 	GetLatestByNode(ctx context.Context, nodeID uuid.UUID) (*model.ConfigBackup, error)
 	GetNextVersion(ctx context.Context, nodeID uuid.UUID) (int, error)
@@ -53,11 +54,11 @@ func (r *pgBackupRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.
 	var b model.ConfigBackup
 	err := r.db.QueryRow(ctx,
 		`SELECT id, node_id, version, backup_type, file_count, total_size,
-		        status, error_message, notes, created_at, completed_at
+		        status, error_message, notes, recovery_guide, created_at, completed_at
 		 FROM config_backups WHERE id = $1`, id,
 	).Scan(&b.ID, &b.NodeID, &b.Version, &b.BackupType,
 		&b.FileCount, &b.TotalSize, &b.Status,
-		&b.ErrorMessage, &b.Notes, &b.CreatedAt, &b.CompletedAt)
+		&b.ErrorMessage, &b.Notes, &b.RecoveryGuide, &b.CreatedAt, &b.CompletedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
@@ -70,7 +71,7 @@ func (r *pgBackupRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.
 func (r *pgBackupRepository) ListAll(ctx context.Context) ([]model.ConfigBackup, error) {
 	rows, err := r.db.Query(ctx,
 		`SELECT id, node_id, version, backup_type, file_count, total_size,
-		        status, error_message, notes, created_at, completed_at
+		        status, error_message, notes, recovery_guide, created_at, completed_at
 		 FROM config_backups ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, fmt.Errorf("list all backups: %w", err)
@@ -93,7 +94,7 @@ func (r *pgBackupRepository) ListAll(ctx context.Context) ([]model.ConfigBackup,
 func (r *pgBackupRepository) ListByNode(ctx context.Context, nodeID uuid.UUID) ([]model.ConfigBackup, error) {
 	rows, err := r.db.Query(ctx,
 		`SELECT id, node_id, version, backup_type, file_count, total_size,
-		        status, error_message, notes, created_at, completed_at
+		        status, error_message, notes, recovery_guide, created_at, completed_at
 		 FROM config_backups WHERE node_id = $1 ORDER BY created_at DESC`, nodeID)
 	if err != nil {
 		return nil, fmt.Errorf("list backups by node: %w", err)
@@ -144,6 +145,17 @@ func (r *pgBackupRepository) UpdateCompleted(ctx context.Context, id uuid.UUID, 
 	return nil
 }
 
+func (r *pgBackupRepository) UpdateRecoveryGuide(ctx context.Context, id uuid.UUID, guide string) error {
+	_, err := r.db.Exec(ctx,
+		`UPDATE config_backups SET recovery_guide=$1 WHERE id=$2`,
+		guide, id,
+	)
+	if err != nil {
+		return fmt.Errorf("update recovery guide: %w", err)
+	}
+	return nil
+}
+
 func (r *pgBackupRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	_, err := r.db.Exec(ctx, "DELETE FROM config_backups WHERE id=$1", id)
 	if err != nil {
@@ -156,11 +168,11 @@ func (r *pgBackupRepository) GetLatestByNode(ctx context.Context, nodeID uuid.UU
 	var b model.ConfigBackup
 	err := r.db.QueryRow(ctx,
 		`SELECT id, node_id, version, backup_type, file_count, total_size,
-		        status, error_message, notes, created_at, completed_at
+		        status, error_message, notes, recovery_guide, created_at, completed_at
 		 FROM config_backups WHERE node_id = $1 ORDER BY created_at DESC LIMIT 1`, nodeID,
 	).Scan(&b.ID, &b.NodeID, &b.Version, &b.BackupType,
 		&b.FileCount, &b.TotalSize, &b.Status,
-		&b.ErrorMessage, &b.Notes, &b.CreatedAt, &b.CompletedAt)
+		&b.ErrorMessage, &b.Notes, &b.RecoveryGuide, &b.CreatedAt, &b.CompletedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound

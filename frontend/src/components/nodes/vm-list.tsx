@@ -15,6 +15,7 @@ import {
   Terminal,
   ArrowRightLeft,
   Loader2,
+  CheckSquare,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +28,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -48,9 +50,9 @@ import { MigrateVmDialog } from "@/components/migration/migrate-vm-dialog";
 import { SnapshotDialog } from "@/components/nodes/snapshot-dialog";
 import { VmConsole } from "@/components/nodes/vm-console";
 import { useNodeStore } from "@/stores/node-store";
-import { vmApi } from "@/lib/api";
+import { vmApi, bulkVmApi, toArray } from "@/lib/api";
 import { toast } from "sonner";
-import type { VM } from "@/types/api";
+import type { VM, BulkVMResult } from "@/types/api";
 import { formatBytes, formatUptime, formatPercentage } from "@/lib/utils";
 
 interface VmListProps {
@@ -71,6 +73,9 @@ export function VmList({ vms, nodeId, onRefresh }: VmListProps) {
   const [consoleVm, setConsoleVm] = useState<VM | null>(null);
   const [stopConfirmVm, setStopConfirmVm] = useState<VM | null>(null);
   const [actionLoading, setActionLoading] = useState<number | null>(null);
+  const [selectedVmIds, setSelectedVmIds] = useState<Set<number>>(new Set());
+  const [bulkAction, setBulkAction] = useState<string | null>(null);
+  const [bulkLoading, setBulkLoading] = useState(false);
   const { nodes } = useNodeStore();
   const currentNode = nodes.find((n) => n.id === nodeId);
 
@@ -119,6 +124,63 @@ export function VmList({ vms, nodeId, onRefresh }: VmListProps) {
 
     return result;
   }, [vms, search, sortField, sortDirection]);
+
+  const allSelected =
+    filteredAndSorted.length > 0 &&
+    filteredAndSorted.every((vm) => selectedVmIds.has(vm.vmid));
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedVmIds(new Set());
+    } else {
+      setSelectedVmIds(new Set(filteredAndSorted.map((vm) => vm.vmid)));
+    }
+  };
+
+  const toggleSelect = (vmid: number) => {
+    setSelectedVmIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(vmid)) {
+        next.delete(vmid);
+      } else {
+        next.add(vmid);
+      }
+      return next;
+    });
+  };
+
+  const handleBulkAction = useCallback(
+    async (action: string) => {
+      const vmids = Array.from(selectedVmIds);
+      if (vmids.length === 0) return;
+
+      setBulkLoading(true);
+      try {
+        const res = await bulkVmApi.execute(nodeId, { vmids, action });
+        const results = toArray<BulkVMResult>(res.data);
+
+        const succeeded = results.filter((r) => r.success).length;
+        const failed = results.filter((r) => !r.success).length;
+
+        if (failed === 0) {
+          toast.success(`${succeeded} VMs: Aktion "${action}" erfolgreich`);
+        } else {
+          toast.warning(
+            `${succeeded} erfolgreich, ${failed} fehlgeschlagen`
+          );
+        }
+
+        setSelectedVmIds(new Set());
+        setTimeout(() => onRefresh?.(), 2000);
+      } catch {
+        toast.error("Bulk-Aktion fehlgeschlagen");
+      } finally {
+        setBulkLoading(false);
+        setBulkAction(null);
+      }
+    },
+    [nodeId, selectedVmIds, onRefresh]
+  );
 
   const statusVariant = (status: string) => {
     switch (status) {
@@ -221,10 +283,61 @@ export function VmList({ vms, nodeId, onRefresh }: VmListProps) {
         </div>
       </div>
 
+      {selectedVmIds.size > 0 && (
+        <div className="flex items-center gap-2 rounded-lg border bg-muted/50 p-3">
+          <CheckSquare className="h-4 w-4 text-primary" />
+          <span className="text-sm font-medium">
+            {selectedVmIds.size} VMs ausgewaehlt
+          </span>
+          <div className="ml-auto flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setBulkAction("start")}
+              disabled={bulkLoading}
+            >
+              <Play className="mr-1 h-3 w-3" />
+              Starten
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setBulkAction("shutdown")}
+              disabled={bulkLoading}
+            >
+              <PowerOff className="mr-1 h-3 w-3" />
+              Herunterfahren
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={() => setBulkAction("stop")}
+              disabled={bulkLoading}
+            >
+              <Square className="mr-1 h-3 w-3" />
+              Stoppen
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setSelectedVmIds(new Set())}
+            >
+              Auswahl aufheben
+            </Button>
+          </div>
+        </div>
+      )}
+
       <div className="rounded-lg border">
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-[40px]">
+                <Checkbox
+                  checked={allSelected}
+                  onCheckedChange={toggleSelectAll}
+                />
+              </TableHead>
               <TableHead>
                 <SortButton field="vmid">ID</SortButton>
               </TableHead>
@@ -248,7 +361,13 @@ export function VmList({ vms, nodeId, onRefresh }: VmListProps) {
           </TableHeader>
           <TableBody>
             {filteredAndSorted.map((vm) => (
-              <TableRow key={vm.vmid}>
+              <TableRow key={vm.vmid} data-state={selectedVmIds.has(vm.vmid) ? "selected" : undefined}>
+                <TableCell>
+                  <Checkbox
+                    checked={selectedVmIds.has(vm.vmid)}
+                    onCheckedChange={() => toggleSelect(vm.vmid)}
+                  />
+                </TableCell>
                 <TableCell className="font-mono text-sm">{vm.vmid}</TableCell>
                 <TableCell>
                   {vm.type === "qemu" ? (
@@ -384,6 +503,43 @@ export function VmList({ vms, nodeId, onRefresh }: VmListProps) {
               }}
             >
               Stoppen
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Bulk Action Confirmation */}
+      <AlertDialog
+        open={!!bulkAction}
+        onOpenChange={(open) => !open && setBulkAction(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Bulk-Aktion ausfuehren?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {selectedVmIds.size} VMs werden mit der Aktion &quot;{bulkAction}&quot;
+              ausgefuehrt. {bulkAction === "stop" &&
+                "Dies entspricht einem harten Ausschalten und kann zu Datenverlust fuehren."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction
+              className={
+                bulkAction === "stop"
+                  ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  : ""
+              }
+              onClick={() => {
+                if (bulkAction) {
+                  handleBulkAction(bulkAction);
+                }
+              }}
+            >
+              {bulkLoading ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              Ausfuehren
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

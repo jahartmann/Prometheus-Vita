@@ -34,15 +34,16 @@ import {
 import { useNotificationStore } from "@/stores/notification-store";
 import { useNodeStore } from "@/stores/node-store";
 import { useEscalationStore } from "@/stores/escalation-store";
-import { notificationApi, alertApi, escalationApi } from "@/lib/api";
+import { notificationApi, alertApi, escalationApi, reflexApi, toArray } from "@/lib/api";
 import { ChannelFormDialog } from "@/components/notifications/channel-form-dialog";
 import { AlertRuleDialog } from "@/components/notifications/alert-rule-dialog";
+import { ReflexRuleDialog } from "@/components/notifications/reflex-rule-dialog";
 import { NotificationHistoryList } from "@/components/notifications/notification-history-list";
 import { EscalationPolicyDialog } from "@/components/notifications/escalation-policy-dialog";
 import { IncidentList } from "@/components/notifications/incident-list";
 import { TelegramLinkCard } from "@/components/notifications/telegram-link-card";
 import { SmtpConfigCard } from "@/components/notifications/smtp-config-card";
-import type { NotificationChannel, AlertRule, AlertSeverity, EscalationPolicy } from "@/types/api";
+import type { NotificationChannel, AlertRule, AlertSeverity, EscalationPolicy, ReflexRule } from "@/types/api";
 
 const channelTypeBadge: Record<string, "default" | "secondary" | "outline"> = {
   email: "default",
@@ -60,6 +61,15 @@ const severityLabel: Record<AlertSeverity, string> = {
   info: "Info",
   warning: "Warnung",
   critical: "Kritisch",
+};
+
+const actionTypeLabel: Record<string, string> = {
+  restart_service: "Service neustarten",
+  clear_cache: "Cache leeren",
+  notify: "Benachrichtigung",
+  run_command: "Befehl",
+  start_vm: "VM starten",
+  stop_vm: "VM stoppen",
 };
 
 const formatDate = (dateStr?: string | null) => {
@@ -100,6 +110,22 @@ export default function NotificationsSettingsPage() {
   const [testingId, setTestingId] = useState<string | null>(null);
   const [policyDialogOpen, setPolicyDialogOpen] = useState(false);
   const [editPolicy, setEditPolicy] = useState<EscalationPolicy | null>(null);
+  const [reflexRules, setReflexRules] = useState<ReflexRule[]>([]);
+  const [reflexDialogOpen, setReflexDialogOpen] = useState(false);
+  const [editReflex, setEditReflex] = useState<ReflexRule | null>(null);
+  const [reflexLoading, setReflexLoading] = useState(false);
+
+  const fetchReflexRules = async () => {
+    setReflexLoading(true);
+    try {
+      const res = await reflexApi.list();
+      setReflexRules(toArray<ReflexRule>(res.data));
+    } catch {
+      // silently ignore
+    } finally {
+      setReflexLoading(false);
+    }
+  };
 
   useEffect(() => {
     fetchChannels();
@@ -108,6 +134,7 @@ export default function NotificationsSettingsPage() {
     fetchNodes();
     fetchPolicies();
     fetchIncidents();
+    fetchReflexRules();
   }, [fetchChannels, fetchHistory, fetchAlertRules, fetchNodes, fetchPolicies, fetchIncidents]);
 
   const handleDeleteChannel = async (id: string) => {
@@ -142,6 +169,16 @@ export default function NotificationsSettingsPage() {
     fetchPolicies();
   };
 
+  const handleDeleteReflex = async (id: string) => {
+    await reflexApi.delete(id);
+    fetchReflexRules();
+  };
+
+  const handleToggleReflex = async (rule: ReflexRule) => {
+    await reflexApi.update(rule.id, { is_active: !rule.is_active });
+    fetchReflexRules();
+  };
+
   return (
     <div className="space-y-4">
       <div>
@@ -159,6 +196,7 @@ export default function NotificationsSettingsPage() {
         <TabsList>
           <TabsTrigger value="channels">Kanaele</TabsTrigger>
           <TabsTrigger value="rules">Alert-Regeln</TabsTrigger>
+          <TabsTrigger value="reflexes">Reflexe</TabsTrigger>
           <TabsTrigger value="escalation">Eskalation</TabsTrigger>
           <TabsTrigger value="incidents">Vorfaelle</TabsTrigger>
           <TabsTrigger value="history">Verlauf</TabsTrigger>
@@ -355,6 +393,107 @@ export default function NotificationsSettingsPage() {
           </Card>
         </TabsContent>
 
+        {/* Reflexes Tab */}
+        <TabsContent value="reflexes" className="space-y-4">
+          <div className="flex justify-end">
+            <Button onClick={() => { setEditReflex(null); setReflexDialogOpen(true); }}>
+              <Plus className="mr-2 h-4 w-4" />
+              Reflex erstellen
+            </Button>
+          </div>
+
+          <Card>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Trigger</TableHead>
+                    <TableHead>Schwellenwert</TableHead>
+                    <TableHead>Aktion</TableHead>
+                    <TableHead>Cooldown</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Letzter Trigger</TableHead>
+                    <TableHead className="w-12"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {reflexLoading && reflexRules.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                        Laden...
+                      </TableCell>
+                    </TableRow>
+                  ) : reflexRules.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                        Keine Reflex-Regeln konfiguriert.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    reflexRules.map((rule) => (
+                      <TableRow key={rule.id}>
+                        <TableCell className="font-medium">{rule.name}</TableCell>
+                        <TableCell>{rule.trigger_metric}</TableCell>
+                        <TableCell className="font-mono text-sm">
+                          {rule.operator} {rule.threshold}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">
+                            {actionTypeLabel[rule.action_type] || rule.action_type}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {rule.cooldown_seconds}s
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={rule.is_active ? "default" : "secondary"}
+                            className="cursor-pointer"
+                            onClick={() => handleToggleReflex(rule)}
+                          >
+                            {rule.is_active ? "Aktiv" : "Inaktiv"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {formatDate(rule.last_triggered_at)}
+                        </TableCell>
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  setEditReflex(rule);
+                                  setReflexDialogOpen(true);
+                                }}
+                              >
+                                <Pencil className="mr-2 h-4 w-4" />
+                                Bearbeiten
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => handleDeleteReflex(rule.id)}
+                                className="text-destructive"
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Loeschen
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         {/* Escalation Tab */}
         <TabsContent value="escalation" className="space-y-4">
           <div className="flex justify-end">
@@ -476,6 +615,14 @@ export default function NotificationsSettingsPage() {
         onSuccess={fetchPolicies}
         policy={editPolicy}
         channels={channels}
+      />
+
+      <ReflexRuleDialog
+        open={reflexDialogOpen}
+        onOpenChange={setReflexDialogOpen}
+        onSuccess={fetchReflexRules}
+        rule={editReflex}
+        nodes={nodes}
       />
     </div>
   );

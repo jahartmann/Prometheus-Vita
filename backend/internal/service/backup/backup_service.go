@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
+	"time"
 
 	"github.com/antigravity/prometheus/internal/model"
 	"github.com/antigravity/prometheus/internal/repository"
@@ -183,6 +185,13 @@ func (s *Service) CreateBackup(ctx context.Context, nodeID uuid.UUID, req model.
 	backup.FileCount = len(backupFiles)
 	backup.TotalSize = totalSize
 
+	// Generate recovery guide
+	guide := s.generateRecoveryGuide(node.Name, node.Hostname, version, backupFiles)
+	if err := s.backupRepo.UpdateRecoveryGuide(ctx, backup.ID, guide); err != nil {
+		slog.Warn("failed to save recovery guide", slog.Any("error", err))
+	}
+	backup.RecoveryGuide = guide
+
 	// Broadcast via WebSocket
 	if s.wsHub != nil {
 		s.wsHub.BroadcastMessage(monitor.WSMessage{
@@ -360,4 +369,39 @@ func (s *Service) getCollectedFilesFromBackup(ctx context.Context, backupID uuid
 	}
 
 	return collected, nil
+}
+
+// GetRecoveryGuide retrieves the recovery guide for a backup.
+func (s *Service) GetRecoveryGuide(ctx context.Context, backupID uuid.UUID) (string, error) {
+	backup, err := s.backupRepo.GetByID(ctx, backupID)
+	if err != nil {
+		return "", fmt.Errorf("get backup: %w", err)
+	}
+	return backup.RecoveryGuide, nil
+}
+
+// generateRecoveryGuide creates a template-based recovery guide for a backup.
+func (s *Service) generateRecoveryGuide(nodeName, hostname string, version int, files []model.BackupFile) string {
+	var b strings.Builder
+
+	b.WriteString(fmt.Sprintf("# Recovery Guide - %s - v%d\n\n", nodeName, version))
+	b.WriteString(fmt.Sprintf("## Erstellt: %s\n\n", time.Now().Format("02.01.2006 15:04")))
+
+	b.WriteString("## System-Information\n\n")
+	b.WriteString(fmt.Sprintf("- Hostname: %s\n\n", hostname))
+
+	b.WriteString(fmt.Sprintf("## Gesicherte Dateien (%d)\n\n", len(files)))
+	for _, f := range files {
+		b.WriteString(fmt.Sprintf("- `%s` (%s, %s)\n", f.FilePath, f.FilePermissions, f.FileOwner))
+	}
+	b.WriteString("\n")
+
+	b.WriteString("## Wiederherstellungs-Schritte\n\n")
+	b.WriteString("1. Neuen Proxmox-Node installieren\n")
+	b.WriteString("2. Node in Prometheus-Vita registrieren\n")
+	b.WriteString(fmt.Sprintf("3. Backup v%d auswaehlen -> Wiederherstellen\n", version))
+	b.WriteString("4. Dateien pruefen\n")
+	b.WriteString("5. Services neustarten\n")
+
+	return b.String()
 }

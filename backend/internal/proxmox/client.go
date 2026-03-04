@@ -506,6 +506,38 @@ func CreateAPITokenWithTicket(ctx context.Context, hostname string, port int, us
 	return result.Data.FullTokenID, result.Data.Value, nil
 }
 
+// GetStorageContent returns content of a specific type from a storage on a node.
+func (c *Client) GetStorageContent(ctx context.Context, node, storage, contentType string) ([]StorageContent, error) {
+	path := fmt.Sprintf("/nodes/%s/storage/%s/content?content=%s", node, url.QueryEscape(storage), url.QueryEscape(contentType))
+	data, err := c.doRequest(ctx, http.MethodGet, path)
+	if err != nil {
+		return nil, fmt.Errorf("get storage content: %w", err)
+	}
+	var content []StorageContent
+	if err := json.Unmarshal(data, &content); err != nil {
+		return nil, fmt.Errorf("unmarshal storage content: %w", err)
+	}
+	return content, nil
+}
+
+// DownloadURL downloads a file from a URL to a storage on a node. Returns the task UPID.
+func (c *Client) DownloadURL(ctx context.Context, node, storage, filename, downloadURL string) (string, error) {
+	path := fmt.Sprintf("/nodes/%s/storage/%s/download-url", node, url.QueryEscape(storage))
+	params := url.Values{}
+	params.Set("filename", filename)
+	params.Set("url", downloadURL)
+	params.Set("content", "iso")
+	data, err := c.doRequestWithBody(ctx, http.MethodPost, path, params)
+	if err != nil {
+		return "", fmt.Errorf("download url: %w", err)
+	}
+	var upid string
+	if err := json.Unmarshal(data, &upid); err != nil {
+		return "", fmt.Errorf("unmarshal download upid: %w", err)
+	}
+	return upid, nil
+}
+
 // ListSnapshots returns all snapshots for a VM/CT.
 func (c *Client) ListSnapshots(ctx context.Context, node string, vmid int, vmType string) ([]SnapshotInfo, error) {
 	path := fmt.Sprintf("/nodes/%s/%s/%d/snapshot", node, vmType, vmid)

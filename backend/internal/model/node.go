@@ -112,6 +112,20 @@ type OnboardNodeRequest struct {
 	SSHPort  int      `json:"ssh_port"`
 }
 
+// Bulk VM operations
+
+type BulkVMRequest struct {
+	VMIDs  []int  `json:"vmids"`
+	Action string `json:"action"` // "start", "stop", "shutdown"
+}
+
+type BulkVMResult struct {
+	VMID    int    `json:"vmid"`
+	Success bool   `json:"success"`
+	Error   string `json:"error,omitempty"`
+	UPID    string `json:"upid,omitempty"`
+}
+
 type TestConnectionRequest struct {
 	Hostname       string   `json:"hostname" validate:"required"`
 	Port           int      `json:"port"`

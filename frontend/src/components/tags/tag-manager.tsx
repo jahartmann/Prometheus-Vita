@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, RefreshCw, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
-import { tagApi, toArray } from "@/lib/api";
-import type { Tag } from "@/types/api";
+import { tagApi, nodeApi, toArray } from "@/lib/api";
+import { toast } from "sonner";
+import type { Tag, Node } from "@/types/api";
 
 const colorPresets = [
   "#ef4444",
@@ -25,6 +26,9 @@ export function TagManager() {
   const [name, setName] = useState("");
   const [color, setColor] = useState("#3b82f6");
   const [category, setCategory] = useState("");
+  const [nodes, setNodes] = useState<Node[]>([]);
+  const [syncNodeId, setSyncNodeId] = useState("");
+  const [syncLoading, setSyncLoading] = useState(false);
 
   const fetchTags = () => {
     tagApi
@@ -35,6 +39,16 @@ export function TagManager() {
 
   useEffect(() => {
     fetchTags();
+    nodeApi
+      .list()
+      .then((res) => {
+        const nodeList = toArray<Node>(res.data);
+        setNodes(nodeList);
+        if (nodeList.length > 0 && !syncNodeId) {
+          setSyncNodeId(nodeList[0].id);
+        }
+      })
+      .catch(() => {});
   }, []);
 
   const handleCreate = async () => {
@@ -48,6 +62,22 @@ export function TagManager() {
   const handleDelete = async (id: string) => {
     await tagApi.delete(id);
     fetchTags();
+  };
+
+  const handleSync = async () => {
+    if (!syncNodeId) return;
+    setSyncLoading(true);
+    try {
+      const res = await tagApi.syncFromProxmox(syncNodeId);
+      const data = res.data as { imported?: number };
+      const count = data?.imported ?? 0;
+      toast.success(`${count} Tags von Proxmox importiert`);
+      fetchTags();
+    } catch {
+      toast.error("Tag-Sync fehlgeschlagen");
+    } finally {
+      setSyncLoading(false);
+    }
   };
 
   return (
@@ -93,6 +123,33 @@ export function TagManager() {
             <Plus className="mr-2 h-4 w-4" />
             Tag erstellen
           </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="p-4 space-y-3">
+          <h3 className="text-sm font-medium">Tags von Proxmox importieren</h3>
+          <div className="flex items-center gap-3">
+            <select
+              className="rounded-md border bg-background px-3 py-2 text-sm"
+              value={syncNodeId}
+              onChange={(e) => setSyncNodeId(e.target.value)}
+            >
+              {nodes.filter((n) => n.type === "pve").map((n) => (
+                <option key={n.id} value={n.id}>
+                  {n.name}
+                </option>
+              ))}
+            </select>
+            <Button onClick={handleSync} disabled={syncLoading || !syncNodeId} variant="outline">
+              {syncLoading ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="mr-2 h-4 w-4" />
+              )}
+              Tags importieren
+            </Button>
+          </div>
         </CardContent>
       </Card>
 

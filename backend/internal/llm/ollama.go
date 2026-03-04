@@ -10,6 +10,12 @@ import (
 	"time"
 )
 
+type ModelInfo struct {
+	Name       string `json:"name"`
+	Size       int64  `json:"size"`
+	ModifiedAt string `json:"modified_at"`
+}
+
 type OllamaProvider struct {
 	baseURL string
 	client  *http.Client
@@ -177,4 +183,55 @@ func (p *OllamaProvider) Complete(ctx context.Context, req CompletionRequest) (*
 	}
 
 	return result, nil
+}
+
+func (p *OllamaProvider) SetBaseURL(url string) {
+	p.baseURL = url
+}
+
+func (p *OllamaProvider) BaseURL() string {
+	return p.baseURL
+}
+
+func (p *OllamaProvider) DiscoverModels(ctx context.Context) ([]ModelInfo, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.baseURL+"/api/tags", nil)
+	if err != nil {
+		return nil, fmt.Errorf("create discover request: %w", err)
+	}
+
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("discover models request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read discover response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("ollama returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var tagsResp struct {
+		Models []struct {
+			Name       string `json:"name"`
+			Size       int64  `json:"size"`
+			ModifiedAt string `json:"modified_at"`
+		} `json:"models"`
+	}
+	if err := json.Unmarshal(body, &tagsResp); err != nil {
+		return nil, fmt.Errorf("unmarshal discover response: %w", err)
+	}
+
+	models := make([]ModelInfo, 0, len(tagsResp.Models))
+	for _, m := range tagsResp.Models {
+		models = append(models, ModelInfo{
+			Name:       m.Name,
+			Size:       m.Size,
+			ModifiedAt: m.ModifiedAt,
+		})
+	}
+	return models, nil
 }

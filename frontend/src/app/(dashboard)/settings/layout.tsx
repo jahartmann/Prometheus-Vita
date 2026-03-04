@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, Server, Users, Key, Globe, Tag, Shield, Bot } from "lucide-react";
+import { Bell, Server, Users, Key, Globe, Tag, Shield, Bot, Brain } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const settingsNav = [
@@ -45,6 +45,11 @@ const settingsNav = [
     label: "KI-Assistent",
     href: "/settings/agent",
     icon: Bot,
+  },
+  {
+    label: "Wissensbasis",
+    href: "/settings/brain",
+    icon: Brain,
   },
 ];
 

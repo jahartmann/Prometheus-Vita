@@ -40,6 +40,9 @@ type Handlers struct {
 	SSHKey       *handler.SSHKeyHandler
 	Gateway      *handler.GatewayHandler
 	Topology     *handler.TopologyHandler
+	Brain        *handler.BrainHandler
+	Reflex       *handler.ReflexHandler
+	AgentConfig  *handler.AgentConfigHandler
 }
 
 func SetupRouter(e *echo.Echo, cfg *config.Config, jwtSvc *auth.JWTService, h Handlers, gatewaySvc *gateway.Service, redisClient *redis.Client, auditRepo repository.AuditRepository) {
@@ -96,6 +99,8 @@ func SetupRouter(e *echo.Echo, cfg *config.Config, jwtSvc *auth.JWTService, h Ha
 	nodes.GET("/:id/network", h.Node.GetNetworkInterfaces)
 	nodes.GET("/:id/disks", h.Node.GetDisks)
 	nodes.GET("/:id/tags", h.Tag.GetNodeTags)
+	nodes.GET("/:id/isos", h.Node.ListISOs)
+	nodes.GET("/:id/templates", h.Node.ListTemplates)
 
 	// Node backups (read)
 	nodes.GET("/:id/backups", h.Backup.ListBackups)
@@ -135,6 +140,7 @@ func SetupRouter(e *echo.Echo, cfg *config.Config, jwtSvc *auth.JWTService, h Ha
 	adminOp.POST("/:id/backup", h.Backup.CreateBackup)
 	adminOp.POST("/:id/vzdump", h.Backup.CreateVzdumpBackup)
 	adminOp.POST("/:id/backup-schedules", h.Schedule.CreateSchedule)
+	adminOp.POST("/:id/sync-content", h.Node.SyncContent)
 	adminOp.PUT("/:id/network/:iface/alias", h.Node.SetNetworkAlias)
 	adminOp.POST("/:id/tags", h.Tag.AddTagToNode)
 	adminOp.DELETE("/:id/tags/:tagId", h.Tag.RemoveTagFromNode)
@@ -413,6 +419,49 @@ func SetupRouter(e *echo.Echo, cfg *config.Config, jwtSvc *auth.JWTService, h Ha
 	if h.Topology != nil {
 		protected.GET("/topology", h.Topology.GetTopology)
 	}
+
+	// Brain (Wissensbasis)
+	if h.Brain != nil {
+		brainRoutes := protected.Group("/brain")
+		brainRoutes.GET("", h.Brain.List)
+		brainRoutes.GET("/search", h.Brain.Search)
+
+		brainAdmin := brainRoutes.Group("")
+		brainAdmin.Use(middleware.RequireRole(model.RoleAdmin, model.RoleOperator))
+		brainAdmin.POST("", h.Brain.Create)
+		brainAdmin.DELETE("/:id", h.Brain.Delete)
+	}
+
+	// Reflexes
+	if h.Reflex != nil {
+		reflexRoutes := protected.Group("/reflexes")
+		reflexRoutes.GET("", h.Reflex.List)
+		reflexRoutes.GET("/:id", h.Reflex.Get)
+
+		reflexAdmin := reflexRoutes.Group("")
+		reflexAdmin.Use(middleware.RequireRole(model.RoleAdmin))
+		reflexAdmin.POST("", h.Reflex.Create)
+		reflexAdmin.PUT("/:id", h.Reflex.Update)
+		reflexAdmin.DELETE("/:id", h.Reflex.Delete)
+	}
+
+	// Agent Config
+	if h.AgentConfig != nil {
+		agentRoutes := protected.Group("/agent")
+		agentRoutes.Use(middleware.RequireRole(model.RoleAdmin))
+		agentRoutes.GET("/config", h.AgentConfig.GetConfig)
+		agentRoutes.PUT("/config", h.AgentConfig.UpdateConfig)
+		agentRoutes.GET("/models", h.AgentConfig.GetModels)
+	}
+
+	// Backup Recovery Guide
+	backups.GET("/:id/recovery-guide", h.Backup.GetRecoveryGuide)
+
+	// Bulk VM Actions
+	adminOp.POST("/:id/vms/bulk", h.Node.BulkVMAction)
+
+	// Tag Sync from Proxmox
+	adminOp.POST("/:id/tags/sync", h.Node.SyncTags)
 
 	// WebSocket
 	e.GET("/api/v1/ws", h.WS.HandleWS)

@@ -123,6 +123,13 @@ export interface VM {
   tags: string[];
 }
 
+export interface BulkVMResult {
+  vmid: number;
+  success: boolean;
+  error?: string;
+  upid?: string;
+}
+
 export interface CreateNodeRequest {
   name: string;
   type: NodeType;
@@ -196,6 +203,7 @@ export interface ConfigBackup {
   status: BackupStatus;
   error_message?: string;
   notes?: string;
+  recovery_guide?: string;
   created_at: string;
   completed_at?: string;
 }
@@ -710,6 +718,27 @@ export interface BriefingNodeSummary {
   disk_pct: number;
 }
 
+// Reflex types
+export type ReflexActionType = 'restart_service' | 'clear_cache' | 'notify' | 'run_command' | 'start_vm' | 'stop_vm';
+
+export interface ReflexRule {
+  id: string;
+  name: string;
+  description?: string;
+  trigger_metric: string;
+  operator: string;
+  threshold: number;
+  action_type: ReflexActionType;
+  action_config: Record<string, unknown>;
+  cooldown_seconds: number;
+  is_active: boolean;
+  node_id?: string;
+  last_triggered_at?: string;
+  trigger_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
 // Phase 6: Drift Detection types
 export type DriftStatus = 'pending' | 'running' | 'completed' | 'failed';
 
@@ -906,4 +935,12 @@ export interface TopologyEdge {
 export interface TopologyGraph {
   nodes: TopologyNode[];
   edges: TopologyEdge[];
+}
+
+// ISO/Template types
+export interface StorageContent {
+  volid: string;
+  format: string;
+  size: number;
+  ctime: number;
 }

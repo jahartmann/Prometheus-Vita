@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Download } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { backupApi, toArray } from "@/lib/api";
@@ -16,7 +17,8 @@ interface BackupDetailDialogProps {
 export function BackupDetailDialog({ backup, open, onOpenChange }: BackupDetailDialogProps) {
   const [files, setFiles] = useState<BackupFile[]>([]);
   const [diffs, setDiffs] = useState<FileDiff[]>([]);
-  const [tab, setTab] = useState<"files" | "diff">("files");
+  const [recoveryGuide, setRecoveryGuide] = useState<string>("");
+  const [tab, setTab] = useState<"files" | "diff" | "recovery">("files");
 
   useEffect(() => {
     if (open && backup.id) {
@@ -25,6 +27,10 @@ export function BackupDetailDialog({ backup, open, onOpenChange }: BackupDetailD
       });
       backupApi.diffBackup(backup.id).then((res) => {
         setDiffs(toArray<FileDiff>(res.data));
+      }).catch(() => {});
+      backupApi.getRecoveryGuide(backup.id).then((res) => {
+        const data = res.data as { recovery_guide?: string };
+        setRecoveryGuide(data?.recovery_guide || "");
       }).catch(() => {});
     }
   }, [open, backup.id]);
@@ -36,6 +42,18 @@ export function BackupDetailDialog({ backup, open, onOpenChange }: BackupDetailD
     removed: "text-red-500",
     modified: "text-amber-500",
     unchanged: "text-muted-foreground",
+  };
+
+  const downloadRecoveryGuide = () => {
+    const blob = new Blob([recoveryGuide], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `recovery-guide-v${backup.version}.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -69,6 +87,13 @@ export function BackupDetailDialog({ backup, open, onOpenChange }: BackupDetailD
             >
               Aenderungen
             </Button>
+            <Button
+              variant={tab === "recovery" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setTab("recovery")}
+            >
+              Recovery Guide
+            </Button>
           </div>
 
           {tab === "files" ? (
@@ -90,7 +115,7 @@ export function BackupDetailDialog({ backup, open, onOpenChange }: BackupDetailD
                 <p className="text-sm text-muted-foreground">Keine Dateien.</p>
               )}
             </div>
-          ) : (
+          ) : tab === "diff" ? (
             <div className="space-y-2">
               {diffs
                 .filter((d) => d.status !== "unchanged")
@@ -112,6 +137,26 @@ export function BackupDetailDialog({ backup, open, onOpenChange }: BackupDetailD
               {diffs.filter((d) => d.status !== "unchanged").length === 0 && (
                 <p className="text-sm text-muted-foreground">
                   Keine Aenderungen seit letztem Backup.
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {recoveryGuide ? (
+                <>
+                  <div className="flex justify-end">
+                    <Button variant="outline" size="sm" onClick={downloadRecoveryGuide}>
+                      <Download className="mr-2 h-4 w-4" />
+                      Als .md herunterladen
+                    </Button>
+                  </div>
+                  <pre className="rounded bg-muted p-4 text-xs overflow-x-auto whitespace-pre-wrap">
+                    {recoveryGuide}
+                  </pre>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Kein Recovery Guide verfuegbar. Dieser wird automatisch bei Abschluss eines Backups generiert.
                 </p>
               )}
             </div>

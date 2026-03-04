@@ -35,10 +35,11 @@ type ConfigBackup struct {
 	FileCount    int          `json:"file_count"`
 	TotalSize    int64        `json:"total_size"`
 	Status       BackupStatus `json:"status"`
-	ErrorMessage string       `json:"error_message,omitempty"`
-	Notes        string       `json:"notes,omitempty"`
-	CreatedAt    time.Time    `json:"created_at"`
-	CompletedAt  *time.Time   `json:"completed_at,omitempty"`
+	ErrorMessage  string       `json:"error_message,omitempty"`
+	Notes         string       `json:"notes,omitempty"`
+	RecoveryGuide string       `json:"recovery_guide,omitempty"`
+	CreatedAt     time.Time    `json:"created_at"`
+	CompletedAt   *time.Time   `json:"completed_at,omitempty"`
 }
 
 type BackupFile struct {

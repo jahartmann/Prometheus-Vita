@@ -126,6 +126,13 @@ type SnapshotInfo struct {
 	VMState     int    `json:"vmstate"`
 }
 
+type StorageContent struct {
+	Volid  string `json:"volid"`
+	Format string `json:"format"`
+	Size   int64  `json:"size"`
+	CTime  int64  `json:"ctime"`
+}
+
 type VNCProxyResponse struct {
 	Ticket string `json:"ticket"`
 	Port   string `json:"port"`

@@ -75,6 +75,12 @@ export function toArray<T>(data: unknown): T[] {
   return [];
 }
 
+// Bulk VM API
+export const bulkVmApi = {
+  execute: (nodeId: string, data: { vmids: number[]; action: string }) =>
+    api.post(`/nodes/${nodeId}/vms/bulk`, data),
+};
+
 // VM API
 export const vmApi = {
   start: (nodeId: string, vmid: number, type: string) =>
@@ -118,6 +124,8 @@ export const backupApi = {
     api.delete(`/backups/${backupId}`),
   restoreBackup: (backupId: string, data: { file_paths: string[]; dry_run: boolean }) =>
     api.post(`/backups/${backupId}/restore`, data),
+  getRecoveryGuide: (backupId: string) =>
+    api.get(`/backups/${backupId}/recovery-guide`),
   downloadBackup: (backupId: string) =>
     api.get(`/backups/${backupId}/download`, { responseType: "blob" }),
 };
@@ -184,6 +192,8 @@ export const tagApi = {
     api.post(`/nodes/${nodeId}/tags`, { tag_id: tagId }),
   removeFromNode: (nodeId: string, tagId: string) =>
     api.delete(`/nodes/${nodeId}/tags/${tagId}`),
+  syncFromProxmox: (nodeId: string) =>
+    api.post(`/nodes/${nodeId}/tags/sync`),
 };
 
 // PBS API
@@ -448,14 +458,57 @@ export const gatewayApi = {
 // Agent Config API
 export const agentConfigApi = {
   get: () => api.get("/agent/config"),
-  update: (data: {
-    llm_provider?: string;
-    llm_model?: string;
-    autonomy_level?: number;
-  }) => api.put("/agent/config", data),
+  update: (data: Record<string, string>) => api.put("/agent/config", data),
+  getModels: () => api.get("/agent/models"),
+};
+
+// ISO/Template API
+export const isoApi = {
+  listISOs: (nodeId: string) => api.get(`/nodes/${nodeId}/isos`),
+  listTemplates: (nodeId: string) => api.get(`/nodes/${nodeId}/templates`),
+  syncContent: (nodeId: string, data: { source_node_id: string; volid: string; target_storage: string }) =>
+    api.post(`/nodes/${nodeId}/sync-content`, data),
+};
+
+// Reflex API
+export const reflexApi = {
+  list: () => api.get("/reflexes"),
+  create: (data: {
+    name: string;
+    description?: string;
+    trigger_metric: string;
+    operator: string;
+    threshold: number;
+    action_type: string;
+    action_config?: Record<string, unknown>;
+    cooldown_seconds?: number;
+    is_active?: boolean;
+    node_id?: string;
+  }) => api.post("/reflexes", data),
+  update: (id: string, data: {
+    name?: string;
+    description?: string;
+    trigger_metric?: string;
+    operator?: string;
+    threshold?: number;
+    action_type?: string;
+    action_config?: Record<string, unknown>;
+    cooldown_seconds?: number;
+    is_active?: boolean;
+    node_id?: string;
+  }) => api.put(`/reflexes/${id}`, data),
+  delete: (id: string) => api.delete(`/reflexes/${id}`),
 };
 
 // Topology API
 export const topologyApi = {
   get: () => api.get("/topology"),
+};
+
+// Brain API
+export const brainApi = {
+  list: () => api.get("/brain"),
+  create: (data: { category: string; subject: string; content: string }) => api.post("/brain", data),
+  delete: (id: string) => api.delete(`/brain/${id}`),
+  search: (query: string) => api.get(`/brain/search?q=${encodeURIComponent(query)}`),
 };

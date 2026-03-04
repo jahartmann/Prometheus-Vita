@@ -464,6 +464,110 @@ func (h *NodeHandler) RollbackSnapshot(c echo.Context) error {
 	return apiPkg.Success(c, map[string]string{"upid": upid})
 }
 
+func (h *NodeHandler) BulkVMAction(c echo.Context) error {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return apiPkg.BadRequest(c, "invalid node id")
+	}
+
+	var req model.BulkVMRequest
+	if err := c.Bind(&req); err != nil {
+		return apiPkg.BadRequest(c, "invalid request body")
+	}
+	if len(req.VMIDs) == 0 {
+		return apiPkg.BadRequest(c, "vmids is required")
+	}
+	if req.Action != "start" && req.Action != "stop" && req.Action != "shutdown" {
+		return apiPkg.BadRequest(c, "action must be 'start', 'stop', or 'shutdown'")
+	}
+
+	results, err := h.service.BulkVMAction(c.Request().Context(), id, req)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return apiPkg.NotFound(c, "node not found")
+		}
+		return apiPkg.InternalError(c, "failed to execute bulk VM action")
+	}
+
+	return apiPkg.Success(c, results)
+}
+
+func (h *NodeHandler) SyncTags(c echo.Context) error {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return apiPkg.BadRequest(c, "invalid node id")
+	}
+
+	count, err := h.service.SyncTagsFromProxmox(c.Request().Context(), id)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return apiPkg.NotFound(c, "node not found")
+		}
+		return apiPkg.InternalError(c, "failed to sync tags")
+	}
+
+	return apiPkg.Success(c, map[string]int{"imported": count})
+}
+
+func (h *NodeHandler) ListISOs(c echo.Context) error {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return apiPkg.BadRequest(c, "invalid node id")
+	}
+
+	isos, err := h.service.ListISOs(c.Request().Context(), id)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return apiPkg.NotFound(c, "node not found")
+		}
+		return apiPkg.InternalError(c, "failed to list ISOs")
+	}
+
+	return apiPkg.Success(c, isos)
+}
+
+func (h *NodeHandler) ListTemplates(c echo.Context) error {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return apiPkg.BadRequest(c, "invalid node id")
+	}
+
+	templates, err := h.service.ListTemplates(c.Request().Context(), id)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return apiPkg.NotFound(c, "node not found")
+		}
+		return apiPkg.InternalError(c, "failed to list templates")
+	}
+
+	return apiPkg.Success(c, templates)
+}
+
+func (h *NodeHandler) SyncContent(c echo.Context) error {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return apiPkg.BadRequest(c, "invalid node id")
+	}
+
+	var req nodeService.SyncContentRequest
+	if err := c.Bind(&req); err != nil {
+		return apiPkg.BadRequest(c, "invalid request body")
+	}
+	if req.SourceNodeID == "" || req.Volid == "" {
+		return apiPkg.BadRequest(c, "source_node_id and volid are required")
+	}
+
+	upid, err := h.service.SyncContent(c.Request().Context(), id, req)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return apiPkg.NotFound(c, "node not found")
+		}
+		return apiPkg.InternalError(c, "failed to sync content")
+	}
+
+	return apiPkg.Success(c, map[string]string{"upid": upid})
+}
+
 func (h *NodeHandler) GetVNCProxy(c echo.Context) error {
 	id, vmid, vmType, err := parseVMParams(c)
 	if err != nil {

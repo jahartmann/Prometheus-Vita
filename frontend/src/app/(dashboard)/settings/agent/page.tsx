@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 import {
   Select,
@@ -23,13 +24,6 @@ const LLM_PROVIDERS = [
 ];
 
 const MODELS_BY_PROVIDER: Record<string, { value: string; label: string }[]> = {
-  ollama: [
-    { value: "llama3", label: "Llama 3" },
-    { value: "llama3:70b", label: "Llama 3 70B" },
-    { value: "mistral", label: "Mistral" },
-    { value: "codellama", label: "Code Llama" },
-    { value: "gemma2", label: "Gemma 2" },
-  ],
   openai: [
     { value: "gpt-4o", label: "GPT-4o" },
     { value: "gpt-4o-mini", label: "GPT-4o Mini" },
@@ -56,66 +50,103 @@ const autonomyLabels: Record<number, { label: string; description: string }> = {
   },
 };
 
-interface AgentConfig {
-  llm_provider: string;
-  llm_model: string;
-  autonomy_level: number;
+interface OllamaModel {
+  name: string;
+  size: number;
+  modified_at: string;
 }
 
 export default function AgentSettingsPage() {
   const user = useAuthStore((s) => s.user);
-  const [config, setConfig] = useState<AgentConfig>({
-    llm_provider: "ollama",
-    llm_model: "llama3",
-    autonomy_level: 1,
-  });
+  const [provider, setProvider] = useState("ollama");
+  const [model, setModel] = useState("llama3");
+  const [ollamaUrl, setOllamaUrl] = useState("http://localhost:11434");
+  const [openaiKey, setOpenaiKey] = useState("");
+  const [anthropicKey, setAnthropicKey] = useState("");
+  const [autonomyLevel, setAutonomyLevel] = useState(1);
   const [isSaving, setIsSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Ollama model discovery
+  const [ollamaModels, setOllamaModels] = useState<OllamaModel[]>([]);
+  const [isDiscovering, setIsDiscovering] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<"idle" | "success" | "error">("idle");
+  const [connectionError, setConnectionError] = useState("");
 
   const fetchConfig = useCallback(async () => {
     setIsLoading(true);
     try {
       const resp = await agentConfigApi.get();
-      const data = resp.data?.data || resp.data;
-      if (data) {
-        setConfig({
-          llm_provider: data.llm_provider || "ollama",
-          llm_model: data.llm_model || "llama3",
-          autonomy_level: data.autonomy_level ?? 1,
-        });
+      const data = resp.data?.data || resp.data || resp;
+      if (data && typeof data === "object") {
+        const cfg = data as Record<string, string>;
+        setProvider(cfg.llm_provider || "ollama");
+        setModel(cfg.llm_model || "llama3");
+        setOllamaUrl(cfg.ollama_url || "http://localhost:11434");
+        setOpenaiKey(cfg.openai_key || "");
+        setAnthropicKey(cfg.anthropic_key || "");
       }
     } catch {
       // Fallback: load autonomy from user profile
-      if (user?.id) {
-        try {
-          const r = await userApi.getById(user.id);
-          const userData = r.data?.data || r.data;
-          setConfig((prev) => ({
-            ...prev,
-            autonomy_level: userData?.autonomy_level ?? 1,
-          }));
-        } catch {
-          // Ignore
-        }
-      }
-    } finally {
-      setIsLoading(false);
     }
+    // Load autonomy from user profile
+    if (user?.id) {
+      try {
+        const r = await userApi.getById(user.id);
+        const userData = r.data?.data || r.data;
+        if (userData?.autonomy_level !== undefined) {
+          setAutonomyLevel(userData.autonomy_level);
+        }
+      } catch {
+        // Ignore
+      }
+    }
+    setIsLoading(false);
   }, [user?.id]);
 
   useEffect(() => {
     fetchConfig();
   }, [fetchConfig]);
 
+  const handleTestConnection = async () => {
+    setIsDiscovering(true);
+    setConnectionStatus("idle");
+    setConnectionError("");
+    try {
+      const resp = await agentConfigApi.getModels();
+      const models = resp.data?.data || resp.data || resp;
+      if (Array.isArray(models)) {
+        setOllamaModels(models);
+        setConnectionStatus("success");
+      } else {
+        setOllamaModels([]);
+        setConnectionStatus("success");
+      }
+    } catch (err: unknown) {
+      setConnectionStatus("error");
+      const msg = err instanceof Error ? err.message : "Verbindung fehlgeschlagen";
+      setConnectionError(msg);
+      setOllamaModels([]);
+    } finally {
+      setIsDiscovering(false);
+    }
+  };
+
   const handleSave = async () => {
     setIsSaving(true);
     setSaved(false);
     try {
-      await agentConfigApi.update(config);
+      await agentConfigApi.update({
+        llm_provider: provider,
+        llm_model: model,
+        ollama_url: ollamaUrl,
+        openai_key: openaiKey,
+        anthropic_key: anthropicKey,
+      });
       // Also update user autonomy level
       if (user?.id) {
-        await userApi.update(user.id, { autonomy_level: config.autonomy_level });
+        await userApi.update(user.id, { autonomy_level: autonomyLevel });
       }
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -123,7 +154,7 @@ export default function AgentSettingsPage() {
       // Fallback: at least save autonomy level
       if (user?.id) {
         try {
-          await userApi.update(user.id, { autonomy_level: config.autonomy_level });
+          await userApi.update(user.id, { autonomy_level: autonomyLevel });
           setSaved(true);
           setTimeout(() => setSaved(false), 2000);
         } catch {
@@ -135,17 +166,41 @@ export default function AgentSettingsPage() {
     }
   };
 
-  const handleProviderChange = (provider: string) => {
-    const models = MODELS_BY_PROVIDER[provider] || [];
-    setConfig({
-      ...config,
-      llm_provider: provider,
-      llm_model: models[0]?.value || "",
-    });
+  const handleProviderChange = (newProvider: string) => {
+    setProvider(newProvider);
+    if (newProvider === "ollama") {
+      const firstOllama = ollamaModels[0]?.name || "llama3";
+      setModel(firstOllama);
+    } else {
+      const models = MODELS_BY_PROVIDER[newProvider] || [];
+      setModel(models[0]?.value || "");
+    }
   };
 
-  const availableModels = MODELS_BY_PROVIDER[config.llm_provider] || [];
-  const currentAutonomy = autonomyLabels[config.autonomy_level] || autonomyLabels[1];
+  const currentAutonomy = autonomyLabels[autonomyLevel] || autonomyLabels[1];
+
+  // Build model list depending on provider
+  const getModelOptions = () => {
+    if (provider === "ollama") {
+      if (ollamaModels.length > 0) {
+        return ollamaModels.map((m) => ({
+          value: m.name,
+          label: `${m.name} (${formatSize(m.size)})`,
+        }));
+      }
+      // Fallback static list
+      return [
+        { value: "llama3", label: "Llama 3" },
+        { value: "llama3:70b", label: "Llama 3 70B" },
+        { value: "mistral", label: "Mistral" },
+        { value: "codellama", label: "Code Llama" },
+        { value: "gemma2", label: "Gemma 2" },
+      ];
+    }
+    return MODELS_BY_PROVIDER[provider] || [];
+  };
+
+  const availableModels = getModelOptions();
 
   if (isLoading) {
     return (
@@ -167,38 +222,71 @@ export default function AgentSettingsPage() {
         </p>
       </div>
 
-      {/* LLM Provider & Model */}
+      {/* Active Provider */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">LLM-Konfiguration</CardTitle>
+          <CardTitle className="text-base">Aktiver Provider</CardTitle>
           <CardDescription>
-            Waehle den KI-Provider und das Sprachmodell fuer den Agenten.
+            Waehle den KI-Provider fuer den Agenten.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label>Provider</Label>
-              <Select value={config.llm_provider} onValueChange={handleProviderChange}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Provider waehlen" />
-                </SelectTrigger>
-                <SelectContent>
-                  {LLM_PROVIDERS.map((p) => (
-                    <SelectItem key={p.value} value={p.value}>
-                      {p.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+        <CardContent>
+          <div className="flex gap-3">
+            {LLM_PROVIDERS.map((p) => (
+              <Button
+                key={p.value}
+                variant={provider === p.value ? "default" : "outline"}
+                onClick={() => handleProviderChange(p.value)}
+                className="flex-1"
+              >
+                {p.label}
+              </Button>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
 
+      {/* Ollama Section */}
+      {provider === "ollama" && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Ollama-Konfiguration</CardTitle>
+            <CardDescription>
+              Verbinde dich mit deiner lokalen oder entfernten Ollama-Instanz.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label>Ollama URL</Label>
+              <div className="flex gap-2">
+                <Input
+                  value={ollamaUrl}
+                  onChange={(e) => setOllamaUrl(e.target.value)}
+                  placeholder="http://localhost:11434"
+                  className="flex-1"
+                />
+                <Button
+                  variant="outline"
+                  onClick={handleTestConnection}
+                  disabled={isDiscovering}
+                >
+                  {isDiscovering ? "Teste..." : "Verbindung testen"}
+                </Button>
+              </div>
+              {connectionStatus === "success" && (
+                <p className="text-sm text-green-600">
+                  Verbindung erfolgreich. {ollamaModels.length} Modell(e) gefunden.
+                </p>
+              )}
+              {connectionStatus === "error" && (
+                <p className="text-sm text-red-600">
+                  Verbindung fehlgeschlagen: {connectionError}
+                </p>
+              )}
+            </div>
             <div className="space-y-2">
               <Label>Modell</Label>
-              <Select
-                value={config.llm_model}
-                onValueChange={(model) => setConfig({ ...config, llm_model: model })}
-              >
+              <Select value={model} onValueChange={setModel}>
                 <SelectTrigger>
                   <SelectValue placeholder="Modell waehlen" />
                 </SelectTrigger>
@@ -211,9 +299,85 @@ export default function AgentSettingsPage() {
                 </SelectContent>
               </Select>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* OpenAI Section */}
+      {provider === "openai" && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">OpenAI-Konfiguration</CardTitle>
+            <CardDescription>
+              Gib deinen OpenAI API-Key ein, um GPT-Modelle zu verwenden.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label>API Key</Label>
+              <Input
+                type="password"
+                value={openaiKey}
+                onChange={(e) => setOpenaiKey(e.target.value)}
+                placeholder="sk-..."
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Modell</Label>
+              <Select value={model} onValueChange={setModel}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Modell waehlen" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableModels.map((m) => (
+                    <SelectItem key={m.value} value={m.value}>
+                      {m.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Anthropic Section */}
+      {provider === "anthropic" && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Anthropic-Konfiguration</CardTitle>
+            <CardDescription>
+              Gib deinen Anthropic API-Key ein, um Claude-Modelle zu verwenden.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label>API Key</Label>
+              <Input
+                type="password"
+                value={anthropicKey}
+                onChange={(e) => setAnthropicKey(e.target.value)}
+                placeholder="sk-ant-..."
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Modell</Label>
+              <Select value={model} onValueChange={setModel}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Modell waehlen" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableModels.map((m) => (
+                    <SelectItem key={m.value} value={m.value}>
+                      {m.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Autonomy Level */}
       <Card>
@@ -226,8 +390,8 @@ export default function AgentSettingsPage() {
         <CardContent className="space-y-4">
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <Label>Level: {config.autonomy_level}</Label>
-              <Badge variant={config.autonomy_level === 2 ? "destructive" : "default"}>
+              <Label>Level: {autonomyLevel}</Label>
+              <Badge variant={autonomyLevel === 2 ? "destructive" : "default"}>
                 {currentAutonomy.label}
               </Badge>
             </div>
@@ -235,8 +399,8 @@ export default function AgentSettingsPage() {
               min={0}
               max={2}
               step={1}
-              value={config.autonomy_level}
-              onValueChange={(val) => setConfig({ ...config, autonomy_level: val })}
+              value={autonomyLevel}
+              onValueChange={(val) => setAutonomyLevel(val)}
             />
             <div className="flex justify-between text-xs text-muted-foreground">
               <span>Nur Lesen</span>
@@ -261,4 +425,12 @@ export default function AgentSettingsPage() {
       </div>
     </div>
   );
+}
+
+function formatSize(bytes: number): string {
+  if (bytes === 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  const size = (bytes / Math.pow(1024, i)).toFixed(1);
+  return `${size} ${units[i]}`;
 }

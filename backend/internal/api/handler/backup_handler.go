@@ -168,6 +168,25 @@ func (h *BackupHandler) DiffBackup(c echo.Context) error {
 	return apiPkg.Success(c, diffs)
 }
 
+// GetRecoveryGuide handles GET /backups/:id/recovery-guide.
+// It returns the auto-generated recovery guide for a backup.
+func (h *BackupHandler) GetRecoveryGuide(c echo.Context) error {
+	backupID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return apiPkg.BadRequest(c, "invalid backup id")
+	}
+
+	guide, err := h.service.GetRecoveryGuide(c.Request().Context(), backupID)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return apiPkg.NotFound(c, "backup not found")
+		}
+		return apiPkg.InternalError(c, "failed to get recovery guide")
+	}
+
+	return apiPkg.Success(c, map[string]string{"recovery_guide": guide})
+}
+
 // DeleteBackup handles DELETE /backups/:id.
 // It removes a backup and all its associated files.
 func (h *BackupHandler) DeleteBackup(c echo.Context) error {

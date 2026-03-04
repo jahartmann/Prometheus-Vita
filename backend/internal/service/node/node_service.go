@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/antigravity/prometheus/internal/model"
@@ -782,6 +783,147 @@ func (s *Service) RunSSHCommand(ctx context.Context, nodeID uuid.UUID, command s
 	defer s.sshPool.Return(nodeID.String(), client)
 
 	return client.RunCommand(ctx, command)
+}
+
+func (s *Service) BulkVMAction(ctx context.Context, nodeID uuid.UUID, req model.BulkVMRequest) ([]model.BulkVMResult, error) {
+	node, err := s.nodeRepo.GetByID(ctx, nodeID)
+	if err != nil {
+		return nil, err
+	}
+
+	client, err := s.clientFactory.CreateClient(node)
+	if err != nil {
+		return nil, fmt.Errorf("create proxmox client: %w", err)
+	}
+
+	nodes, err := client.GetNodes(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get nodes: %w", err)
+	}
+	if len(nodes) == 0 {
+		return nil, fmt.Errorf("no nodes found")
+	}
+	pveNode := nodes[0]
+
+	// Get all VMs to determine types
+	vms, err := client.GetVMs(ctx, pveNode)
+	if err != nil {
+		return nil, fmt.Errorf("get VMs: %w", err)
+	}
+	vmTypeMap := make(map[int]string, len(vms))
+	for _, vm := range vms {
+		vmTypeMap[vm.VMID] = vm.Type
+	}
+
+	results := make([]model.BulkVMResult, len(req.VMIDs))
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+
+	for i, vmid := range req.VMIDs {
+		wg.Add(1)
+		go func(idx, id int) {
+			defer wg.Done()
+
+			vmType := vmTypeMap[id]
+			if vmType == "" {
+				vmType = "qemu"
+			}
+
+			var upid string
+			var actionErr error
+			switch req.Action {
+			case "start":
+				upid, actionErr = client.StartVM(ctx, pveNode, id, vmType)
+			case "stop":
+				upid, actionErr = client.StopVM(ctx, pveNode, id, vmType)
+			case "shutdown":
+				upid, actionErr = client.ShutdownVM(ctx, pveNode, id, vmType)
+			default:
+				actionErr = fmt.Errorf("unknown action: %s", req.Action)
+			}
+
+			mu.Lock()
+			defer mu.Unlock()
+			if actionErr != nil {
+				results[idx] = model.BulkVMResult{VMID: id, Success: false, Error: actionErr.Error()}
+			} else {
+				results[idx] = model.BulkVMResult{VMID: id, Success: true, UPID: upid}
+			}
+		}(i, vmid)
+	}
+
+	wg.Wait()
+	return results, nil
+}
+
+func (s *Service) SyncTagsFromProxmox(ctx context.Context, nodeID uuid.UUID) (int, error) {
+	node, err := s.nodeRepo.GetByID(ctx, nodeID)
+	if err != nil {
+		return 0, err
+	}
+
+	client, err := s.clientFactory.CreateClient(node)
+	if err != nil {
+		return 0, fmt.Errorf("create proxmox client: %w", err)
+	}
+
+	pveNodes, err := client.GetNodes(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("get nodes: %w", err)
+	}
+	if len(pveNodes) == 0 {
+		return 0, fmt.Errorf("no nodes found")
+	}
+
+	vms, err := client.GetVMs(ctx, pveNodes[0])
+	if err != nil {
+		return 0, fmt.Errorf("get VMs: %w", err)
+	}
+
+	// Collect unique tags from all VMs
+	tagSet := make(map[string]struct{})
+	for _, vm := range vms {
+		if vm.Tags == "" {
+			continue
+		}
+		// Proxmox separates tags with semicolons
+		for _, tag := range strings.Split(vm.Tags, ";") {
+			tag = strings.TrimSpace(tag)
+			if tag != "" {
+				tagSet[tag] = struct{}{}
+			}
+		}
+	}
+
+	// Get existing tags
+	existingTags, err := s.tagRepo.List(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("list existing tags: %w", err)
+	}
+	existingMap := make(map[string]struct{}, len(existingTags))
+	for _, t := range existingTags {
+		existingMap[strings.ToLower(t.Name)] = struct{}{}
+	}
+
+	// Create missing tags
+	created := 0
+	for tagName := range tagSet {
+		if _, exists := existingMap[strings.ToLower(tagName)]; exists {
+			continue
+		}
+		tag := &model.Tag{
+			Name:  tagName,
+			Color: "#3b82f6",
+		}
+		if err := s.tagRepo.Create(ctx, tag); err != nil {
+			slog.Warn("failed to create synced tag", slog.String("tag", tagName), slog.Any("error", err))
+			continue
+		}
+		created++
+	}
+
+	slog.Info("tags synced from proxmox", slog.String("node_id", nodeID.String()), slog.Int("created", created))
+	return created, nil
 }
 
 func (s *Service) buildSSHConfig(node *model.Node) (ssh.SSHConfig, error) {
