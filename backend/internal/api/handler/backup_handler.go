@@ -53,6 +53,17 @@ func (h *BackupHandler) CreateBackup(c echo.Context) error {
 	return apiPkg.Created(c, result)
 }
 
+// ListAll handles GET /backups.
+// It returns all backups across all nodes.
+func (h *BackupHandler) ListAll(c echo.Context) error {
+	backups, err := h.service.ListAllBackups(c.Request().Context())
+	if err != nil {
+		return apiPkg.InternalError(c, "failed to list backups")
+	}
+
+	return apiPkg.Success(c, backups)
+}
+
 // ListBackups handles GET /nodes/:id/backups.
 // It returns all backups for the specified node.
 func (h *BackupHandler) ListBackups(c echo.Context) error {

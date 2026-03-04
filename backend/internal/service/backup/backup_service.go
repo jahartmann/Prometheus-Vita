@@ -210,6 +210,12 @@ func (s *Service) CreateBackup(ctx context.Context, nodeID uuid.UUID, req model.
 	return backup, nil
 }
 
+// ListAllBackups returns all backups across all nodes, ordered by creation
+// time descending.
+func (s *Service) ListAllBackups(ctx context.Context) ([]model.ConfigBackup, error) {
+	return s.backupRepo.ListAll(ctx)
+}
+
 // ListBackups returns all backups for the given node, ordered by creation
 // time descending.
 func (s *Service) ListBackups(ctx context.Context, nodeID uuid.UUID) ([]model.ConfigBackup, error) {

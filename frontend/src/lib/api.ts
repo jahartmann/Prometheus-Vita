@@ -64,6 +64,7 @@ export default api;
 
 // Backup API
 export const backupApi = {
+  listAll: () => api.get("/backups"),
   createBackup: (nodeId: string, data?: { backup_type?: string; notes?: string }) =>
     api.post(`/nodes/${nodeId}/backup`, data || {}),
   listBackups: (nodeId: string) =>

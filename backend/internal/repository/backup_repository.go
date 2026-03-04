@@ -14,6 +14,7 @@ import (
 type BackupRepository interface {
 	Create(ctx context.Context, backup *model.ConfigBackup) error
 	GetByID(ctx context.Context, id uuid.UUID) (*model.ConfigBackup, error)
+	ListAll(ctx context.Context) ([]model.ConfigBackup, error)
 	ListByNode(ctx context.Context, nodeID uuid.UUID) ([]model.ConfigBackup, error)
 	UpdateStatus(ctx context.Context, id uuid.UUID, status model.BackupStatus, errorMsg string) error
 	UpdateCompleted(ctx context.Context, id uuid.UUID, fileCount int, totalSize int64) error
@@ -64,6 +65,29 @@ func (r *pgBackupRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.
 		return nil, fmt.Errorf("get backup by id: %w", err)
 	}
 	return &b, nil
+}
+
+func (r *pgBackupRepository) ListAll(ctx context.Context) ([]model.ConfigBackup, error) {
+	rows, err := r.db.Query(ctx,
+		`SELECT id, node_id, version, backup_type, file_count, total_size,
+		        status, error_message, notes, created_at, completed_at
+		 FROM config_backups ORDER BY created_at DESC`)
+	if err != nil {
+		return nil, fmt.Errorf("list all backups: %w", err)
+	}
+	defer rows.Close()
+
+	var backups []model.ConfigBackup
+	for rows.Next() {
+		var b model.ConfigBackup
+		if err := rows.Scan(&b.ID, &b.NodeID, &b.Version, &b.BackupType,
+			&b.FileCount, &b.TotalSize, &b.Status,
+			&b.ErrorMessage, &b.Notes, &b.CreatedAt, &b.CompletedAt); err != nil {
+			return nil, fmt.Errorf("scan backup: %w", err)
+		}
+		backups = append(backups, b)
+	}
+	return backups, rows.Err()
 }
 
 func (r *pgBackupRepository) ListByNode(ctx context.Context, nodeID uuid.UUID) ([]model.ConfigBackup, error) {

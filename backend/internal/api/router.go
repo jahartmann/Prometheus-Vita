@@ -128,6 +128,7 @@ func SetupRouter(e *echo.Echo, cfg *config.Config, jwtSvc *auth.JWTService, h Ha
 
 	// Backups (non-node-scoped)
 	backups := protected.Group("/backups")
+	backups.GET("", h.Backup.ListAll)
 	backups.GET("/:id", h.Backup.GetBackup)
 	backups.GET("/:id/files", h.Backup.GetBackupFiles)
 	backups.GET("/:id/files/*", h.Backup.GetBackupFile)
