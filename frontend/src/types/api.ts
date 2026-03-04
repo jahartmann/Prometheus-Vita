@@ -133,6 +133,16 @@ export interface CreateNodeRequest {
   metadata?: Record<string, unknown>;
 }
 
+export interface OnboardNodeRequest {
+  name: string;
+  type: 'pve' | 'pbs';
+  hostname: string;
+  password: string;
+  port?: number;
+  ssh_port?: number;
+  username?: string;
+}
+
 export interface TestConnectionRequest {
   hostname: string;
   port: number;
@@ -858,6 +868,24 @@ export interface AuditLogEntry {
   user_agent?: string;
   duration_ms: number;
   created_at: string;
+}
+
+// VM Snapshot types
+export interface VMSnapshot {
+  name: string;
+  description: string;
+  parent: string;
+  snaptime: number;
+  vmstate: number;
+}
+
+// VNC Proxy types
+export interface VNCProxyTicket {
+  ticket: string;
+  port: string;
+  cert: string;
+  user: string;
+  upid: string;
 }
 
 // Topology types

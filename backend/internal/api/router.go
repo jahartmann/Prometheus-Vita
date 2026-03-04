@@ -113,9 +113,27 @@ func SetupRouter(e *echo.Echo, cfg *config.Config, jwtSvc *auth.JWTService, h Ha
 	adminOp := nodes.Group("")
 	adminOp.Use(middleware.RequireRole(model.RoleAdmin, model.RoleOperator))
 	adminOp.POST("", h.Node.Create)
+	adminOp.POST("/onboard", h.Node.Onboard)
 	adminOp.PUT("/:id", h.Node.Update)
 	adminOp.POST("/test", h.Node.TestConnection)
+	// VM Actions
+	adminOp.POST("/:id/vms/:vmid/start", h.Node.StartVM)
+	adminOp.POST("/:id/vms/:vmid/stop", h.Node.StopVM)
+	adminOp.POST("/:id/vms/:vmid/shutdown", h.Node.ShutdownVM)
+	adminOp.POST("/:id/vms/:vmid/suspend", h.Node.SuspendVM)
+	adminOp.POST("/:id/vms/:vmid/resume", h.Node.ResumeVM)
+
+	// Snapshots
+	nodes.GET("/:id/vms/:vmid/snapshots", h.Node.ListSnapshots)
+	adminOp.POST("/:id/vms/:vmid/snapshots", h.Node.CreateSnapshot)
+	adminOp.DELETE("/:id/vms/:vmid/snapshots/:snapname", h.Node.DeleteSnapshot)
+	adminOp.POST("/:id/vms/:vmid/snapshots/:snapname/rollback", h.Node.RollbackSnapshot)
+
+	// Console
+	adminOp.POST("/:id/vms/:vmid/vncproxy", h.Node.GetVNCProxy)
+
 	adminOp.POST("/:id/backup", h.Backup.CreateBackup)
+	adminOp.POST("/:id/vzdump", h.Backup.CreateVzdumpBackup)
 	adminOp.POST("/:id/backup-schedules", h.Schedule.CreateSchedule)
 	adminOp.PUT("/:id/network/:iface/alias", h.Node.SetNetworkAlias)
 	adminOp.POST("/:id/tags", h.Tag.AddTagToNode)

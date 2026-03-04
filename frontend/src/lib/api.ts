@@ -75,6 +75,30 @@ export function toArray<T>(data: unknown): T[] {
   return [];
 }
 
+// VM API
+export const vmApi = {
+  start: (nodeId: string, vmid: number, type: string) =>
+    api.post(`/nodes/${nodeId}/vms/${vmid}/start`, null, { params: { type } }),
+  stop: (nodeId: string, vmid: number, type: string) =>
+    api.post(`/nodes/${nodeId}/vms/${vmid}/stop`, null, { params: { type } }),
+  shutdown: (nodeId: string, vmid: number, type: string) =>
+    api.post(`/nodes/${nodeId}/vms/${vmid}/shutdown`, null, { params: { type } }),
+  suspend: (nodeId: string, vmid: number, type: string) =>
+    api.post(`/nodes/${nodeId}/vms/${vmid}/suspend`, null, { params: { type } }),
+  resume: (nodeId: string, vmid: number, type: string) =>
+    api.post(`/nodes/${nodeId}/vms/${vmid}/resume`, null, { params: { type } }),
+  listSnapshots: (nodeId: string, vmid: number, type: string) =>
+    api.get(`/nodes/${nodeId}/vms/${vmid}/snapshots`, { params: { type } }),
+  createSnapshot: (nodeId: string, vmid: number, type: string, data: { name: string; description?: string; vmstate?: boolean }) =>
+    api.post(`/nodes/${nodeId}/vms/${vmid}/snapshots`, data, { params: { type } }),
+  deleteSnapshot: (nodeId: string, vmid: number, type: string, snapname: string) =>
+    api.delete(`/nodes/${nodeId}/vms/${vmid}/snapshots/${snapname}`, { params: { type } }),
+  rollbackSnapshot: (nodeId: string, vmid: number, type: string, snapname: string) =>
+    api.post(`/nodes/${nodeId}/vms/${vmid}/snapshots/${snapname}/rollback`, null, { params: { type } }),
+  getVNCProxy: (nodeId: string, vmid: number, type: string) =>
+    api.post(`/nodes/${nodeId}/vms/${vmid}/vncproxy`, null, { params: { type } }),
+};
+
 // Backup API
 export const backupApi = {
   listAll: () => api.get("/backups"),
@@ -96,6 +120,19 @@ export const backupApi = {
     api.post(`/backups/${backupId}/restore`, data),
   downloadBackup: (backupId: string) =>
     api.get(`/backups/${backupId}/download`, { responseType: "blob" }),
+};
+
+// Vzdump API
+export const vzdumpApi = {
+  create: (nodeId: string, data: { vmid: number; storage?: string; mode?: string; compress?: string }) =>
+    api.post(`/nodes/${nodeId}/vzdump`, data),
+};
+
+// Node API (for vzdump dialog)
+export const nodeApi = {
+  list: () => api.get("/nodes"),
+  getVMs: (nodeId: string) => api.get(`/nodes/${nodeId}/vms`),
+  getStorage: (nodeId: string) => api.get(`/nodes/${nodeId}/storage`),
 };
 
 // Schedule API
@@ -406,6 +443,16 @@ export const gatewayApi = {
     if (offset) params.set("offset", String(offset));
     return api.get(`/gateway/audit?${params.toString()}`);
   },
+};
+
+// Agent Config API
+export const agentConfigApi = {
+  get: () => api.get("/agent/config"),
+  update: (data: {
+    llm_provider?: string;
+    llm_model?: string;
+    autonomy_level?: number;
+  }) => api.put("/agent/config", data),
 };
 
 // Topology API

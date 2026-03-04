@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Download, Trash2, Eye, Plus, Clock } from "lucide-react";
+import { Download, Trash2, Eye, Plus, Clock, RotateCcw, HardDrive } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +9,8 @@ import { useBackupStore } from "@/stores/backup-store";
 import { CreateBackupDialog } from "./create-backup-dialog";
 import { BackupDetailDialog } from "./backup-detail-dialog";
 import { BackupScheduleDialog } from "./backup-schedule-dialog";
+import { RestoreDialog } from "./restore-dialog";
+import { VzdumpDialog } from "./vzdump-dialog";
 import { backupApi } from "@/lib/api";
 import { formatBytes } from "@/lib/utils";
 import type { ConfigBackup } from "@/types/api";
@@ -36,6 +38,8 @@ export function BackupList({ nodeId }: BackupListProps) {
   const [createOpen, setCreateOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [selectedBackup, setSelectedBackup] = useState<ConfigBackup | null>(null);
+  const [restoreBackupId, setRestoreBackupId] = useState<string | null>(null);
+  const [vzdumpOpen, setVzdumpOpen] = useState(false);
 
   const handleDownload = async (backupId: string) => {
     try {
@@ -61,6 +65,10 @@ export function BackupList({ nodeId }: BackupListProps) {
           <Button variant="outline" onClick={() => setScheduleOpen(true)}>
             <Clock className="mr-2 h-4 w-4" />
             Zeitplan
+          </Button>
+          <Button variant="outline" onClick={() => setVzdumpOpen(true)}>
+            <HardDrive className="mr-2 h-4 w-4" />
+            Vzdump
           </Button>
           <Button onClick={() => setCreateOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
@@ -112,9 +120,14 @@ export function BackupList({ nodeId }: BackupListProps) {
                     <Eye className="h-4 w-4" />
                   </Button>
                   {backup.status === "completed" && (
-                    <Button variant="ghost" size="icon" onClick={() => handleDownload(backup.id)}>
-                      <Download className="h-4 w-4" />
-                    </Button>
+                    <>
+                      <Button variant="ghost" size="icon" onClick={() => setRestoreBackupId(backup.id)}>
+                        <RotateCcw className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => handleDownload(backup.id)}>
+                        <Download className="h-4 w-4" />
+                      </Button>
+                    </>
                   )}
                   <Button
                     variant="ghost"
@@ -143,6 +156,16 @@ export function BackupList({ nodeId }: BackupListProps) {
           }}
         />
       )}
+      {restoreBackupId && (
+        <RestoreDialog
+          backupId={restoreBackupId}
+          open={!!restoreBackupId}
+          onOpenChange={(open) => {
+            if (!open) setRestoreBackupId(null);
+          }}
+        />
+      )}
+      <VzdumpDialog open={vzdumpOpen} onOpenChange={setVzdumpOpen} />
     </div>
   );
 }

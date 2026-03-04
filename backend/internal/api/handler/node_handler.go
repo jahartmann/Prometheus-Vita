@@ -2,6 +2,7 @@ package handler
 
 import (
 	"errors"
+	"strconv"
 
 	apiPkg "github.com/antigravity/prometheus/internal/api/response"
 	"github.com/antigravity/prometheus/internal/model"
@@ -221,6 +222,26 @@ func (h *NodeHandler) SetNetworkAlias(c echo.Context) error {
 	return apiPkg.Success(c, map[string]string{"status": "ok"})
 }
 
+func (h *NodeHandler) Onboard(c echo.Context) error {
+	var req model.OnboardNodeRequest
+	if err := c.Bind(&req); err != nil {
+		return apiPkg.BadRequest(c, "invalid request body")
+	}
+	if req.Name == "" || req.Hostname == "" || req.Password == "" {
+		return apiPkg.BadRequest(c, "name, hostname, and password are required")
+	}
+	if !req.Type.IsValid() {
+		return apiPkg.BadRequest(c, "type must be 'pve' or 'pbs'")
+	}
+
+	node, err := h.service.Onboard(c.Request().Context(), req)
+	if err != nil {
+		return apiPkg.InternalError(c, "failed to onboard node: "+err.Error())
+	}
+
+	return apiPkg.Created(c, node.ToResponse())
+}
+
 func (h *NodeHandler) GetDisks(c echo.Context) error {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -236,4 +257,226 @@ func (h *NodeHandler) GetDisks(c echo.Context) error {
 	}
 
 	return apiPkg.Success(c, disks)
+}
+
+// parseVMParams extracts node ID, vmid, and vmType from the request.
+func parseVMParams(c echo.Context) (uuid.UUID, int, string, error) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return uuid.UUID{}, 0, "", err
+	}
+
+	vmid, err := strconv.Atoi(c.Param("vmid"))
+	if err != nil {
+		return uuid.UUID{}, 0, "", err
+	}
+
+	vmType := c.QueryParam("type")
+	if vmType == "" {
+		vmType = "qemu"
+	}
+
+	return id, vmid, vmType, nil
+}
+
+func (h *NodeHandler) StartVM(c echo.Context) error {
+	id, vmid, vmType, err := parseVMParams(c)
+	if err != nil {
+		return apiPkg.BadRequest(c, "invalid node id or vmid")
+	}
+
+	upid, err := h.service.StartVM(c.Request().Context(), id, vmid, vmType)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return apiPkg.NotFound(c, "node not found")
+		}
+		return apiPkg.InternalError(c, "failed to start VM")
+	}
+
+	return apiPkg.Success(c, map[string]string{"upid": upid})
+}
+
+func (h *NodeHandler) StopVM(c echo.Context) error {
+	id, vmid, vmType, err := parseVMParams(c)
+	if err != nil {
+		return apiPkg.BadRequest(c, "invalid node id or vmid")
+	}
+
+	upid, err := h.service.StopVM(c.Request().Context(), id, vmid, vmType)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return apiPkg.NotFound(c, "node not found")
+		}
+		return apiPkg.InternalError(c, "failed to stop VM")
+	}
+
+	return apiPkg.Success(c, map[string]string{"upid": upid})
+}
+
+func (h *NodeHandler) ShutdownVM(c echo.Context) error {
+	id, vmid, vmType, err := parseVMParams(c)
+	if err != nil {
+		return apiPkg.BadRequest(c, "invalid node id or vmid")
+	}
+
+	upid, err := h.service.ShutdownVM(c.Request().Context(), id, vmid, vmType)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return apiPkg.NotFound(c, "node not found")
+		}
+		return apiPkg.InternalError(c, "failed to shutdown VM")
+	}
+
+	return apiPkg.Success(c, map[string]string{"upid": upid})
+}
+
+func (h *NodeHandler) SuspendVM(c echo.Context) error {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return apiPkg.BadRequest(c, "invalid node id")
+	}
+
+	vmid, err := strconv.Atoi(c.Param("vmid"))
+	if err != nil {
+		return apiPkg.BadRequest(c, "invalid vmid")
+	}
+
+	upid, err := h.service.SuspendVM(c.Request().Context(), id, vmid)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return apiPkg.NotFound(c, "node not found")
+		}
+		return apiPkg.InternalError(c, "failed to suspend VM")
+	}
+
+	return apiPkg.Success(c, map[string]string{"upid": upid})
+}
+
+func (h *NodeHandler) ResumeVM(c echo.Context) error {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return apiPkg.BadRequest(c, "invalid node id")
+	}
+
+	vmid, err := strconv.Atoi(c.Param("vmid"))
+	if err != nil {
+		return apiPkg.BadRequest(c, "invalid vmid")
+	}
+
+	upid, err := h.service.ResumeVM(c.Request().Context(), id, vmid)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return apiPkg.NotFound(c, "node not found")
+		}
+		return apiPkg.InternalError(c, "failed to resume VM")
+	}
+
+	return apiPkg.Success(c, map[string]string{"upid": upid})
+}
+
+func (h *NodeHandler) ListSnapshots(c echo.Context) error {
+	id, vmid, vmType, err := parseVMParams(c)
+	if err != nil {
+		return apiPkg.BadRequest(c, "invalid node id or vmid")
+	}
+
+	snapshots, err := h.service.ListSnapshots(c.Request().Context(), id, vmid, vmType)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return apiPkg.NotFound(c, "node not found")
+		}
+		return apiPkg.InternalError(c, "failed to list snapshots")
+	}
+
+	return apiPkg.Success(c, snapshots)
+}
+
+func (h *NodeHandler) CreateSnapshot(c echo.Context) error {
+	id, vmid, vmType, err := parseVMParams(c)
+	if err != nil {
+		return apiPkg.BadRequest(c, "invalid node id or vmid")
+	}
+
+	var req struct {
+		Name        string `json:"name"`
+		Description string `json:"description"`
+		IncludeRAM  bool   `json:"include_ram"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apiPkg.BadRequest(c, "invalid request body")
+	}
+	if req.Name == "" {
+		return apiPkg.BadRequest(c, "snapshot name is required")
+	}
+
+	upid, err := h.service.CreateSnapshot(c.Request().Context(), id, vmid, vmType, req.Name, req.Description, req.IncludeRAM)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return apiPkg.NotFound(c, "node not found")
+		}
+		return apiPkg.InternalError(c, "failed to create snapshot")
+	}
+
+	return apiPkg.Success(c, map[string]string{"upid": upid})
+}
+
+func (h *NodeHandler) DeleteSnapshot(c echo.Context) error {
+	id, vmid, vmType, err := parseVMParams(c)
+	if err != nil {
+		return apiPkg.BadRequest(c, "invalid node id or vmid")
+	}
+
+	snapname := c.Param("snapname")
+	if snapname == "" {
+		return apiPkg.BadRequest(c, "snapshot name is required")
+	}
+
+	upid, err := h.service.DeleteSnapshot(c.Request().Context(), id, vmid, vmType, snapname)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return apiPkg.NotFound(c, "node not found")
+		}
+		return apiPkg.InternalError(c, "failed to delete snapshot")
+	}
+
+	return apiPkg.Success(c, map[string]string{"upid": upid})
+}
+
+func (h *NodeHandler) RollbackSnapshot(c echo.Context) error {
+	id, vmid, vmType, err := parseVMParams(c)
+	if err != nil {
+		return apiPkg.BadRequest(c, "invalid node id or vmid")
+	}
+
+	snapname := c.Param("snapname")
+	if snapname == "" {
+		return apiPkg.BadRequest(c, "snapshot name is required")
+	}
+
+	upid, err := h.service.RollbackSnapshot(c.Request().Context(), id, vmid, vmType, snapname)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return apiPkg.NotFound(c, "node not found")
+		}
+		return apiPkg.InternalError(c, "failed to rollback snapshot")
+	}
+
+	return apiPkg.Success(c, map[string]string{"upid": upid})
+}
+
+func (h *NodeHandler) GetVNCProxy(c echo.Context) error {
+	id, vmid, vmType, err := parseVMParams(c)
+	if err != nil {
+		return apiPkg.BadRequest(c, "invalid node id or vmid")
+	}
+
+	proxy, err := h.service.GetVNCProxy(c.Request().Context(), id, vmid, vmType)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return apiPkg.NotFound(c, "node not found")
+		}
+		return apiPkg.InternalError(c, "failed to get VNC proxy")
+	}
+
+	return apiPkg.Success(c, proxy)
 }

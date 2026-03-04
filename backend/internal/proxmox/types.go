@@ -117,3 +117,19 @@ type VMRRDDataPoint struct {
 	NetIn  float64 `json:"netin"`
 	NetOut float64 `json:"netout"`
 }
+
+type SnapshotInfo struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Parent      string `json:"parent"`
+	Snaptime    int64  `json:"snaptime"`
+	VMState     int    `json:"vmstate"`
+}
+
+type VNCProxyResponse struct {
+	Ticket string `json:"ticket"`
+	Port   string `json:"port"`
+	Cert   string `json:"cert"`
+	User   string `json:"user"`
+	UPID   string `json:"upid"`
+}

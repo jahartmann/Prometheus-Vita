@@ -308,7 +308,7 @@ func main() {
 		Auth:         handler.NewAuthHandler(authService, userRepo),
 		Node:         handler.NewNodeHandler(nodeSvc),
 		WS:           handler.NewWSHandler(wsHub, jwtSvc),
-		Backup:       handler.NewBackupHandler(backupSvc, restoreSvc),
+		Backup:       handler.NewBackupHandler(backupSvc, restoreSvc, nodeSvc),
 		Schedule:     handler.NewScheduleHandler(scheduleRepo),
 		Metrics:      handler.NewMetricsHandler(monitorSvc),
 		Tag:          handler.NewTagHandler(tagRepo),

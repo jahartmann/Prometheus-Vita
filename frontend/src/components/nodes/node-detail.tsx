@@ -67,7 +67,7 @@ interface NodeDetailProps {
 }
 
 export function NodeDetail({ node }: NodeDetailProps) {
-  const { nodeStatus, nodeVMs } = useNodeStore();
+  const { nodeStatus, nodeVMs, fetchNodeVMs } = useNodeStore();
   const status = nodeStatus[node.id];
   const vms = nodeVMs[node.id] || [];
   const { metrics } = useNodeMetrics(node.id, node.is_online);
@@ -362,7 +362,7 @@ export function NodeDetail({ node }: NodeDetailProps) {
         </TabsContent>
 
         <TabsContent value="vms">
-          <VmList vms={vms} nodeId={node.id} />
+          <VmList vms={vms} nodeId={node.id} onRefresh={() => fetchNodeVMs(node.id)} />
         </TabsContent>
 
         <TabsContent value="backups">

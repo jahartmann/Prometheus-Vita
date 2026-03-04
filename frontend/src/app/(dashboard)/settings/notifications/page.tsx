@@ -41,6 +41,7 @@ import { NotificationHistoryList } from "@/components/notifications/notification
 import { EscalationPolicyDialog } from "@/components/notifications/escalation-policy-dialog";
 import { IncidentList } from "@/components/notifications/incident-list";
 import { TelegramLinkCard } from "@/components/notifications/telegram-link-card";
+import { SmtpConfigCard } from "@/components/notifications/smtp-config-card";
 import type { NotificationChannel, AlertRule, AlertSeverity, EscalationPolicy } from "@/types/api";
 
 const channelTypeBadge: Record<string, "default" | "secondary" | "outline"> = {
@@ -149,6 +150,8 @@ export default function NotificationsSettingsPage() {
           Kanaele, Alert-Regeln und Benachrichtigungsverlauf verwalten.
         </p>
       </div>
+
+      <SmtpConfigCard channels={channels} onSaved={() => { fetchChannels(); fetchHistory(); }} />
 
       <TelegramLinkCard />
 

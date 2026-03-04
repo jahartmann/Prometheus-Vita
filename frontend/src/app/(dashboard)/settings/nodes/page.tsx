@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { useNodeStore } from "@/stores/node-store";
-import { AddNodeDialog } from "@/components/nodes/add-node-dialog";
+import { OnboardNodeDialog } from "@/components/nodes/onboard-node-dialog";
 import { DeleteNodeDialog } from "@/components/nodes/delete-node-dialog";
 import type { Node } from "@/types/api";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -94,7 +94,7 @@ export default function SettingsNodesPage() {
         </div>
       )}
 
-      <AddNodeDialog open={addOpen} onOpenChange={setAddOpen} />
+      <OnboardNodeDialog open={addOpen} onOpenChange={setAddOpen} />
       <DeleteNodeDialog
         node={deleteNode}
         open={!!deleteNode}

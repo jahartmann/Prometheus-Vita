@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Label } from "@/components/ui/label";
 import { useBackupStore } from "@/stores/backup-store";
 import { scheduleApi } from "@/lib/api";
+import { ScheduleForm } from "./schedule-form";
 import type { BackupSchedule } from "@/types/api";
 
 interface BackupScheduleDialogProps {
@@ -16,17 +16,8 @@ interface BackupScheduleDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-const cronPresets = [
-  { label: "Taeglich 2:00", value: "0 2 * * *" },
-  { label: "Woechentlich Sonntag 3:00", value: "0 3 * * 0" },
-  { label: "Alle 6 Stunden", value: "0 */6 * * *" },
-  { label: "Alle 12 Stunden", value: "0 */12 * * *" },
-];
-
 export function BackupScheduleDialog({ nodeId, open, onOpenChange }: BackupScheduleDialogProps) {
   const { schedules, fetchSchedules } = useBackupStore();
-  const [cron, setCron] = useState("0 2 * * *");
-  const [retention, setRetention] = useState(10);
   const [isCreating, setIsCreating] = useState(false);
 
   useEffect(() => {
@@ -35,16 +26,15 @@ export function BackupScheduleDialog({ nodeId, open, onOpenChange }: BackupSched
 
   if (!open) return null;
 
-  const handleCreate = async () => {
+  const handleCreate = async (cronExpression: string, retentionDays: number) => {
     setIsCreating(true);
     try {
       await scheduleApi.createSchedule(nodeId, {
-        cron_expression: cron,
+        cron_expression: cronExpression,
         is_active: true,
-        retention_count: retention,
+        retention_count: retentionDays,
       });
       fetchSchedules(nodeId);
-      setCron("0 2 * * *");
     } catch {
       /* ignore */
     }
@@ -104,38 +94,9 @@ export function BackupScheduleDialog({ nodeId, open, onOpenChange }: BackupSched
             </div>
           )}
 
-          <div className="space-y-3 border-t pt-4">
-            <h4 className="text-sm font-medium">Neuen Zeitplan erstellen</h4>
-            <div className="space-y-2">
-              <Label>Cron-Ausdruck</Label>
-              <input
-                className="w-full rounded-md border bg-background px-3 py-2 text-sm font-mono"
-                value={cron}
-                onChange={(e) => setCron(e.target.value)}
-              />
-              <div className="flex flex-wrap gap-1">
-                {cronPresets.map((p) => (
-                  <Button key={p.value} variant="outline" size="sm" onClick={() => setCron(p.value)}>
-                    {p.label}
-                  </Button>
-                ))}
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Aufbewahrung (Anzahl Backups)</Label>
-              <input
-                type="number"
-                min={1}
-                max={100}
-                className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-                value={retention}
-                onChange={(e) => setRetention(parseInt(e.target.value) || 10)}
-              />
-            </div>
-            <Button onClick={handleCreate} disabled={isCreating} className="w-full">
-              <Plus className="mr-2 h-4 w-4" />
-              {isCreating ? "Erstelle..." : "Zeitplan erstellen"}
-            </Button>
+          <div className="border-t pt-4">
+            <h4 className="text-sm font-medium mb-3">Neuen Zeitplan erstellen</h4>
+            <ScheduleForm onSubmit={handleCreate} isSubmitting={isCreating} />
           </div>
         </CardContent>
       </Card>

@@ -2,9 +2,14 @@ package node
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"log/slog"
+	"strings"
+	"time"
 
 	"github.com/antigravity/prometheus/internal/model"
 	"github.com/antigravity/prometheus/internal/proxmox"
@@ -12,6 +17,7 @@ import (
 	"github.com/antigravity/prometheus/internal/service/crypto"
 	"github.com/antigravity/prometheus/internal/ssh"
 	"github.com/google/uuid"
+	gossh "golang.org/x/crypto/ssh"
 )
 
 type NetworkInterfaceWithAlias struct {
@@ -110,7 +116,136 @@ func (s *Service) Create(ctx context.Context, req model.CreateNodeRequest) (*mod
 	}
 
 	slog.Info("node created", slog.String("name", node.Name), slog.String("id", node.ID.String()))
+
+	// Immediate status check so new nodes don't start as offline
+	s.checkNodeOnline(ctx, node)
+
 	return node, nil
+}
+
+func (s *Service) Onboard(ctx context.Context, req model.OnboardNodeRequest) (*model.Node, error) {
+	if !req.Type.IsValid() {
+		return nil, fmt.Errorf("invalid node type: %s", req.Type)
+	}
+
+	// Defaults
+	port := req.Port
+	if port == 0 {
+		port = 8006
+	}
+	username := req.Username
+	if username == "" {
+		username = "root@pam"
+	}
+	sshPort := req.SSHPort
+	if sshPort == 0 {
+		sshPort = 22
+	}
+
+	// 1. Ticket-Auth
+	ticket, csrf, err := proxmox.GetTicket(ctx, req.Hostname, port, username, req.Password)
+	if err != nil {
+		return nil, fmt.Errorf("proxmox authentication failed: %w", err)
+	}
+
+	// 2. Create API token
+	tokenID, tokenSecret, err := proxmox.CreateAPITokenWithTicket(ctx, req.Hostname, port, username, ticket, csrf, "prometheus-vita")
+	if err != nil {
+		return nil, fmt.Errorf("create API token failed: %w", err)
+	}
+
+	// 3. Generate SSH keypair (Ed25519)
+	pubKey, privKey, err := generateEd25519KeyPair()
+	if err != nil {
+		return nil, fmt.Errorf("generate ssh key pair: %w", err)
+	}
+
+	// 4. SSH with password -> deploy public key
+	sshClient, err := ssh.NewClient(ssh.SSHConfig{
+		Host:     req.Hostname,
+		Port:     sshPort,
+		User:     "root",
+		Password: req.Password,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("ssh connect with password: %w", err)
+	}
+	defer sshClient.Close()
+
+	deployCmd := fmt.Sprintf(
+		`mkdir -p ~/.ssh && chmod 700 ~/.ssh && echo %q >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys`,
+		strings.TrimSpace(pubKey),
+	)
+	result, err := sshClient.RunCommand(ctx, deployCmd)
+	if err != nil {
+		return nil, fmt.Errorf("deploy ssh key: %w", err)
+	}
+	if result.ExitCode != 0 {
+		return nil, fmt.Errorf("deploy ssh key failed: %s", result.Stderr)
+	}
+
+	// 5. Save node via existing Create flow
+	createReq := model.CreateNodeRequest{
+		Name:           req.Name,
+		Type:           req.Type,
+		Hostname:       req.Hostname,
+		Port:           port,
+		APITokenID:     tokenID,
+		APITokenSecret: tokenSecret,
+		SSHPort:        sshPort,
+		SSHUser:        "root",
+		SSHPrivateKey:  privKey,
+	}
+
+	node, err := s.Create(ctx, createReq)
+	if err != nil {
+		return nil, fmt.Errorf("save node: %w", err)
+	}
+
+	slog.Info("node onboarded", slog.String("name", node.Name), slog.String("id", node.ID.String()))
+	return node, nil
+}
+
+// checkNodeOnline performs an immediate status check and updates the node if online.
+func (s *Service) checkNodeOnline(ctx context.Context, node *model.Node) {
+	client, err := s.clientFactory.CreateClient(node)
+	if err != nil {
+		return
+	}
+
+	_, err = client.GetVersion(ctx)
+	if err != nil {
+		return
+	}
+
+	now := time.Now().UTC()
+	node.IsOnline = true
+	node.LastSeen = &now
+	if updateErr := s.nodeRepo.Update(ctx, node); updateErr != nil {
+		slog.Warn("failed to update node online status", slog.Any("error", updateErr))
+	}
+}
+
+func generateEd25519KeyPair() (publicKey, privateKey string, err error) {
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return "", "", fmt.Errorf("generate ed25519 key: %w", err)
+	}
+
+	sshPub, err := gossh.NewPublicKey(pub)
+	if err != nil {
+		return "", "", fmt.Errorf("create ssh public key: %w", err)
+	}
+
+	pubKeyStr := string(gossh.MarshalAuthorizedKey(sshPub))
+
+	privPEM, err := gossh.MarshalPrivateKey(priv, "")
+	if err != nil {
+		return "", "", fmt.Errorf("marshal private key: %w", err)
+	}
+	privKeyStr := string(pem.EncodeToMemory(privPEM))
+
+	return pubKeyStr, privKeyStr, nil
 }
 
 func (s *Service) GetByID(ctx context.Context, id uuid.UUID) (*model.Node, error) {
@@ -418,6 +553,213 @@ func (s *Service) StopVM(ctx context.Context, nodeID uuid.UUID, vmid int, vmType
 	}
 
 	return client.StopVM(ctx, nodes[0], vmid, vmType)
+}
+
+func (s *Service) ShutdownVM(ctx context.Context, nodeID uuid.UUID, vmid int, vmType string) (string, error) {
+	node, err := s.nodeRepo.GetByID(ctx, nodeID)
+	if err != nil {
+		return "", err
+	}
+
+	client, err := s.clientFactory.CreateClient(node)
+	if err != nil {
+		return "", fmt.Errorf("create proxmox client: %w", err)
+	}
+
+	nodes, err := client.GetNodes(ctx)
+	if err != nil {
+		return "", fmt.Errorf("get nodes: %w", err)
+	}
+
+	if len(nodes) == 0 {
+		return "", fmt.Errorf("no nodes found")
+	}
+
+	return client.ShutdownVM(ctx, nodes[0], vmid, vmType)
+}
+
+func (s *Service) SuspendVM(ctx context.Context, nodeID uuid.UUID, vmid int) (string, error) {
+	node, err := s.nodeRepo.GetByID(ctx, nodeID)
+	if err != nil {
+		return "", err
+	}
+
+	client, err := s.clientFactory.CreateClient(node)
+	if err != nil {
+		return "", fmt.Errorf("create proxmox client: %w", err)
+	}
+
+	nodes, err := client.GetNodes(ctx)
+	if err != nil {
+		return "", fmt.Errorf("get nodes: %w", err)
+	}
+
+	if len(nodes) == 0 {
+		return "", fmt.Errorf("no nodes found")
+	}
+
+	return client.SuspendVM(ctx, nodes[0], vmid)
+}
+
+func (s *Service) ResumeVM(ctx context.Context, nodeID uuid.UUID, vmid int) (string, error) {
+	node, err := s.nodeRepo.GetByID(ctx, nodeID)
+	if err != nil {
+		return "", err
+	}
+
+	client, err := s.clientFactory.CreateClient(node)
+	if err != nil {
+		return "", fmt.Errorf("create proxmox client: %w", err)
+	}
+
+	nodes, err := client.GetNodes(ctx)
+	if err != nil {
+		return "", fmt.Errorf("get nodes: %w", err)
+	}
+
+	if len(nodes) == 0 {
+		return "", fmt.Errorf("no nodes found")
+	}
+
+	return client.ResumeVM(ctx, nodes[0], vmid)
+}
+
+func (s *Service) ListSnapshots(ctx context.Context, nodeID uuid.UUID, vmid int, vmType string) ([]proxmox.SnapshotInfo, error) {
+	node, err := s.nodeRepo.GetByID(ctx, nodeID)
+	if err != nil {
+		return nil, err
+	}
+
+	client, err := s.clientFactory.CreateClient(node)
+	if err != nil {
+		return nil, fmt.Errorf("create proxmox client: %w", err)
+	}
+
+	nodes, err := client.GetNodes(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get nodes: %w", err)
+	}
+
+	if len(nodes) == 0 {
+		return nil, fmt.Errorf("no nodes found")
+	}
+
+	return client.ListSnapshots(ctx, nodes[0], vmid, vmType)
+}
+
+func (s *Service) CreateSnapshot(ctx context.Context, nodeID uuid.UUID, vmid int, vmType string, name string, description string, includeRAM bool) (string, error) {
+	node, err := s.nodeRepo.GetByID(ctx, nodeID)
+	if err != nil {
+		return "", err
+	}
+
+	client, err := s.clientFactory.CreateClient(node)
+	if err != nil {
+		return "", fmt.Errorf("create proxmox client: %w", err)
+	}
+
+	nodes, err := client.GetNodes(ctx)
+	if err != nil {
+		return "", fmt.Errorf("get nodes: %w", err)
+	}
+
+	if len(nodes) == 0 {
+		return "", fmt.Errorf("no nodes found")
+	}
+
+	return client.CreateSnapshot(ctx, nodes[0], vmid, vmType, name, description, includeRAM)
+}
+
+func (s *Service) DeleteSnapshot(ctx context.Context, nodeID uuid.UUID, vmid int, vmType string, snapname string) (string, error) {
+	node, err := s.nodeRepo.GetByID(ctx, nodeID)
+	if err != nil {
+		return "", err
+	}
+
+	client, err := s.clientFactory.CreateClient(node)
+	if err != nil {
+		return "", fmt.Errorf("create proxmox client: %w", err)
+	}
+
+	nodes, err := client.GetNodes(ctx)
+	if err != nil {
+		return "", fmt.Errorf("get nodes: %w", err)
+	}
+
+	if len(nodes) == 0 {
+		return "", fmt.Errorf("no nodes found")
+	}
+
+	return client.DeleteSnapshot(ctx, nodes[0], vmid, vmType, snapname)
+}
+
+func (s *Service) RollbackSnapshot(ctx context.Context, nodeID uuid.UUID, vmid int, vmType string, snapname string) (string, error) {
+	node, err := s.nodeRepo.GetByID(ctx, nodeID)
+	if err != nil {
+		return "", err
+	}
+
+	client, err := s.clientFactory.CreateClient(node)
+	if err != nil {
+		return "", fmt.Errorf("create proxmox client: %w", err)
+	}
+
+	nodes, err := client.GetNodes(ctx)
+	if err != nil {
+		return "", fmt.Errorf("get nodes: %w", err)
+	}
+
+	if len(nodes) == 0 {
+		return "", fmt.Errorf("no nodes found")
+	}
+
+	return client.RollbackSnapshot(ctx, nodes[0], vmid, vmType, snapname)
+}
+
+func (s *Service) GetVNCProxy(ctx context.Context, nodeID uuid.UUID, vmid int, vmType string) (*proxmox.VNCProxyResponse, error) {
+	node, err := s.nodeRepo.GetByID(ctx, nodeID)
+	if err != nil {
+		return nil, err
+	}
+
+	client, err := s.clientFactory.CreateClient(node)
+	if err != nil {
+		return nil, fmt.Errorf("create proxmox client: %w", err)
+	}
+
+	nodes, err := client.GetNodes(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get nodes: %w", err)
+	}
+
+	if len(nodes) == 0 {
+		return nil, fmt.Errorf("no nodes found")
+	}
+
+	return client.GetVNCProxy(ctx, nodes[0], vmid, vmType)
+}
+
+func (s *Service) CreateVzdump(ctx context.Context, nodeID uuid.UUID, vmid int, opts proxmox.VzdumpOptions) (string, error) {
+	node, err := s.nodeRepo.GetByID(ctx, nodeID)
+	if err != nil {
+		return "", err
+	}
+
+	client, err := s.clientFactory.CreateClient(node)
+	if err != nil {
+		return "", fmt.Errorf("create proxmox client: %w", err)
+	}
+
+	nodes, err := client.GetNodes(ctx)
+	if err != nil {
+		return "", fmt.Errorf("get nodes: %w", err)
+	}
+
+	if len(nodes) == 0 {
+		return "", fmt.Errorf("no nodes found")
+	}
+
+	return client.CreateVzdump(ctx, nodes[0], vmid, opts)
 }
 
 func (s *Service) RunSSHCommand(ctx context.Context, nodeID uuid.UUID, command string) (*ssh.CommandResult, error) {

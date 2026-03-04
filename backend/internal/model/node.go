@@ -102,6 +102,16 @@ func (n *Node) ToResponse() NodeResponse {
 	}
 }
 
+type OnboardNodeRequest struct {
+	Name     string   `json:"name" validate:"required"`
+	Type     NodeType `json:"type" validate:"required,oneof=pve pbs"`
+	Hostname string   `json:"hostname" validate:"required"`
+	Port     int      `json:"port"`
+	Username string   `json:"username"`
+	Password string   `json:"password" validate:"required"`
+	SSHPort  int      `json:"ssh_port"`
+}
+
 type TestConnectionRequest struct {
 	Hostname       string   `json:"hostname" validate:"required"`
 	Port           int      `json:"port"`

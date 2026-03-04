@@ -49,7 +49,7 @@ export default function NodeVmsPage() {
         </div>
       </div>
 
-      <VmList vms={vms} nodeId={nodeId} />
+      <VmList vms={vms} nodeId={nodeId} onRefresh={() => fetchNodeVMs(nodeId)} />
     </div>
   );
 }

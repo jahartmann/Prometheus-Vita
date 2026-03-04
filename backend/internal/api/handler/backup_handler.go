@@ -7,8 +7,10 @@ import (
 
 	apiPkg "github.com/antigravity/prometheus/internal/api/response"
 	"github.com/antigravity/prometheus/internal/model"
+	"github.com/antigravity/prometheus/internal/proxmox"
 	"github.com/antigravity/prometheus/internal/repository"
 	"github.com/antigravity/prometheus/internal/service/backup"
+	nodeService "github.com/antigravity/prometheus/internal/service/node"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 )
@@ -18,14 +20,16 @@ import (
 type BackupHandler struct {
 	service        *backup.Service
 	restoreService *backup.RestoreService
+	nodeSvc        *nodeService.Service
 }
 
 // NewBackupHandler creates a new BackupHandler with references to both the
 // main backup service and the restore service.
-func NewBackupHandler(service *backup.Service, restoreService *backup.RestoreService) *BackupHandler {
+func NewBackupHandler(service *backup.Service, restoreService *backup.RestoreService, nodeSvc *nodeService.Service) *BackupHandler {
 	return &BackupHandler{
 		service:        service,
 		restoreService: restoreService,
+		nodeSvc:        nodeSvc,
 	}
 }
 
@@ -233,4 +237,41 @@ func (h *BackupHandler) DownloadBackup(c echo.Context) error {
 
 	_, err = io.Copy(c.Response().Writer, reader)
 	return err
+}
+
+// CreateVzdumpBackup handles POST /nodes/:id/vzdump.
+// It triggers a vzdump backup of a VM/CT on the specified node via the Proxmox API.
+func (h *BackupHandler) CreateVzdumpBackup(c echo.Context) error {
+	nodeID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return apiPkg.BadRequest(c, "invalid node id")
+	}
+
+	var req struct {
+		VMID     int    `json:"vmid"`
+		Storage  string `json:"storage"`
+		Mode     string `json:"mode"`
+		Compress string `json:"compress"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apiPkg.BadRequest(c, "invalid request body")
+	}
+
+	if req.VMID == 0 {
+		return apiPkg.BadRequest(c, "vmid is required")
+	}
+
+	upid, err := h.nodeSvc.CreateVzdump(c.Request().Context(), nodeID, req.VMID, proxmox.VzdumpOptions{
+		Storage:  req.Storage,
+		Mode:     req.Mode,
+		Compress: req.Compress,
+	})
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return apiPkg.NotFound(c, "node not found")
+		}
+		return apiPkg.InternalError(c, "failed to create vzdump backup")
+	}
+
+	return apiPkg.Success(c, map[string]string{"upid": upid})
 }
