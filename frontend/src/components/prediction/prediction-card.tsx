@@ -13,7 +13,7 @@ export function PredictionCard() {
   useEffect(() => {
     predictionApi
       .listCritical()
-      .then((data) => setPredictions(data || []))
+      .then((data) => setPredictions((data || []) as MaintenancePrediction[]))
       .finally(() => setIsLoading(false));
   }, []);
 
