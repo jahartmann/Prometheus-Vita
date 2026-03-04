@@ -31,7 +31,7 @@ export function StorageNode({ data }: NodeProps) {
             />
           </div>
           <div className="text-xs text-muted-foreground mt-0.5">
-            {usagePercent.toFixed(1)}% belegt
+            {(usagePercent ?? 0).toFixed(1)}% belegt
           </div>
         </div>
       )}

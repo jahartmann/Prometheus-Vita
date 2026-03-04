@@ -148,8 +148,10 @@ func (s *Service) Onboard(ctx context.Context, req model.OnboardNodeRequest) (*m
 		return nil, fmt.Errorf("proxmox authentication failed: %w", err)
 	}
 
-	// 2. Create API token
-	tokenID, tokenSecret, err := proxmox.CreateAPITokenWithTicket(ctx, req.Hostname, port, username, ticket, csrf, "prometheus-vita")
+	// 2. Create API token (unique per node to avoid conflicts in clusters)
+	sanitizedHost := strings.ReplaceAll(strings.ReplaceAll(req.Hostname, ".", "-"), ":", "-")
+	tokenName := fmt.Sprintf("prometheus-vita-%s", sanitizedHost)
+	tokenID, tokenSecret, err := proxmox.CreateAPITokenWithTicket(ctx, req.Hostname, port, username, ticket, csrf, tokenName)
 	if err != nil {
 		return nil, fmt.Errorf("create API token failed: %w", err)
 	}

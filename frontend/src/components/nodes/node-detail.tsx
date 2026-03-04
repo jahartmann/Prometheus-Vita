@@ -126,7 +126,7 @@ export function NodeDetail({ node }: NodeDetailProps) {
   );
 
   const formatTooltipValue = useCallback(
-    (value: number) => `${value.toFixed(1)}%`,
+    (value: number) => `${(value ?? 0).toFixed(1)}%`,
     []
   );
 
@@ -212,7 +212,7 @@ export function NodeDetail({ node }: NodeDetailProps) {
                   {formatUptime(status.uptime)}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Load: {status.load_average.map((l) => l.toFixed(2)).join(" ")}
+                  Load: {(status.load_average || []).map((l) => (l ?? 0).toFixed(2)).join(" ")}
                 </p>
               </div>
             </CardContent>

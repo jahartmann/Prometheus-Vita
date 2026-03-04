@@ -92,7 +92,7 @@ export function RecommendationList({ recommendations, getNodeName }: Recommendat
               </TableCell>
               <TableCell className="text-sm">
                 <span className="text-muted-foreground">
-                  avg {rec.avg_usage.toFixed(1)}% / max {rec.max_usage.toFixed(1)}%
+                  avg {(rec.avg_usage ?? 0).toFixed(1)}% / max {(rec.max_usage ?? 0).toFixed(1)}%
                 </span>
               </TableCell>
               <TableCell>

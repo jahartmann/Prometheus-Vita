@@ -55,15 +55,15 @@ export function PredictionCard() {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
-              <div>Aktuell: {p.current_value.toFixed(1)}%</div>
+              <div>Aktuell: {(p.current_value ?? 0).toFixed(1)}%</div>
               <div>Schwellenwert: {p.threshold}%</div>
               {p.days_until_threshold != null && (
                 <div className="col-span-2 font-medium text-foreground">
                   Geschaetzte Tage bis Schwellenwert:{" "}
-                  {p.days_until_threshold.toFixed(1)}
+                  {(p.days_until_threshold ?? 0).toFixed(1)}
                 </div>
               )}
-              <div>R²: {p.r_squared.toFixed(3)}</div>
+              <div>R²: {(p.r_squared ?? 0).toFixed(3)}</div>
               <div>
                 Berechnet:{" "}
                 {new Date(p.predicted_at).toLocaleString("de-DE")}
