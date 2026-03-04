@@ -1,7 +1,7 @@
 package handler
 
 import (
-	apiPkg "github.com/antigravity/prometheus/internal/api"
+	apiPkg "github.com/antigravity/prometheus/internal/api/response"
 	"github.com/antigravity/prometheus/internal/service/topology"
 	"github.com/labstack/echo/v4"
 )

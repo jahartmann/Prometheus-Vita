@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 
-	apiPkg "github.com/antigravity/prometheus/internal/api"
+	apiPkg "github.com/antigravity/prometheus/internal/api/response"
 	"github.com/antigravity/prometheus/internal/model"
 	"github.com/antigravity/prometheus/internal/repository"
 	"github.com/antigravity/prometheus/internal/service/backup"

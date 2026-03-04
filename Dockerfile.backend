@@ -5,10 +5,11 @@ RUN apk add --no-cache git
 
 WORKDIR /build
 
-COPY backend/go.mod ./
+COPY backend/go.mod backend/go.sum* ./
 RUN go mod download
 
 COPY backend/ .
+RUN go mod tidy
 
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /prometheus-server ./cmd/server
 

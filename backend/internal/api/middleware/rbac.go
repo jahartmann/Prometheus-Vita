@@ -1,7 +1,7 @@
 package middleware
 
 import (
-	"github.com/antigravity/prometheus/internal/api"
+	"github.com/antigravity/prometheus/internal/api/response"
 	"github.com/antigravity/prometheus/internal/model"
 	"github.com/labstack/echo/v4"
 )
@@ -16,11 +16,11 @@ func RequireRole(roles ...model.UserRole) echo.MiddlewareFunc {
 		return func(c echo.Context) error {
 			role, ok := c.Get(ContextKeyRole).(model.UserRole)
 			if !ok {
-				return api.Unauthorized(c, "no role found in context")
+				return response.Unauthorized(c, "no role found in context")
 			}
 
 			if !allowed[role] {
-				return api.Forbidden(c, "insufficient permissions")
+				return response.Forbidden(c, "insufficient permissions")
 			}
 
 			return next(c)

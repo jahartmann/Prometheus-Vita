@@ -4,7 +4,7 @@ import (
 	"errors"
 	"strconv"
 
-	apiPkg "github.com/antigravity/prometheus/internal/api"
+	apiPkg "github.com/antigravity/prometheus/internal/api/response"
 	"github.com/antigravity/prometheus/internal/api/middleware"
 	"github.com/antigravity/prometheus/internal/model"
 	"github.com/antigravity/prometheus/internal/repository"

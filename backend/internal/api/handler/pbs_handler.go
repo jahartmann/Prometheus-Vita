@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	apiPkg "github.com/antigravity/prometheus/internal/api"
+	apiPkg "github.com/antigravity/prometheus/internal/api/response"
 	"github.com/antigravity/prometheus/internal/model"
 	"github.com/antigravity/prometheus/internal/proxmox"
 	"github.com/antigravity/prometheus/internal/repository"

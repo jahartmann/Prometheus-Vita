@@ -3,7 +3,7 @@ package handler
 import (
 	"github.com/antigravity/prometheus/internal/model"
 
-	apiPkg "github.com/antigravity/prometheus/internal/api"
+	apiPkg "github.com/antigravity/prometheus/internal/api/response"
 	"github.com/antigravity/prometheus/internal/service/anomaly"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"

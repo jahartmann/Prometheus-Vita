@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/antigravity/prometheus/internal/api"
+	"github.com/antigravity/prometheus/internal/api/response"
 	"github.com/labstack/echo/v4"
 	"github.com/redis/go-redis/v9"
 )
@@ -56,7 +56,7 @@ func RateLimit(redisClient *redis.Client, cfg RateLimitConfig) echo.MiddlewareFu
 				c.Response().Header().Set("X-RateLimit-Limit", fmt.Sprintf("%d", cfg.RequestsPerMinute))
 				c.Response().Header().Set("X-RateLimit-Remaining", "0")
 				c.Response().Header().Set("Retry-After", "60")
-				return api.ErrorResponse(c, http.StatusTooManyRequests, "rate limit exceeded")
+				return response.ErrorResponse(c, http.StatusTooManyRequests, "rate limit exceeded")
 			}
 
 			remaining := int64(cfg.RequestsPerMinute) - count
