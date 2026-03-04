@@ -73,6 +73,7 @@ export interface Node {
 }
 
 export interface NodeStatus {
+  node: string;
   node_id: string;
   cpu_usage: number;
   cpu_cores: number;

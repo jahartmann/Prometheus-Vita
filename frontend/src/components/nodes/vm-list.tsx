@@ -76,7 +76,7 @@ export function VmList({ vms, nodeId, onRefresh }: VmListProps) {
   const [selectedVmIds, setSelectedVmIds] = useState<Set<number>>(new Set());
   const [bulkAction, setBulkAction] = useState<string | null>(null);
   const [bulkLoading, setBulkLoading] = useState(false);
-  const { nodes } = useNodeStore();
+  const { nodes, nodeStatus } = useNodeStore();
   const currentNode = nodes.find((n) => n.id === nodeId);
 
   const toggleSort = (field: SortField) => {
@@ -579,6 +579,7 @@ export function VmList({ vms, nodeId, onRefresh }: VmListProps) {
           vmName={consoleVm.name}
           hostname={currentNode.hostname}
           port={currentNode.port}
+          pveNode={nodeStatus[nodeId]?.node}
         />
       )}
     </div>

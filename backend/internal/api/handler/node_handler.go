@@ -226,7 +226,7 @@ func (h *NodeHandler) Onboard(c echo.Context) error {
 	node, err := h.service.Onboard(c.Request().Context(), req)
 	if err != nil {
 		slog.Error("failed to onboard node", slog.Any("error", err))
-		return apiPkg.InternalError(c, "failed to onboard node")
+		return apiPkg.InternalError(c, err.Error())
 	}
 
 	return apiPkg.Created(c, node.ToResponse())

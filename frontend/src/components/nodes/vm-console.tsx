@@ -19,6 +19,7 @@ interface VmConsoleProps {
   vmName: string;
   hostname: string;
   port: number;
+  pveNode?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -30,6 +31,7 @@ export function VmConsole({
   vmName,
   hostname,
   port,
+  pveNode,
   open,
   onOpenChange,
 }: VmConsoleProps) {
@@ -42,7 +44,8 @@ export function VmConsole({
     try {
       await vmApi.getVNCProxy(nodeId, vmid, vmType);
       const consoleType = vmType === "qemu" ? "kvm" : "lxc";
-      const url = `https://${hostname}:${port}/?console=${consoleType}&novnc=1&vmid=${vmid}&vmname=${encodeURIComponent(vmName)}&node=${nodeId}&resize=off`;
+      const nodeName = pveNode || hostname;
+      const url = `https://${hostname}:${port}/?console=${consoleType}&novnc=1&vmid=${vmid}&vmname=${encodeURIComponent(vmName)}&node=${encodeURIComponent(nodeName)}&resize=off`;
       window.open(url, "_blank");
     } catch {
       setError("VNC-Proxy konnte nicht erstellt werden.");
