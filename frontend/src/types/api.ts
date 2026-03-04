@@ -784,29 +784,6 @@ export interface UpdateEnvironmentRequest {
   color?: string;
 }
 
-// Phase 6: Update Intelligence types
-export type UpdateCheckStatus = 'pending' | 'running' | 'completed' | 'failed';
-
-export interface UpdateCheck {
-  id: string;
-  node_id: string;
-  status: UpdateCheckStatus;
-  total_updates: number;
-  security_updates: number;
-  packages?: PackageUpdate[];
-  error_message?: string;
-  checked_at: string;
-  created_at: string;
-}
-
-export interface PackageUpdate {
-  name: string;
-  current_version: string;
-  new_version: string;
-  is_security: boolean;
-  source?: string;
-}
-
 // Phase 6: Resource Right-Sizing types
 export type RecommendationType = 'downsize' | 'upsize' | 'optimal';
 
@@ -917,25 +894,6 @@ export interface VNCProxyTicket {
   upid: string;
 }
 
-// Topology types
-export interface TopologyNode {
-  id: string;
-  type: string;
-  label: string;
-  status: string;
-  metadata?: Record<string, unknown>;
-}
-
-export interface TopologyEdge {
-  source: string;
-  target: string;
-  label?: string;
-}
-
-export interface TopologyGraph {
-  nodes: TopologyNode[];
-  edges: TopologyEdge[];
-}
 
 // ISO/Template types
 export interface StorageContent {

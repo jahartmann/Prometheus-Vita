@@ -8,12 +8,7 @@ import {
   Server,
   Settings,
   Flame,
-  Archive,
-  Activity,
-  Shield,
   MessageSquare,
-  Package,
-  TrendingDown,
   ChevronDown,
   ChevronRight,
   Monitor,
@@ -22,10 +17,8 @@ import {
   FolderArchive,
   BarChart3,
   Plus,
-  Newspaper,
-  ArrowLeftRight,
-  Map,
   Brain,
+  Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -44,21 +37,13 @@ interface NavItem {
   matchPrefix?: string;
 }
 
-const topItems: NavItem[] = [
+const navItems: NavItem[] = [
   { label: "Dashboard", href: "/", icon: LayoutDashboard },
 ];
 
-const bottomItems: NavItem[] = [
-  { label: "Backups", href: "/backups", icon: Archive, matchPrefix: "/backups" },
-  { label: "Monitoring", href: "/monitoring", icon: Activity, matchPrefix: "/monitoring" },
-  { label: "Briefing", href: "/briefing", icon: Newspaper, matchPrefix: "/briefing" },
-  { label: "Disaster Recovery", href: "/disaster-recovery", icon: Shield, matchPrefix: "/disaster-recovery" },
-  { label: "Migrationen", href: "/migrations", icon: ArrowLeftRight, matchPrefix: "/migrations" },
-  { label: "Updates", href: "/updates", icon: Package, matchPrefix: "/updates" },
-  { label: "Empfehlungen", href: "/recommendations", icon: TrendingDown, matchPrefix: "/recommendations" },
-  { label: "Topologie", href: "/topology", icon: Map, matchPrefix: "/topology" },
-  { label: "AI Chat", href: "/chat", icon: MessageSquare, matchPrefix: "/chat" },
-  { label: "Wissensbasis", href: "/settings/brain", icon: Brain, matchPrefix: "/settings/brain" },
+const bottomNavItems: NavItem[] = [
+  { label: "Automatisierung", href: "/settings/notifications", icon: Zap, matchPrefix: "/settings/notifications" },
+  { label: "KI-Assistent", href: "/chat", icon: Brain, matchPrefix: "/chat" },
   { label: "Einstellungen", href: "/settings/nodes", icon: Settings, matchPrefix: "/settings" },
 ];
 
@@ -91,7 +76,6 @@ export function Sidebar({ collapsed = false }: SidebarProps) {
     fetchNodes();
   }, [fetchNodes]);
 
-  // Auto-open only the active node when path changes
   useEffect(() => {
     if (pathname.startsWith("/nodes/")) {
       const segments = pathname.split("/");
@@ -154,17 +138,16 @@ export function Sidebar({ collapsed = false }: SidebarProps) {
     return link;
   };
 
-  // Collapsed: show only icons, including Server icon for Nodes
   if (collapsed) {
     const allCollapsedItems: NavItem[] = [
-      ...topItems,
-      { label: "Nodes", href: "/nodes", icon: Server, matchPrefix: "/nodes" },
-      ...bottomItems,
+      ...navItems,
+      { label: "Server", href: "/nodes", icon: Server, matchPrefix: "/nodes" },
+      ...bottomNavItems,
     ];
 
     return (
       <>
-        <aside className="flex h-screen w-16 flex-col border-r bg-card transition-all duration-300">
+        <aside className="flex h-screen w-16 flex-col border-r bg-card/80 backdrop-blur-sm transition-all duration-300">
           <div className="flex h-14 items-center justify-center border-b">
             <Flame className="h-6 w-6 shrink-0 text-primary" />
           </div>
@@ -177,20 +160,18 @@ export function Sidebar({ collapsed = false }: SidebarProps) {
     );
   }
 
-  // Expanded: full tree sidebar
   return (
     <>
-      <aside className="flex h-screen w-60 flex-col border-r bg-card transition-all duration-300">
+      <aside className="flex h-screen w-60 flex-col border-r bg-card/80 backdrop-blur-sm transition-all duration-300">
         <div className="flex h-14 items-center gap-2 border-b px-4">
           <Flame className="h-6 w-6 shrink-0 text-primary" />
           <span className="text-lg font-bold tracking-tight">Prometheus</span>
         </div>
 
         <nav className="flex-1 space-y-1 overflow-y-auto p-2">
-          {/* Dashboard */}
-          {topItems.map((item) => renderNavLink(item))}
+          {navItems.map((item) => renderNavLink(item))}
 
-          {/* Nodes Tree */}
+          {/* Server (Nodes) Tree */}
           <Collapsible open={nodesOpen} onOpenChange={setNodesOpen}>
             <CollapsibleTrigger
               className={cn(
@@ -201,7 +182,7 @@ export function Sidebar({ collapsed = false }: SidebarProps) {
               )}
             >
               <Server className="h-4 w-4 shrink-0" />
-              <span className="flex-1 text-left">Nodes</span>
+              <span className="flex-1 text-left">Server</span>
               {nodesOpen ? (
                 <ChevronDown className="h-3.5 w-3.5 shrink-0" />
               ) : (
@@ -262,19 +243,19 @@ export function Sidebar({ collapsed = false }: SidebarProps) {
                 </Collapsible>
               ))}
 
-              {/* + Node hinzufuegen */}
               <button
                 onClick={() => setOnboardOpen(true)}
                 className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
               >
                 <Plus className="h-3.5 w-3.5 shrink-0" />
-                <span>Node hinzufuegen</span>
+                <span>Server hinzufuegen</span>
               </button>
             </CollapsibleContent>
           </Collapsible>
 
-          {/* Remaining items */}
-          {bottomItems.map((item) => renderNavLink(item))}
+          <div className="my-2 border-t border-border" />
+
+          {bottomNavItems.map((item) => renderNavLink(item))}
         </nav>
       </aside>
 

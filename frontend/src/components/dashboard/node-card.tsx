@@ -45,18 +45,20 @@ export function NodeCard({ node, status }: NodeCardProps) {
 
   return (
     <Link href={`/nodes/${node.id}`}>
-      <Card className="cursor-pointer transition-shadow hover:shadow-md">
+      <Card hover className="cursor-pointer">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Server className="h-4 w-4 text-muted-foreground" />
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+                <Server className="h-4 w-4 text-primary" />
+              </div>
               <CardTitle className="text-base">{node.name}</CardTitle>
             </div>
             <Badge variant={node.is_online ? "success" : "destructive"}>
               {node.is_online ? "Online" : "Offline"}
             </Badge>
           </div>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground pl-10">
             <span>{node.hostname}:{node.port}</span>
           </div>
         </CardHeader>
@@ -91,7 +93,7 @@ export function NodeCard({ node, status }: NodeCardProps) {
             <div className="py-4 text-center text-sm text-muted-foreground">
               {node.is_online
                 ? "Lade Status..."
-                : "Node ist offline"}
+                : "Server ist offline"}
             </div>
           )}
         </CardContent>

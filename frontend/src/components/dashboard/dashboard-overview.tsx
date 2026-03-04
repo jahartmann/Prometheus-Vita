@@ -1,9 +1,11 @@
 "use client";
 
-import { Server, ServerCog, Activity, AlertTriangle } from "lucide-react";
+import { Server, ServerCog, Activity, AlertTriangle, Cpu, Plus } from "lucide-react";
+import Link from "next/link";
 import { useNodeStore } from "@/stores/node-store";
-import { KpiCard } from "./kpi-card";
+import { KpiCard } from "@/components/ui/kpi-card";
 import { NodeGrid } from "./node-grid";
+import { Button } from "@/components/ui/button";
 
 export function DashboardOverview() {
   const { nodes, nodeStatus } = useNodeStore();
@@ -19,39 +21,57 @@ export function DashboardOverview() {
   );
   const offlineNodes = nodes.length - onlineNodes;
 
+  const avgCpu =
+    Object.values(nodeStatus).length > 0
+      ? Object.values(nodeStatus).reduce((acc, s) => acc + (s?.cpu_usage ?? 0), 0) /
+        Object.values(nodeStatus).length
+      : 0;
+
   return (
     <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
-          title="Nodes"
+          title="Server"
           value={nodes.length}
           subtitle={`${onlineNodes} online`}
           icon={Server}
+          color="blue"
         />
         <KpiCard
           title="VMs / Container"
           value={totalVMs}
           subtitle={`${runningVMs} aktiv`}
           icon={ServerCog}
+          color="green"
+        />
+        <KpiCard
+          title="CPU-Durchschnitt"
+          value={`${avgCpu.toFixed(1)}%`}
+          subtitle="Alle Server"
+          icon={Cpu}
+          color={avgCpu > 80 ? "red" : avgCpu > 60 ? "orange" : "blue"}
         />
         <KpiCard
           title="Status"
           value={offlineNodes === 0 ? "Gesund" : `${offlineNodes} offline`}
           subtitle={offlineNodes === 0 ? "Alle Systeme operativ" : "Achtung erforderlich"}
           icon={offlineNodes === 0 ? Activity : AlertTriangle}
-        />
-        <KpiCard
-          title="Uptime"
-          value="--"
-          subtitle="Durchschnitt aller Nodes"
-          icon={Activity}
+          color={offlineNodes === 0 ? "green" : "red"}
         />
       </div>
 
-      <div>
-        <h2 className="mb-4 text-lg font-semibold">Nodes</h2>
-        <NodeGrid />
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold">Server</h2>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/settings/nodes">
+              <Plus className="mr-2 h-4 w-4" />
+              Server hinzufuegen
+            </Link>
+          </Button>
+        </div>
       </div>
+      <NodeGrid />
     </div>
   );
 }

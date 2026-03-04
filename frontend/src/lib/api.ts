@@ -409,12 +409,6 @@ export const environmentApi = {
     api.put(`/nodes/${nodeId}/environment`, { environment_id: environmentId }),
 };
 
-// Update Intelligence API
-export const updateApi = {
-  listAll: () => api.get("/updates"),
-  listByNode: (nodeId: string) => api.get(`/nodes/${nodeId}/updates`),
-  triggerCheck: (nodeId: string) => api.post(`/nodes/${nodeId}/updates/check`),
-};
 
 // Right-Sizing API
 export const rightsizingApi = {
@@ -500,10 +494,6 @@ export const reflexApi = {
   delete: (id: string) => api.delete(`/reflexes/${id}`),
 };
 
-// Topology API
-export const topologyApi = {
-  get: () => api.get("/topology"),
-};
 
 // Brain API
 export const brainApi = {

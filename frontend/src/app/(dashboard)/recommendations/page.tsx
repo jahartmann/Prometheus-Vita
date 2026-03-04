@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { RefreshCw, TrendingDown } from "lucide-react";
+import { RefreshCw, TrendingDown, TrendingUp, Shield, Settings2, Coins } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { rightsizingApi, toArray } from "@/lib/api";
 import { useNodeStore } from "@/stores/node-store";
 import { RecommendationList } from "@/components/recommendations/recommendation-list";
+import { KpiCard } from "@/components/ui/kpi-card";
 import type { ResourceRecommendation } from "@/types/api";
 
 export default function RecommendationsPage() {
@@ -38,14 +40,23 @@ export default function RecommendationsPage() {
 
   const downsizeCount = recommendations.filter((r) => r.recommendation_type === "downsize").length;
   const upsizeCount = recommendations.filter((r) => r.recommendation_type === "upsize").length;
+  const optimalCount = recommendations.filter((r) => r.recommendation_type === "optimal").length;
+
+  // Categorize recommendations
+  const performanceRecs = recommendations.filter(
+    (r) => r.resource_type === "cpu" || r.resource_type === "memory"
+  );
+  const configRecs = recommendations.filter(
+    (r) => r.resource_type === "disk" || r.resource_type === "balloon"
+  );
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold">Ressourcen-Empfehlungen</h2>
+          <h2 className="text-xl font-bold">Empfehlungen</h2>
           <p className="text-sm text-muted-foreground">
-            Right-Sizing Vorschlaege fuer VMs und Container.
+            Optimierungs- und Sicherheitsvorschlaege fuer Ihre Infrastruktur.
           </p>
         </div>
         <Button variant="outline" onClick={fetchData} disabled={isLoading}>
@@ -54,35 +65,74 @@ export default function RecommendationsPage() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <TrendingDown className="h-8 w-8 text-blue-500" />
-            <div>
-              <p className="text-2xl font-bold">{recommendations.length}</p>
-              <p className="text-sm text-muted-foreground">Empfehlungen gesamt</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-2xl font-bold text-green-600">{downsizeCount}</p>
-            <p className="text-sm text-muted-foreground">Verkleinerung moeglich</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-2xl font-bold text-yellow-600">{upsizeCount}</p>
-            <p className="text-sm text-muted-foreground">Vergroesserung empfohlen</p>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <KpiCard
+          title="Gesamt"
+          value={recommendations.length}
+          subtitle="Empfehlungen"
+          icon={Settings2}
+          color="blue"
+        />
+        <KpiCard
+          title="Verkleinern"
+          value={downsizeCount}
+          subtitle="Ressourcen sparen"
+          icon={TrendingDown}
+          color="green"
+        />
+        <KpiCard
+          title="Vergroessern"
+          value={upsizeCount}
+          subtitle="Mehr Leistung"
+          icon={TrendingUp}
+          color="orange"
+        />
+        <KpiCard
+          title="Optimal"
+          value={optimalCount}
+          subtitle="Richtig konfiguriert"
+          icon={Shield}
+          color="green"
+        />
       </div>
 
-      <Card>
-        <CardContent className="p-0">
-          <RecommendationList recommendations={recommendations} getNodeName={getNodeName} />
-        </CardContent>
-      </Card>
+      <Tabs defaultValue="all">
+        <TabsList>
+          <TabsTrigger value="all">
+            Alle ({recommendations.length})
+          </TabsTrigger>
+          <TabsTrigger value="performance">
+            Performance ({performanceRecs.length})
+          </TabsTrigger>
+          <TabsTrigger value="config">
+            Konfiguration ({configRecs.length})
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="all">
+          <Card>
+            <CardContent className="p-0">
+              <RecommendationList recommendations={recommendations} getNodeName={getNodeName} />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="performance">
+          <Card>
+            <CardContent className="p-0">
+              <RecommendationList recommendations={performanceRecs} getNodeName={getNodeName} />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="config">
+          <Card>
+            <CardContent className="p-0">
+              <RecommendationList recommendations={configRecs} getNodeName={getNodeName} />
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

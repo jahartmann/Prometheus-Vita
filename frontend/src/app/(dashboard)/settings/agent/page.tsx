@@ -106,7 +106,18 @@ export default function AgentSettingsPage() {
   }, [user?.id]);
 
   useEffect(() => {
-    fetchConfig();
+    const token = useAuthStore.getState().accessToken;
+    if (token) {
+      fetchConfig();
+    } else {
+      const unsub = useAuthStore.subscribe((state) => {
+        if (state.accessToken) {
+          fetchConfig();
+          unsub();
+        }
+      });
+      return () => unsub();
+    }
   }, [fetchConfig]);
 
   const handleTestConnection = async () => {
