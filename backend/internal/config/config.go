@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 )
 
 type Config struct {
@@ -129,7 +130,7 @@ func Load() (*Config, error) {
 			Key: getEnv("ENCRYPTION_KEY", ""),
 		},
 		CORS: CORSConfig{
-			AllowOrigins: []string{getEnv("CORS_ALLOW_ORIGINS", "http://localhost:3000")},
+			AllowOrigins: strings.Split(getEnv("CORS_ALLOW_ORIGINS", "*"), ","),
 			AllowMethods: []string{"GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"},
 			AllowHeaders: []string{"Authorization", "Content-Type", "X-Request-ID", "X-API-Key"},
 		},

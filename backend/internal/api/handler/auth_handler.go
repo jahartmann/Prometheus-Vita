@@ -2,6 +2,7 @@ package handler
 
 import (
 	"errors"
+	"log/slog"
 
 	apiPkg "github.com/antigravity/prometheus/internal/api/response"
 	"github.com/antigravity/prometheus/internal/api/middleware"
@@ -41,6 +42,7 @@ func (h *AuthHandler) Login(c echo.Context) error {
 		if errors.Is(err, auth.ErrUserInactive) {
 			return apiPkg.Forbidden(c, "account is inactive")
 		}
+		slog.Error("login failed", slog.Any("error", err))
 		return apiPkg.InternalError(c, "login failed")
 	}
 
