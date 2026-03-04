@@ -149,7 +149,7 @@ export function RestoreDialog({ backupId, open, onOpenChange }: RestoreDialogPro
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
   const [dryRun, setDryRun] = useState(true);
   const [isRestoring, setIsRestoring] = useState(false);
-  const [result, setResult] = useState<unknown>(null);
+  const [result, setResult] = useState<Record<string, unknown> | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
