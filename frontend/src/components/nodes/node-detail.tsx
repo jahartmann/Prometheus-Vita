@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Cpu, MemoryStick, HardDrive, Clock, Monitor, Disc } from "lucide-react";
+import { ArrowLeft, AlertTriangle, Cpu, MemoryStick, HardDrive, Clock, Monitor, Disc } from "lucide-react";
 import {
   LineChart,
   Line,
@@ -67,7 +67,7 @@ interface NodeDetailProps {
 }
 
 export function NodeDetail({ node }: NodeDetailProps) {
-  const { nodeStatus, nodeVMs, fetchNodeVMs } = useNodeStore();
+  const { nodeStatus, nodeVMs, nodeErrors, fetchNodeVMs } = useNodeStore();
   const status = nodeStatus[node.id];
   const vms = nodeVMs[node.id] || [];
   const { metrics } = useNodeMetrics(node.id, node.is_online);
@@ -183,6 +183,15 @@ export function NodeDetail({ node }: NodeDetailProps) {
           </p>
         </div>
       </div>
+
+      {nodeErrors[node.id] && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-600 dark:text-amber-400">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4" />
+            <span>{nodeErrors[node.id]} — Einige Daten sind moeglicherweise nicht verfuegbar.</span>
+          </div>
+        </div>
+      )}
 
       {status && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">

@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { Server, Cpu, MemoryStick, HardDrive } from "lucide-react";
+import { Server, Cpu, MemoryStick, HardDrive, AlertTriangle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { useNodeStore } from "@/stores/node-store";
 import type { Node, NodeStatus } from "@/types/api";
 import {
   formatBytes,
@@ -35,6 +36,8 @@ function UsageBar({ value, label }: { value: number; label: string }) {
 }
 
 export function NodeCard({ node, status }: NodeCardProps) {
+  const { nodeErrors } = useNodeStore();
+  const nodeError = nodeErrors[node.id];
   const cpuUsage = status?.cpu_usage ?? 0;
   const memUsage = status && status.memory_total
     ? (status.memory_used / status.memory_total) * 100
@@ -63,7 +66,12 @@ export function NodeCard({ node, status }: NodeCardProps) {
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
-          {status ? (
+          {nodeError ? (
+            <div className="flex items-center gap-2 py-3 text-xs text-amber-600 dark:text-amber-400">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+              <span>Nicht erreichbar</span>
+            </div>
+          ) : status ? (
             <>
               <div className="flex items-center gap-4 text-xs text-muted-foreground">
                 <span className="flex items-center gap-1">

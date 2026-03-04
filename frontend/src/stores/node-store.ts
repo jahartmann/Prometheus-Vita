@@ -8,6 +8,7 @@ interface NodeState {
   selectedNode: Node | null;
   nodeStatus: Record<string, NodeStatus>;
   nodeVMs: Record<string, VM[]>;
+  nodeErrors: Record<string, string>;
   isLoading: boolean;
   error: string | null;
   fetchNodes: () => Promise<void>;
@@ -23,6 +24,7 @@ export const useNodeStore = create<NodeState>()((set, get) => ({
   selectedNode: null,
   nodeStatus: {},
   nodeVMs: {},
+  nodeErrors: {},
   isLoading: false,
   error: null,
 
@@ -45,9 +47,18 @@ export const useNodeStore = create<NodeState>()((set, get) => ({
       const response = await api.get<NodeStatus>(`/nodes/${nodeId}/status`);
       set((state) => ({
         nodeStatus: { ...state.nodeStatus, [nodeId]: response.data },
+        nodeErrors: { ...state.nodeErrors, [nodeId]: "" },
       }));
-    } catch {
-      // Status nicht verfuegbar
+    } catch (err: any) {
+      const msg =
+        err?.response?.status === 503
+          ? "Node nicht erreichbar"
+          : err?.response?.status === 401
+          ? ""
+          : "Statusabfrage fehlgeschlagen";
+      if (msg) {
+        set((state) => ({ nodeErrors: { ...state.nodeErrors, [nodeId]: msg } }));
+      }
     }
   },
 
@@ -57,9 +68,18 @@ export const useNodeStore = create<NodeState>()((set, get) => ({
       const response = await api.get<VM[]>(`/nodes/${nodeId}/vms`);
       set((state) => ({
         nodeVMs: { ...state.nodeVMs, [nodeId]: toArray<VM>(response.data) },
+        nodeErrors: { ...state.nodeErrors, [nodeId]: "" },
       }));
-    } catch {
-      // VMs nicht verfuegbar
+    } catch (err: any) {
+      const msg =
+        err?.response?.status === 503
+          ? "Node nicht erreichbar"
+          : err?.response?.status === 401
+          ? ""
+          : "VM-Abfrage fehlgeschlagen";
+      if (msg) {
+        set((state) => ({ nodeErrors: { ...state.nodeErrors, [nodeId]: msg } }));
+      }
     }
   },
 

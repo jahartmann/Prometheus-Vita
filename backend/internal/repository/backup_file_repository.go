@@ -31,7 +31,7 @@ func (r *pgBackupFileRepository) CreateBatch(ctx context.Context, files []model.
 	for i := range files {
 		files[i].ID = uuid.New()
 		batch.Queue(
-			`INSERT INTO backup_files (id, backup_id, file_path, file_hash, file_size,
+			`INSERT INTO config_backup_files (id, backup_id, file_path, file_hash, file_size,
 			        file_permissions, file_owner, content, diff_from_previous, created_at)
 			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())`,
 			files[i].ID, files[i].BackupID, files[i].FilePath, files[i].FileHash,
@@ -55,7 +55,7 @@ func (r *pgBackupFileRepository) GetByBackupID(ctx context.Context, backupID uui
 	rows, err := r.db.Query(ctx,
 		`SELECT id, backup_id, file_path, file_hash, file_size,
 		        file_permissions, file_owner, diff_from_previous, created_at
-		 FROM backup_files WHERE backup_id = $1 ORDER BY file_path`, backupID)
+		 FROM config_backup_files WHERE backup_id = $1 ORDER BY file_path`, backupID)
 	if err != nil {
 		return nil, fmt.Errorf("list backup files: %w", err)
 	}
@@ -79,7 +79,7 @@ func (r *pgBackupFileRepository) GetSingleFile(ctx context.Context, backupID uui
 	err := r.db.QueryRow(ctx,
 		`SELECT id, backup_id, file_path, file_hash, file_size,
 		        file_permissions, file_owner, content, diff_from_previous, created_at
-		 FROM backup_files WHERE backup_id = $1 AND file_path = $2`, backupID, filePath,
+		 FROM config_backup_files WHERE backup_id = $1 AND file_path = $2`, backupID, filePath,
 	).Scan(&f.ID, &f.BackupID, &f.FilePath, &f.FileHash,
 		&f.FileSize, &f.FilePermissions, &f.FileOwner,
 		&f.Content, &f.DiffFromPrevious, &f.CreatedAt)
@@ -93,7 +93,7 @@ func (r *pgBackupFileRepository) GetSingleFile(ctx context.Context, backupID uui
 }
 
 func (r *pgBackupFileRepository) DeleteByBackupID(ctx context.Context, backupID uuid.UUID) error {
-	_, err := r.db.Exec(ctx, "DELETE FROM backup_files WHERE backup_id=$1", backupID)
+	_, err := r.db.Exec(ctx, "DELETE FROM config_backup_files WHERE backup_id=$1", backupID)
 	if err != nil {
 		return fmt.Errorf("delete backup files: %w", err)
 	}
