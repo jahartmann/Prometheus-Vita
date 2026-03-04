@@ -27,7 +27,7 @@ import { StorageOverview } from "@/components/nodes/storage-overview";
 import { DiskList } from "@/components/nodes/disk-list";
 import { PBSOverview } from "@/components/nodes/pbs-overview";
 import { TagAssignDialog } from "@/components/tags/tag-assign-dialog";
-import { metricsApi, networkApi, diskApi, tagApi } from "@/lib/api";
+import { metricsApi, networkApi, diskApi, tagApi, toArray } from "@/lib/api";
 import type { Node, MetricsRecord, NetworkInterface, DiskInfo, Tag } from "@/types/api";
 import {
   formatBytes,
@@ -84,22 +84,22 @@ export function NodeDetail({ node }: NodeDetailProps) {
 
     metricsApi
       .getHistory(node.id, new Date(Date.now() - 3600000).toISOString(), new Date().toISOString())
-      .then((res) => setMetricsHistory(res.data?.data || res.data || []))
+      .then((res) => setMetricsHistory(toArray(res.data)))
       .catch(() => {});
 
     networkApi
       .getInterfaces(node.id)
-      .then((res) => setNetworkIfaces(res.data?.data || res.data || []))
+      .then((res) => setNetworkIfaces(toArray(res.data)))
       .catch(() => {});
 
     diskApi
       .getDisks(node.id)
-      .then((res) => setDisks(res.data?.data || res.data || []))
+      .then((res) => setDisks(toArray(res.data)))
       .catch(() => {});
 
     tagApi
       .getNodeTags(node.id)
-      .then((res) => setNodeTags(res.data?.data || res.data || []))
+      .then((res) => setNodeTags(toArray(res.data)))
       .catch(() => {});
   }, [node.id, fetchBackups, fetchSchedules]);
 
@@ -380,7 +380,7 @@ export function NodeDetail({ node }: NodeDetailProps) {
             onRefresh={() => {
               networkApi
                 .getInterfaces(node.id)
-                .then((res) => setNetworkIfaces(res.data?.data || res.data || []));
+                .then((res) => setNetworkIfaces(toArray(res.data)));
             }}
           />
         </TabsContent>

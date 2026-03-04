@@ -12,7 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { gatewayApi } from "@/lib/api";
+import { gatewayApi, toArray } from "@/lib/api";
 import type { APIToken } from "@/types/api";
 
 interface TokenListProps {
@@ -28,7 +28,7 @@ export function TokenList({ refreshKey }: TokenListProps) {
     setIsLoading(true);
     try {
       const resp = await gatewayApi.listTokens();
-      setTokens(resp.data?.data || resp.data || []);
+      setTokens(toArray<APIToken>(resp.data));
     } catch {
       // Fehler
     } finally {

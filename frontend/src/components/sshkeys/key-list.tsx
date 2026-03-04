@@ -12,7 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { sshKeyApi } from "@/lib/api";
+import { sshKeyApi, toArray } from "@/lib/api";
 import type { SSHKey } from "@/types/api";
 
 interface KeyListProps {
@@ -28,7 +28,7 @@ export function KeyList({ nodeId, onGenerate }: KeyListProps) {
     setIsLoading(true);
     try {
       const resp = await sshKeyApi.listByNode(nodeId);
-      setKeys(resp.data?.data || resp.data || []);
+      setKeys(toArray<SSHKey>(resp.data));
     } catch {
       // Fehler
     } finally {

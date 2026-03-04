@@ -9,7 +9,7 @@ import { useNodeStore } from "@/stores/node-store";
 import { MetricsCharts } from "@/components/monitoring/metrics-charts";
 import { MetricsSummaryCards } from "@/components/monitoring/metrics-summary";
 import { Skeleton } from "@/components/ui/skeleton";
-import { metricsApi } from "@/lib/api";
+import { metricsApi, toArray } from "@/lib/api";
 import type { MetricsRecord, MetricsSummary } from "@/types/api";
 
 const periods = [
@@ -39,12 +39,12 @@ export default function NodeMonitoringPage() {
 
     metricsApi
       .getHistory(nodeId, since.toISOString(), new Date().toISOString())
-      .then((res) => setMetrics(res.data?.data || res.data || []))
+      .then((res) => setMetrics(toArray<MetricsRecord>(res.data)))
       .catch(() => {});
 
     metricsApi
       .getSummary(nodeId, period)
-      .then((res) => setSummary(res.data?.data || res.data || null))
+      .then((res) => setSummary(res.data?.data ?? res.data ?? null))
       .catch(() => {});
   }, [nodeId, period]);
 

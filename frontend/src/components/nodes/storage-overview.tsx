@@ -5,7 +5,7 @@ import { Database } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatBytes, getUsageBgColor } from "@/lib/utils";
 import type { NodeStatus } from "@/types/api";
-import api from "@/lib/api";
+import api, { toArray } from "@/lib/api";
 
 interface StorageOverviewProps {
   nodeId: string;
@@ -30,7 +30,7 @@ export function StorageOverview({ nodeId, status }: StorageOverviewProps) {
     api
       .get(`/nodes/${nodeId}/storage`)
       .then((res) => {
-        setStorages(res.data?.data || res.data || []);
+        setStorages(toArray<StorageItem>(res.data));
       })
       .catch(() => {});
   }, [nodeId]);

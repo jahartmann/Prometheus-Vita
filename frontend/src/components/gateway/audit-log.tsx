@@ -12,7 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { gatewayApi } from "@/lib/api";
+import { gatewayApi, toArray } from "@/lib/api";
 import type { AuditLogEntry } from "@/types/api";
 
 export function AuditLog() {
@@ -23,7 +23,7 @@ export function AuditLog() {
     setIsLoading(true);
     try {
       const resp = await gatewayApi.listAuditLog(50);
-      setEntries(resp.data?.data || resp.data || []);
+      setEntries(toArray<AuditLogEntry>(resp.data));
     } catch {
       // Fehler
     } finally {

@@ -9,7 +9,7 @@ import { useNodeStore } from "@/stores/node-store";
 import { StorageOverview } from "@/components/nodes/storage-overview";
 import { DiskList } from "@/components/nodes/disk-list";
 import { Skeleton } from "@/components/ui/skeleton";
-import { diskApi } from "@/lib/api";
+import { diskApi, toArray } from "@/lib/api";
 import type { DiskInfo } from "@/types/api";
 
 export default function NodeStoragePage() {
@@ -28,7 +28,7 @@ export default function NodeStoragePage() {
       diskApi
         .getDisks(nodeId)
         .then((res) => {
-          setDisks(res.data?.data || res.data || []);
+          setDisks(toArray<DiskInfo>(res.data));
         })
         .catch(() => {});
     }

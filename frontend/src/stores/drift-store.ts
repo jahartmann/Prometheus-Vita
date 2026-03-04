@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { DriftCheck } from "@/types/api";
-import { driftApi } from "@/lib/api";
+import { driftApi, toArray } from "@/lib/api";
 
 interface DriftState {
   checks: DriftCheck[];
@@ -22,7 +22,7 @@ export const useDriftStore = create<DriftState>()((set) => ({
     set({ isLoading: true, error: null });
     try {
       const resp = await driftApi.listAll();
-      set({ checks: resp.data?.data || resp.data || [], isLoading: false });
+      set({ checks: toArray<DriftCheck>(resp.data), isLoading: false });
     } catch {
       set({ error: "Drift-Checks konnten nicht geladen werden", isLoading: false });
     }
@@ -31,7 +31,7 @@ export const useDriftStore = create<DriftState>()((set) => ({
   fetchByNode: async (nodeId: string) => {
     try {
       const resp = await driftApi.listByNode(nodeId);
-      const data = resp.data?.data || resp.data || [];
+      const data = toArray<DriftCheck>(resp.data);
       set((state) => ({
         nodeChecks: { ...state.nodeChecks, [nodeId]: data },
       }));

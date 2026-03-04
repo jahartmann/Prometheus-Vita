@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Database, Calendar } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatBytes, formatPercentage, getUsageBgColor } from "@/lib/utils";
-import { pbsApi } from "@/lib/api";
+import { pbsApi, toArray } from "@/lib/api";
 import type { PBSDatastore, PBSBackupJob } from "@/types/api";
 
 interface PBSOverviewProps {
@@ -19,13 +19,13 @@ export function PBSOverview({ nodeId }: PBSOverviewProps) {
     pbsApi
       .getDatastores(nodeId)
       .then((res) => {
-        setDatastores(res.data?.data || res.data || []);
+        setDatastores(toArray<PBSDatastore>(res.data));
       })
       .catch(() => {});
     pbsApi
       .getBackupJobs(nodeId)
       .then((res) => {
-        setJobs(res.data?.data || res.data || []);
+        setJobs(toArray<PBSBackupJob>(res.data));
       })
       .catch(() => {});
   }, [nodeId]);

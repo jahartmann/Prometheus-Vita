@@ -16,7 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { useNodeStore } from "@/stores/node-store";
 import { useMigrationStore } from "@/stores/migration-store";
 import { formatBytes } from "@/lib/utils";
-import api from "@/lib/api";
+import api, { toArray } from "@/lib/api";
 import type { VM, MigrationMode } from "@/types/api";
 import { ArrowRight, Loader2 } from "lucide-react";
 
@@ -101,7 +101,7 @@ export function MigrateVmDialog({
     api
       .get(`/nodes/${targetNodeId}/storage`)
       .then((res) => {
-        const data = res.data.data || [];
+        const data = toArray<StorageOption>(res.data);
         setStorages(
           data.filter(
             (s: StorageOption) =>

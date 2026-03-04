@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
-import { tagApi } from "@/lib/api";
+import { tagApi, toArray } from "@/lib/api";
 import type { Tag } from "@/types/api";
 
 const colorPresets = [
@@ -29,7 +29,7 @@ export function TagManager() {
   const fetchTags = () => {
     tagApi
       .list()
-      .then((res) => setTags(res.data?.data || res.data || []))
+      .then((res) => setTags(toArray<Tag>(res.data)))
       .catch(() => {});
   };
 

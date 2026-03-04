@@ -5,7 +5,7 @@ import { Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { tagApi } from "@/lib/api";
+import { tagApi, toArray } from "@/lib/api";
 import type { Tag } from "@/types/api";
 
 interface TagAssignDialogProps {
@@ -21,11 +21,11 @@ export function TagAssignDialog({ nodeId, open, onOpenChange }: TagAssignDialogP
   const fetchData = () => {
     tagApi
       .list()
-      .then((res) => setAllTags(res.data?.data || res.data || []))
+      .then((res) => setAllTags(toArray<Tag>(res.data)))
       .catch(() => {});
     tagApi
       .getNodeTags(nodeId)
-      .then((res) => setNodeTags(res.data?.data || res.data || []))
+      .then((res) => setNodeTags(toArray<Tag>(res.data)))
       .catch(() => {});
   };
 

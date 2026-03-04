@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { useNodeStore } from "@/stores/node-store";
 import { NetworkInterfaces } from "@/components/nodes/network-interfaces";
 import { Skeleton } from "@/components/ui/skeleton";
-import { networkApi } from "@/lib/api";
+import { networkApi, toArray } from "@/lib/api";
 import type { NetworkInterface } from "@/types/api";
 
 export default function NodeNetworkPage() {
@@ -26,7 +26,7 @@ export default function NodeNetworkPage() {
       networkApi
         .getInterfaces(nodeId)
         .then((res) => {
-          setInterfaces(res.data?.data || res.data || []);
+          setInterfaces(toArray<NetworkInterface>(res.data));
         })
         .catch(() => {});
     }
@@ -50,7 +50,7 @@ export default function NodeNetworkPage() {
         interfaces={interfaces}
         onRefresh={() => {
           networkApi.getInterfaces(nodeId).then((res) => {
-            setInterfaces(res.data?.data || res.data || []);
+            setInterfaces(toArray<NetworkInterface>(res.data));
           });
         }}
       />

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { backupApi } from "@/lib/api";
+import { backupApi, toArray } from "@/lib/api";
 import { formatBytes } from "@/lib/utils";
 import type { ConfigBackup, BackupFile, FileDiff } from "@/types/api";
 
@@ -21,10 +21,10 @@ export function BackupDetailDialog({ backup, open, onOpenChange }: BackupDetailD
   useEffect(() => {
     if (open && backup.id) {
       backupApi.getBackupFiles(backup.id).then((res) => {
-        setFiles(res.data?.data || res.data || []);
+        setFiles(toArray<BackupFile>(res.data));
       });
       backupApi.diffBackup(backup.id).then((res) => {
-        setDiffs(res.data?.data || res.data || []);
+        setDiffs(toArray<FileDiff>(res.data));
       }).catch(() => {});
     }
   }, [open, backup.id]);
