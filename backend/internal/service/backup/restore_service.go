@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -17,6 +18,11 @@ import (
 	"github.com/antigravity/prometheus/internal/service/crypto"
 	"github.com/antigravity/prometheus/internal/ssh"
 	"github.com/google/uuid"
+)
+
+var (
+	validPermissions = regexp.MustCompile(`^[0-7]{3,4}$`)
+	validOwner       = regexp.MustCompile(`^[a-zA-Z0-9._-]+:[a-zA-Z0-9._-]+$`)
 )
 
 // RestoreService handles restoring backed-up configuration files to nodes and
@@ -137,22 +143,36 @@ func (rs *RestoreService) RestoreFiles(ctx context.Context, backupID uuid.UUID, 
 			return nil, fmt.Errorf("restore file %s: %w", filePath, err)
 		}
 
-		// Restore permissions
+		// Restore permissions (validate to prevent command injection)
 		if backupFile.FilePermissions != "" {
-			if _, err := client.RunCommand(ctx, fmt.Sprintf("chmod %s %q", backupFile.FilePermissions, filePath)); err != nil {
-				slog.Warn("failed to restore file permissions",
+			if validPermissions.MatchString(backupFile.FilePermissions) {
+				if _, err := client.RunCommand(ctx, fmt.Sprintf("chmod %s %q", backupFile.FilePermissions, filePath)); err != nil {
+					slog.Warn("failed to restore file permissions",
+						slog.String("file_path", filePath),
+						slog.Any("error", err),
+					)
+				}
+			} else {
+				slog.Warn("skipping invalid file permissions",
 					slog.String("file_path", filePath),
-					slog.Any("error", err),
+					slog.String("permissions", backupFile.FilePermissions),
 				)
 			}
 		}
 
-		// Restore ownership
+		// Restore ownership (validate to prevent command injection)
 		if backupFile.FileOwner != "" {
-			if _, err := client.RunCommand(ctx, fmt.Sprintf("chown %s %q", backupFile.FileOwner, filePath)); err != nil {
-				slog.Warn("failed to restore file ownership",
+			if validOwner.MatchString(backupFile.FileOwner) {
+				if _, err := client.RunCommand(ctx, fmt.Sprintf("chown %s %q", backupFile.FileOwner, filePath)); err != nil {
+					slog.Warn("failed to restore file ownership",
+						slog.String("file_path", filePath),
+						slog.Any("error", err),
+					)
+				}
+			} else {
+				slog.Warn("skipping invalid file owner",
 					slog.String("file_path", filePath),
-					slog.Any("error", err),
+					slog.String("owner", backupFile.FileOwner),
 				)
 			}
 		}

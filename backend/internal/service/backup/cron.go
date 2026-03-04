@@ -78,10 +78,33 @@ func NextRun(expr string, after time.Time) (time.Time, error) {
 	t := after.Truncate(time.Minute).Add(time.Minute)
 	limit := after.Add(366 * 24 * time.Hour)
 
+	// Standard POSIX cron: when both day-of-month and day-of-week are
+	// restricted (not wildcard "*"), the job runs if EITHER matches.
+	dayIsWild := fields[2] == "*"
+	weekdayIsWild := fields[4] == "*"
+
 	for t.Before(limit) {
-		if monthField.values[int(t.Month())] &&
-			dayField.values[t.Day()] &&
-			weekdayField.values[int(t.Weekday())] &&
+		if !monthField.values[int(t.Month())] {
+			t = t.Add(time.Minute)
+			continue
+		}
+
+		// Apply POSIX OR-semantics for day-of-month / day-of-week
+		dayMatch := dayField.values[t.Day()]
+		weekdayMatch := weekdayField.values[int(t.Weekday())]
+		var dayOk bool
+		if dayIsWild && weekdayIsWild {
+			dayOk = true
+		} else if dayIsWild {
+			dayOk = weekdayMatch
+		} else if weekdayIsWild {
+			dayOk = dayMatch
+		} else {
+			// Both restricted: OR-semantics per POSIX
+			dayOk = dayMatch || weekdayMatch
+		}
+
+		if dayOk &&
 			hourField.values[t.Hour()] &&
 			minuteField.values[t.Minute()] {
 			return t, nil

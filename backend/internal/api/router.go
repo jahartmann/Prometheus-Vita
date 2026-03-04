@@ -325,6 +325,7 @@ func SetupRouter(e *echo.Echo, cfg *config.Config, jwtSvc *auth.JWTService, h Ha
 	// Agent Approvals
 	if h.Approval != nil {
 		approvals := protected.Group("/approvals")
+		approvals.Use(middleware.RequireRole(model.RoleAdmin, model.RoleOperator))
 		approvals.GET("", h.Approval.ListPending)
 		approvals.POST("/:id/approve", h.Approval.Approve)
 		approvals.POST("/:id/reject", h.Approval.Reject)
@@ -406,9 +407,12 @@ func SetupRouter(e *echo.Echo, cfg *config.Config, jwtSvc *auth.JWTService, h Ha
 	if h.Gateway != nil {
 		gwRoutes := protected.Group("/gateway")
 		gwRoutes.GET("/tokens", h.Gateway.ListTokens)
-		gwRoutes.POST("/tokens", h.Gateway.CreateToken)
-		gwRoutes.POST("/tokens/:id/revoke", h.Gateway.RevokeToken)
-		gwRoutes.DELETE("/tokens/:id", h.Gateway.DeleteToken)
+
+		gwOperator := gwRoutes.Group("")
+		gwOperator.Use(middleware.RequireRole(model.RoleAdmin, model.RoleOperator))
+		gwOperator.POST("/tokens", h.Gateway.CreateToken)
+		gwOperator.POST("/tokens/:id/revoke", h.Gateway.RevokeToken)
+		gwOperator.DELETE("/tokens/:id", h.Gateway.DeleteToken)
 
 		gwAdmin := gwRoutes.Group("")
 		gwAdmin.Use(middleware.RequireRole(model.RoleAdmin))

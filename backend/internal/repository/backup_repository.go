@@ -184,11 +184,29 @@ func (r *pgBackupRepository) GetLatestByNode(ctx context.Context, nodeID uuid.UU
 
 func (r *pgBackupRepository) GetNextVersion(ctx context.Context, nodeID uuid.UUID) (int, error) {
 	var version int
-	err := r.db.QueryRow(ctx,
+	// Use advisory lock to prevent race conditions when concurrent backups
+	// request the next version for the same node
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("begin tx for next version: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	// Advisory lock based on node ID to serialize version assignment per node
+	_, err = tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtext($1))", nodeID.String())
+	if err != nil {
+		return 0, fmt.Errorf("advisory lock: %w", err)
+	}
+
+	err = tx.QueryRow(ctx,
 		"SELECT COALESCE(MAX(version), 0) + 1 FROM config_backups WHERE node_id = $1", nodeID,
 	).Scan(&version)
 	if err != nil {
 		return 0, fmt.Errorf("get next backup version: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return 0, fmt.Errorf("commit next version: %w", err)
 	}
 	return version, nil
 }
@@ -196,7 +214,7 @@ func (r *pgBackupRepository) GetNextVersion(ctx context.Context, nodeID uuid.UUI
 func (r *pgBackupRepository) CountByNode(ctx context.Context, nodeID uuid.UUID) (int, error) {
 	var count int
 	err := r.db.QueryRow(ctx,
-		"SELECT COUNT(*) FROM config_backups WHERE node_id = $1", nodeID,
+		"SELECT COUNT(*) FROM config_backups WHERE node_id = $1 AND backup_type = 'scheduled'", nodeID,
 	).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("count backups by node: %w", err)
@@ -205,14 +223,32 @@ func (r *pgBackupRepository) CountByNode(ctx context.Context, nodeID uuid.UUID) 
 }
 
 func (r *pgBackupRepository) DeleteOldest(ctx context.Context, nodeID uuid.UUID, keepCount int) error {
-	_, err := r.db.Exec(ctx,
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx for delete oldest: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	// Only delete scheduled backups to preserve manual and pre_update backups
+	_, err = tx.Exec(ctx,
+		`DELETE FROM config_backup_files WHERE backup_id IN (
+			SELECT id FROM config_backups WHERE node_id = $1 AND backup_type = 'scheduled'
+			ORDER BY created_at DESC OFFSET $2
+		)`, nodeID, keepCount,
+	)
+	if err != nil {
+		return fmt.Errorf("delete oldest backup files: %w", err)
+	}
+
+	_, err = tx.Exec(ctx,
 		`DELETE FROM config_backups WHERE id IN (
-			SELECT id FROM config_backups WHERE node_id = $1
+			SELECT id FROM config_backups WHERE node_id = $1 AND backup_type = 'scheduled'
 			ORDER BY created_at DESC OFFSET $2
 		)`, nodeID, keepCount,
 	)
 	if err != nil {
 		return fmt.Errorf("delete oldest backups: %w", err)
 	}
-	return nil
+
+	return tx.Commit(ctx)
 }

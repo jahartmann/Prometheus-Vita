@@ -52,9 +52,7 @@ func (s *Scheduler) runJob(ctx context.Context, job Job) {
 	slog.Info("starting job", slog.String("job", job.Name()), slog.Duration("interval", job.Interval()))
 
 	// Run immediately on start
-	if err := job.Run(ctx); err != nil {
-		slog.Error("job failed", slog.String("job", job.Name()), slog.Any("error", err))
-	}
+	s.safeRun(ctx, job)
 
 	ticker := time.NewTicker(job.Interval())
 	defer ticker.Stop()
@@ -64,9 +62,20 @@ func (s *Scheduler) runJob(ctx context.Context, job Job) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if err := job.Run(ctx); err != nil {
-				slog.Error("job failed", slog.String("job", job.Name()), slog.Any("error", err))
-			}
+			s.safeRun(ctx, job)
 		}
+	}
+}
+
+// safeRun executes a job with panic recovery to prevent a single job from
+// crashing the entire scheduler.
+func (s *Scheduler) safeRun(ctx context.Context, job Job) {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("job panicked", slog.String("job", job.Name()), slog.Any("panic", r))
+		}
+	}()
+	if err := job.Run(ctx); err != nil {
+		slog.Error("job failed", slog.String("job", job.Name()), slog.Any("error", err))
 	}
 }

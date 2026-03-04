@@ -29,27 +29,47 @@ export const useEnvironmentStore = create<EnvironmentState>()((set) => ({
   },
 
   createEnvironment: async (data) => {
-    const resp = await environmentApi.create(data);
-    const env = resp.data?.data || resp.data;
-    set((state) => ({ environments: [...state.environments, env] }));
+    try {
+      const resp = await environmentApi.create(data);
+      const env = resp.data;
+      set((state) => ({ environments: [...state.environments, env] }));
+    } catch {
+      set({ error: "Umgebung konnte nicht erstellt werden" });
+      throw new Error("Umgebung konnte nicht erstellt werden");
+    }
   },
 
   updateEnvironment: async (id, data) => {
-    const resp = await environmentApi.update(id, data);
-    const updated = resp.data?.data || resp.data;
-    set((state) => ({
-      environments: state.environments.map((e) => (e.id === id ? updated : e)),
-    }));
+    try {
+      const resp = await environmentApi.update(id, data);
+      const updated = resp.data;
+      set((state) => ({
+        environments: state.environments.map((e) => (e.id === id ? updated : e)),
+      }));
+    } catch {
+      set({ error: "Umgebung konnte nicht aktualisiert werden" });
+      throw new Error("Umgebung konnte nicht aktualisiert werden");
+    }
   },
 
   deleteEnvironment: async (id) => {
-    await environmentApi.delete(id);
-    set((state) => ({
-      environments: state.environments.filter((e) => e.id !== id),
-    }));
+    try {
+      await environmentApi.delete(id);
+      set((state) => ({
+        environments: state.environments.filter((e) => e.id !== id),
+      }));
+    } catch {
+      set({ error: "Umgebung konnte nicht geloescht werden" });
+      throw new Error("Umgebung konnte nicht geloescht werden");
+    }
   },
 
   assignNode: async (nodeId, environmentId) => {
-    await environmentApi.assignNode(nodeId, environmentId);
+    try {
+      await environmentApi.assignNode(nodeId, environmentId);
+    } catch {
+      set({ error: "Node konnte nicht zugewiesen werden" });
+      throw new Error("Node konnte nicht zugewiesen werden");
+    }
   },
 }));

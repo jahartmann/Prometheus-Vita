@@ -429,7 +429,7 @@ func (s *Service) GetNetworkInterfaces(ctx context.Context, id uuid.UUID) ([]Net
 
 	ifaces, err := client.GetNetworkInterfaces(ctx, pveNode)
 	if err != nil {
-		return nil, fmt.Errorf("get network interfaces: %w", err)
+		return nil, fmt.Errorf("%w: get network interfaces: %v", ErrNodeUnreachable, err)
 	}
 
 	// Get aliases for this node

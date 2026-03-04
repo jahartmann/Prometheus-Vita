@@ -16,6 +16,9 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// Shared refresh promise to prevent concurrent refresh requests
+let refreshPromise: Promise<string> | null = null;
+
 api.interceptors.response.use(
   (response) => {
     // Unwrap { success, data } envelope from backend
@@ -37,18 +40,26 @@ api.interceptors.response.use(
           return Promise.reject(error);
         }
 
-        const response = await axios.post("/api/v1/auth/refresh", {
-          refresh_token: refreshToken,
-        });
-
-        const responseData = response.data?.data ?? response.data;
-        const { access_token, refresh_token } = responseData;
-        useAuthStore.getState().setAccessToken(access_token);
-        if (refresh_token) {
-          useAuthStore.getState().setRefreshToken(refresh_token);
+        // Use shared promise to deduplicate concurrent refresh calls
+        if (!refreshPromise) {
+          refreshPromise = axios
+            .post("/api/v1/auth/refresh", { refresh_token: refreshToken })
+            .then((response) => {
+              const responseData = response.data?.data ?? response.data;
+              const { access_token, refresh_token: new_refresh } = responseData;
+              useAuthStore.getState().setAccessToken(access_token);
+              if (new_refresh) {
+                useAuthStore.getState().setRefreshToken(new_refresh);
+              }
+              return access_token;
+            })
+            .finally(() => {
+              refreshPromise = null;
+            });
         }
 
-        originalRequest.headers.Authorization = `Bearer ${access_token}`;
+        const newToken = await refreshPromise;
+        originalRequest.headers.Authorization = `Bearer ${newToken}`;
         return api(originalRequest);
       } catch {
         useAuthStore.getState().logout();
@@ -157,14 +168,10 @@ export const scheduleApi = {
 
 // Metrics API
 export const metricsApi = {
-  getHistory: (nodeId: string, since?: string, until?: string) => {
-    const params = new URLSearchParams();
-    if (since) params.set("since", since);
-    if (until) params.set("until", until);
-    return api.get(`/nodes/${nodeId}/metrics?${params.toString()}`);
-  },
+  getHistory: (nodeId: string, since?: string, until?: string) =>
+    api.get(`/nodes/${nodeId}/metrics`, { params: { since, until } }),
   getSummary: (nodeId: string, period?: string) =>
-    api.get(`/nodes/${nodeId}/metrics/summary${period ? `?period=${period}` : ""}`),
+    api.get(`/nodes/${nodeId}/metrics/summary`, { params: { period } }),
 };
 
 // Network API
@@ -242,9 +249,9 @@ export const notificationApi = {
   testChannel: (id: string) => api.post(`/notifications/channels/${id}/test`),
   listHistory: (limit?: number, offset?: number) => {
     const params = new URLSearchParams();
-    if (limit) params.set("limit", String(limit));
-    if (offset) params.set("offset", String(offset));
-    return api.get(`/notifications/history?${params.toString()}`);
+    if (limit !== undefined) params.set("limit", String(limit));
+    if (offset !== undefined) params.set("offset", String(offset));
+    return api.get("/notifications/history", { params });
   },
 };
 
@@ -296,9 +303,9 @@ export const escalationApi = {
   deletePolicy: (id: string) => api.delete(`/escalation/policies/${id}`),
   listIncidents: (limit?: number, offset?: number) => {
     const params = new URLSearchParams();
-    if (limit) params.set("limit", String(limit));
-    if (offset) params.set("offset", String(offset));
-    return api.get(`/escalation/incidents?${params.toString()}`);
+    if (limit !== undefined) params.set("limit", String(limit));
+    if (offset !== undefined) params.set("offset", String(offset));
+    return api.get("/escalation/incidents", { params });
   },
   getIncident: (id: string) => api.get(`/escalation/incidents/${id}`),
   acknowledgeIncident: (id: string) => api.post(`/escalation/incidents/${id}/acknowledge`),
@@ -377,8 +384,7 @@ export const predictionApi = {
 export const briefingApi = {
   getLatest: () => api.get("/briefings/latest").then((r) => r.data?.data ?? r.data),
   list: (limit?: number) => {
-    const params = limit ? `?limit=${limit}` : "";
-    return api.get(`/briefings${params}`).then((r) => toArray(r.data));
+    return api.get("/briefings", { params: limit !== undefined ? { limit } : undefined }).then((r) => toArray(r.data));
   },
 };
 
@@ -443,9 +449,9 @@ export const gatewayApi = {
   deleteToken: (id: string) => api.delete(`/gateway/tokens/${id}`),
   listAuditLog: (limit?: number, offset?: number) => {
     const params = new URLSearchParams();
-    if (limit) params.set("limit", String(limit));
-    if (offset) params.set("offset", String(offset));
-    return api.get(`/gateway/audit?${params.toString()}`);
+    if (limit !== undefined) params.set("limit", String(limit));
+    if (offset !== undefined) params.set("offset", String(offset));
+    return api.get("/gateway/audit", { params });
   },
 };
 

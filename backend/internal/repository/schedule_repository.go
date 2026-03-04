@@ -88,7 +88,8 @@ func (r *pgScheduleRepository) ListDue(ctx context.Context) ([]model.BackupSched
 	rows, err := r.db.Query(ctx,
 		`SELECT id, node_id, cron_expression, is_active, retention_count,
 		        last_run_at, next_run_at, created_at, updated_at
-		 FROM backup_schedules WHERE is_active = true AND next_run_at <= NOW()`)
+		 FROM backup_schedules WHERE is_active = true AND next_run_at <= NOW()
+		 FOR UPDATE SKIP LOCKED`)
 	if err != nil {
 		return nil, fmt.Errorf("list due schedules: %w", err)
 	}

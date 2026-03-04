@@ -326,7 +326,7 @@ func main() {
 		Health:       handler.NewHealthHandler(dbPool, redisClient),
 		Auth:         handler.NewAuthHandler(authService, userRepo),
 		Node:         handler.NewNodeHandler(nodeSvc),
-		WS:           handler.NewWSHandler(wsHub, jwtSvc),
+		WS:           handler.NewWSHandler(wsHub, jwtSvc, cfg.CORS.AllowOrigins),
 		Backup:       handler.NewBackupHandler(backupSvc, restoreSvc, nodeSvc),
 		Schedule:     handler.NewScheduleHandler(scheduleRepo),
 		Metrics:      handler.NewMetricsHandler(monitorSvc),

@@ -2,6 +2,8 @@ package handler
 
 import (
 	"errors"
+	"fmt"
+	"log/slog"
 	"strconv"
 
 	apiPkg "github.com/antigravity/prometheus/internal/api/response"
@@ -223,7 +225,8 @@ func (h *NodeHandler) Onboard(c echo.Context) error {
 
 	node, err := h.service.Onboard(c.Request().Context(), req)
 	if err != nil {
-		return apiPkg.InternalError(c, "failed to onboard node: "+err.Error())
+		slog.Error("failed to onboard node", slog.Any("error", err))
+		return apiPkg.InternalError(c, "failed to onboard node")
 	}
 
 	return apiPkg.Created(c, node.ToResponse())
@@ -258,6 +261,9 @@ func parseVMParams(c echo.Context) (uuid.UUID, int, string, error) {
 	vmType := c.QueryParam("type")
 	if vmType == "" {
 		vmType = "qemu"
+	}
+	if vmType != "qemu" && vmType != "lxc" {
+		return uuid.UUID{}, 0, "", fmt.Errorf("type must be 'qemu' or 'lxc'")
 	}
 
 	return id, vmid, vmType, nil

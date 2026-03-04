@@ -82,6 +82,9 @@ func (h *EnvironmentHandler) Delete(c echo.Context) error {
 		return apiPkg.BadRequest(c, "invalid environment id")
 	}
 	if err := h.envSvc.Delete(c.Request().Context(), id); err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return apiPkg.NotFound(c, "environment not found")
+		}
 		return apiPkg.InternalError(c, "failed to delete environment")
 	}
 	return apiPkg.NoContent(c)

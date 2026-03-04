@@ -1,5 +1,3 @@
-"use client";
-
 import { create } from "zustand";
 import type { ConfigBackup, BackupSchedule } from "@/types/api";
 import { backupApi, scheduleApi, toArray } from "@/lib/api";
@@ -32,20 +30,30 @@ export const useBackupStore = create<BackupState>()((set) => ({
   },
 
   createBackup: async (nodeId: string, notes?: string) => {
-    const response = await backupApi.createBackup(nodeId, {
-      backup_type: "manual",
-      notes,
-    });
-    const backup = response.data?.data || response.data;
-    set((state) => ({ backups: [backup, ...state.backups] }));
-    return backup;
+    try {
+      const response = await backupApi.createBackup(nodeId, {
+        backup_type: "manual",
+        notes,
+      });
+      const backup = response.data;
+      set((state) => ({ backups: [backup, ...state.backups] }));
+      return backup;
+    } catch {
+      set({ error: "Backup konnte nicht erstellt werden" });
+      throw new Error("Backup konnte nicht erstellt werden");
+    }
   },
 
   deleteBackup: async (backupId: string) => {
-    await backupApi.deleteBackup(backupId);
-    set((state) => ({
-      backups: state.backups.filter((b) => b.id !== backupId),
-    }));
+    try {
+      await backupApi.deleteBackup(backupId);
+      set((state) => ({
+        backups: state.backups.filter((b) => b.id !== backupId),
+      }));
+    } catch {
+      set({ error: "Backup konnte nicht geloescht werden" });
+      throw new Error("Backup konnte nicht geloescht werden");
+    }
   },
 
   fetchSchedules: async (nodeId: string) => {
@@ -53,7 +61,7 @@ export const useBackupStore = create<BackupState>()((set) => ({
       const response = await scheduleApi.listSchedules(nodeId);
       set({ schedules: toArray<BackupSchedule>(response.data) });
     } catch {
-      // Schedules nicht verfuegbar
+      set({ error: "Zeitplaene konnten nicht geladen werden" });
     }
   },
 }));

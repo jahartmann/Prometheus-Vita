@@ -11,7 +11,15 @@ export function useNodeMetrics(nodeId: string, enabled = true) {
   const [latestMetrics, setLatestMetrics] = useState<NodeMetrics | null>(null);
 
   const handleMessage = useCallback((data: unknown) => {
-    const metric = data as NodeMetrics;
+    if (!data || typeof data !== "object") return;
+    const msg = data as Record<string, unknown>;
+    // Only process metrics messages (skip heartbeats, errors, etc.)
+    if (msg.type && msg.type !== "node_metrics" && msg.type !== "metrics") {
+      return;
+    }
+    const metric = (msg.data ?? msg) as NodeMetrics;
+    if (!metric.timestamp || metric.cpu_usage === undefined) return;
+
     setLatestMetrics(metric);
     setMetrics((prev) => {
       const next = [...prev, metric];

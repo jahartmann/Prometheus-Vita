@@ -19,7 +19,7 @@ interface NodeState {
   removeNode: (nodeId: string) => void;
 }
 
-export const useNodeStore = create<NodeState>()((set, get) => ({
+export const useNodeStore = create<NodeState>()((set) => ({
   nodes: [],
   selectedNode: null,
   nodeStatus: {},
@@ -49,11 +49,12 @@ export const useNodeStore = create<NodeState>()((set, get) => ({
         nodeStatus: { ...state.nodeStatus, [nodeId]: response.data },
         nodeErrors: { ...state.nodeErrors, [nodeId]: "" },
       }));
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const status = (err as { response?: { status?: number } })?.response?.status;
       const msg =
-        err?.response?.status === 503
+        status === 503
           ? "Node nicht erreichbar"
-          : err?.response?.status === 401
+          : status === 401
           ? ""
           : "Statusabfrage fehlgeschlagen";
       if (msg) {
@@ -70,11 +71,12 @@ export const useNodeStore = create<NodeState>()((set, get) => ({
         nodeVMs: { ...state.nodeVMs, [nodeId]: toArray<VM>(response.data) },
         nodeErrors: { ...state.nodeErrors, [nodeId]: "" },
       }));
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const status = (err as { response?: { status?: number } })?.response?.status;
       const msg =
-        err?.response?.status === 503
+        status === 503
           ? "Node nicht erreichbar"
-          : err?.response?.status === 401
+          : status === 401
           ? ""
           : "VM-Abfrage fehlgeschlagen";
       if (msg) {
@@ -94,8 +96,7 @@ export const useNodeStore = create<NodeState>()((set, get) => ({
   removeNode: (nodeId: string) => {
     set((state) => ({
       nodes: state.nodes.filter((n) => n.id !== nodeId),
-      selectedNode:
-        get().selectedNode?.id === nodeId ? null : get().selectedNode,
+      selectedNode: state.selectedNode?.id === nodeId ? null : state.selectedNode,
     }));
   },
 }));

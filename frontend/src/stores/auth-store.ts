@@ -56,6 +56,11 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: () => {
+        const refreshToken = get().refreshToken;
+        // Call backend logout to revoke refresh token (fire-and-forget)
+        if (refreshToken) {
+          api.post("/auth/logout", { refresh_token: refreshToken }).catch(() => {});
+        }
         set({
           user: null,
           accessToken: null,
@@ -76,9 +81,12 @@ export const useAuthStore = create<AuthState>()(
       fetchUser: async () => {
         try {
           const response = await api.get<User>("/auth/me");
-          set({ user: response.data });
-        } catch {
-          if (!get().accessToken) {
+          set({ user: response.data, isAuthenticated: true });
+        } catch (err: unknown) {
+          const status = (err as { response?: { status?: number } })?.response?.status;
+          // 401 is handled by the interceptor (refresh logic), so only logout
+          // if the token is gone (refresh also failed)
+          if (status === 401 || !get().accessToken) {
             get().logout();
           }
         }

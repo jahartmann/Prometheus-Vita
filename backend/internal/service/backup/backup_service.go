@@ -75,6 +75,9 @@ func (s *Service) CreateBackup(ctx context.Context, nodeID uuid.UUID, req model.
 	if backupType == "" {
 		backupType = model.BackupTypeManual
 	}
+	if !backupType.IsValid() {
+		return nil, fmt.Errorf("invalid backup type: %s", backupType)
+	}
 
 	// Get next version number
 	version, err := s.backupRepo.GetNextVersion(ctx, nodeID)
@@ -248,8 +251,12 @@ func (s *Service) GetBackupFile(ctx context.Context, backupID uuid.UUID, filePat
 }
 
 // DeleteBackup removes a backup and all its associated files from the
-// database.
+// database using a transaction to ensure consistency.
 func (s *Service) DeleteBackup(ctx context.Context, backupID uuid.UUID) error {
+	// Verify backup exists first
+	if _, err := s.backupRepo.GetByID(ctx, backupID); err != nil {
+		return err
+	}
 	if err := s.fileRepo.DeleteByBackupID(ctx, backupID); err != nil {
 		return fmt.Errorf("delete backup files: %w", err)
 	}

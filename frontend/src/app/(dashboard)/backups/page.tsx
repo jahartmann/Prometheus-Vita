@@ -182,13 +182,21 @@ export default function BackupsPage() {
   };
 
   const handleDeleteSchedule = async (id: string) => {
-    await scheduleApi.deleteSchedule(id);
-    loadAllSchedules();
+    try {
+      await scheduleApi.deleteSchedule(id);
+      loadAllSchedules();
+    } catch {
+      /* ignore */
+    }
   };
 
   const handleToggleSchedule = async (schedule: BackupSchedule & { _nodeId: string }) => {
-    await scheduleApi.updateSchedule(schedule.id, { is_active: !schedule.is_active });
-    loadAllSchedules();
+    try {
+      await scheduleApi.updateSchedule(schedule.id, { is_active: !schedule.is_active });
+      loadAllSchedules();
+    } catch {
+      /* ignore */
+    }
   };
 
   const onlineNodes = nodes.filter((n) => n.is_online);

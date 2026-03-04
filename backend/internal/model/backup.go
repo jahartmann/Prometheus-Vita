@@ -16,6 +16,14 @@ const (
 	BackupTypePreUpdate BackupType = "pre_update"
 )
 
+func (b BackupType) IsValid() bool {
+	switch b {
+	case BackupTypeManual, BackupTypeScheduled, BackupTypePreUpdate:
+		return true
+	}
+	return false
+}
+
 type BackupStatus string
 
 const (

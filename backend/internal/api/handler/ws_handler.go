@@ -11,24 +11,38 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-	CheckOrigin: func(r *http.Request) bool {
-		return true
-	},
-}
-
 type WSHandler struct {
-	hub    *monitor.WSHub
-	jwtSvc *auth.JWTService
+	hub      *monitor.WSHub
+	jwtSvc   *auth.JWTService
+	upgrader websocket.Upgrader
 }
 
-func NewWSHandler(hub *monitor.WSHub, jwtSvc *auth.JWTService) *WSHandler {
-	return &WSHandler{
+func NewWSHandler(hub *monitor.WSHub, jwtSvc *auth.JWTService, allowedOrigins []string) *WSHandler {
+	h := &WSHandler{
 		hub:    hub,
 		jwtSvc: jwtSvc,
 	}
+	h.upgrader = websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		CheckOrigin: func(r *http.Request) bool {
+			origin := r.Header.Get("Origin")
+			if origin == "" {
+				return true
+			}
+			if len(allowedOrigins) == 0 {
+				return true
+			}
+			for _, allowed := range allowedOrigins {
+				if allowed == "*" || allowed == origin {
+					return true
+				}
+			}
+			slog.Warn("ws origin rejected", slog.String("origin", origin))
+			return false
+		},
+	}
+	return h
 }
 
 func (h *WSHandler) HandleWS(c echo.Context) error {
@@ -44,14 +58,17 @@ func (h *WSHandler) HandleWS(c echo.Context) error {
 		}
 	}
 
-	if token != "" {
-		if _, err := h.jwtSvc.ValidateAccessToken(token); err != nil {
-			slog.Warn("ws auth failed", slog.Any("error", err))
-			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
-		}
+	// Require authentication - reject if no token provided
+	if token == "" {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "token required"})
 	}
 
-	conn, err := upgrader.Upgrade(c.Response(), c.Request(), nil)
+	if _, err := h.jwtSvc.ValidateAccessToken(token); err != nil {
+		slog.Warn("ws auth failed", slog.Any("error", err))
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+	}
+
+	conn, err := h.upgrader.Upgrade(c.Response(), c.Request(), nil)
 	if err != nil {
 		slog.Error("ws upgrade failed", slog.Any("error", err))
 		return err
