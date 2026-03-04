@@ -92,9 +92,10 @@ export function NodeCard({ node, status }: NodeCardProps) {
               <UsageBar value={diskUsage} label="Disk" />
               <div className="flex items-center justify-between text-xs text-muted-foreground">
                 <span>Uptime: {formatUptime(status.uptime)}</span>
-                <span>
-                  {status.vm_running}/{status.vm_count} VMs
-                </span>
+                <div className="flex gap-2">
+                  <span>{status.vm_running ?? 0}/{status.vm_count ?? 0} VMs</span>
+                  <span>{status.ct_running ?? 0}/{status.ct_count ?? 0} CTs</span>
+                </div>
               </div>
             </>
           ) : (

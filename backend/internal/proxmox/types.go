@@ -17,6 +17,10 @@ type NodeStatus struct {
 	LoadAvg     []float64 `json:"load_average"`
 	KVersion    string    `json:"kernel_version"`
 	PVEVersion  string    `json:"pve_version"`
+	VMCount     int       `json:"vm_count"`
+	VMRunning   int       `json:"vm_running"`
+	CTCount     int       `json:"ct_count"`
+	CTRunning   int       `json:"ct_running"`
 }
 
 type VMInfo struct {

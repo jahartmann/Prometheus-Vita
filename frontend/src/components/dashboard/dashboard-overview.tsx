@@ -12,11 +12,11 @@ export function DashboardOverview() {
 
   const onlineNodes = nodes.filter((n) => n.is_online).length;
   const totalVMs = Object.values(nodeStatus).reduce(
-    (acc, s) => acc + (s?.vm_count ?? 0),
+    (acc, s) => acc + (s?.vm_count ?? 0) + (s?.ct_count ?? 0),
     0
   );
   const runningVMs = Object.values(nodeStatus).reduce(
-    (acc, s) => acc + (s?.vm_running ?? 0),
+    (acc, s) => acc + (s?.vm_running ?? 0) + (s?.ct_running ?? 0),
     0
   );
   const offlineNodes = nodes.length - onlineNodes;

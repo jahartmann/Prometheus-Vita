@@ -390,6 +390,24 @@ func (s *Service) GetStatus(ctx context.Context, id uuid.UUID) (*proxmox.NodeSta
 		return nil, fmt.Errorf("%w: get node status: %v", ErrNodeUnreachable, err)
 	}
 
+	// Enrich status with VM/CT counts
+	vms, err := client.GetVMs(ctx, pveNode)
+	if err == nil {
+		for _, vm := range vms {
+			if vm.Type == "qemu" {
+				status.VMCount++
+				if vm.Status == "running" {
+					status.VMRunning++
+				}
+			} else if vm.Type == "lxc" {
+				status.CTCount++
+				if vm.Status == "running" {
+					status.CTRunning++
+				}
+			}
+		}
+	}
+
 	return status, nil
 }
 
