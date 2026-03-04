@@ -55,11 +55,9 @@ export const useNodeStore = create<NodeState>()((set) => ({
         status === 503
           ? "Node nicht erreichbar"
           : status === 401
-          ? ""
+          ? "Authentifizierung fehlgeschlagen"
           : "Statusabfrage fehlgeschlagen";
-      if (msg) {
-        set((state) => ({ nodeErrors: { ...state.nodeErrors, [nodeId]: msg } }));
-      }
+      set((state) => ({ nodeErrors: { ...state.nodeErrors, [nodeId]: msg } }));
     }
   },
 
@@ -77,11 +75,12 @@ export const useNodeStore = create<NodeState>()((set) => ({
         status === 503
           ? "Node nicht erreichbar"
           : status === 401
-          ? ""
+          ? "Authentifizierung fehlgeschlagen"
           : "VM-Abfrage fehlgeschlagen";
-      if (msg) {
-        set((state) => ({ nodeErrors: { ...state.nodeErrors, [nodeId]: msg } }));
-      }
+      set((state) => ({
+        nodeVMs: { ...state.nodeVMs, [nodeId]: [] },
+        nodeErrors: { ...state.nodeErrors, [nodeId]: msg },
+      }));
     }
   },
 

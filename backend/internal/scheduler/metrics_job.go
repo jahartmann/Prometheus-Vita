@@ -10,6 +10,7 @@ import (
 	"github.com/antigravity/prometheus/internal/model"
 	"github.com/antigravity/prometheus/internal/proxmox"
 	"github.com/antigravity/prometheus/internal/repository"
+	nodeService "github.com/antigravity/prometheus/internal/service/node"
 	"github.com/antigravity/prometheus/internal/service/monitor"
 )
 
@@ -90,7 +91,7 @@ func (j *MetricsCollectionJob) Run(ctx context.Context) error {
 				return
 			}
 
-			status, err := client.GetNodeStatus(ctx, pveNodes[0])
+			status, err := client.GetNodeStatus(ctx, nodeService.ResolvePVENode(&node, pveNodes))
 			if err != nil {
 				slog.Warn("metrics: failed to get node status",
 					slog.String("node", node.Name),

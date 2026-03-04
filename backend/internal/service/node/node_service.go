@@ -191,7 +191,21 @@ func (s *Service) Onboard(ctx context.Context, req model.OnboardNodeRequest) (*m
 		return nil, fmt.Errorf("deploy ssh key failed: %s", result.Stderr)
 	}
 
-	// 5. Save node via existing Create flow
+	// 5. Get PVE node name via SSH hostname command
+	hostnameResult, err := sshClient.RunCommand(ctx, "hostname")
+	pveNodeName := ""
+	if err == nil && hostnameResult.ExitCode == 0 {
+		pveNodeName = strings.TrimSpace(hostnameResult.Stdout)
+	}
+
+	// Build metadata with pve_node
+	var metadata json.RawMessage
+	if pveNodeName != "" {
+		metaBytes, _ := json.Marshal(map[string]string{"pve_node": pveNodeName})
+		metadata = metaBytes
+	}
+
+	// 6. Save node via existing Create flow
 	createReq := model.CreateNodeRequest{
 		Name:           req.Name,
 		Type:           req.Type,
@@ -202,6 +216,7 @@ func (s *Service) Onboard(ctx context.Context, req model.OnboardNodeRequest) (*m
 		SSHPort:        sshPort,
 		SSHUser:        "root",
 		SSHPrivateKey:  privKey,
+		Metadata:       metadata,
 	}
 
 	node, err := s.Create(ctx, createReq)
@@ -256,7 +271,7 @@ func generateEd25519KeyPair() (publicKey, privateKey string, err error) {
 }
 
 // getClientAndNode retrieves the node from the DB, creates a Proxmox client,
-// and resolves the first PVE node name. It wraps connection errors with
+// and resolves the correct PVE node name. It wraps connection errors with
 // ErrNodeUnreachable so handlers can return 503 instead of 500.
 func (s *Service) getClientAndNode(ctx context.Context, id uuid.UUID) (*model.Node, *proxmox.Client, string, error) {
 	node, err := s.nodeRepo.GetByID(ctx, id)
@@ -269,16 +284,45 @@ func (s *Service) getClientAndNode(ctx context.Context, id uuid.UUID) (*model.No
 		return nil, nil, "", fmt.Errorf("%w: create proxmox client: %v", ErrNodeUnreachable, err)
 	}
 
-	nodes, err := client.GetNodes(ctx)
+	pveNodes, err := client.GetNodes(ctx)
 	if err != nil {
 		return nil, nil, "", fmt.Errorf("%w: %v", ErrNodeUnreachable, err)
 	}
 
-	if len(nodes) == 0 {
+	if len(pveNodes) == 0 {
 		return nil, nil, "", fmt.Errorf("%w: no nodes found in cluster", ErrNodeUnreachable)
 	}
 
-	return node, client, nodes[0], nil
+	pveNode := ResolvePVENode(node, pveNodes)
+	return node, client, pveNode, nil
+}
+
+// ResolvePVENode determines which PVE cluster node corresponds to the registered node.
+// Priority: 1) pve_node from metadata, 2) name match, 3) first node.
+func ResolvePVENode(node *model.Node, pveNodes []string) string {
+	// 1. Check metadata for stored pve_node
+	if len(node.Metadata) > 0 {
+		var meta map[string]interface{}
+		if err := json.Unmarshal(node.Metadata, &meta); err == nil {
+			if pn, ok := meta["pve_node"].(string); ok && pn != "" {
+				for _, n := range pveNodes {
+					if strings.EqualFold(n, pn) {
+						return n
+					}
+				}
+			}
+		}
+	}
+
+	// 2. Try to match node.Name against PVE node names
+	for _, n := range pveNodes {
+		if strings.EqualFold(n, node.Name) {
+			return n
+		}
+	}
+
+	// 3. Fallback to first node
+	return pveNodes[0]
 }
 
 func (s *Service) GetByID(ctx context.Context, id uuid.UUID) (*model.Node, error) {

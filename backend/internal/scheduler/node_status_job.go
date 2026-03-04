@@ -10,6 +10,7 @@ import (
 	"github.com/antigravity/prometheus/internal/proxmox"
 	"github.com/antigravity/prometheus/internal/repository"
 	"github.com/antigravity/prometheus/internal/service/monitor"
+	nodeService "github.com/antigravity/prometheus/internal/service/node"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -109,7 +110,7 @@ func (j *NodeStatusJob) Run(ctx context.Context) error {
 		_ = j.nodeRepo.UpdateStatus(ctx, node.ID, true)
 
 		if len(pveNodes) > 0 {
-			status, err := client.GetNodeStatus(ctx, pveNodes[0])
+			status, err := client.GetNodeStatus(ctx, nodeService.ResolvePVENode(&node, pveNodes))
 			if err != nil {
 				slog.Warn("failed to get node status",
 					slog.String("node", node.Name),
