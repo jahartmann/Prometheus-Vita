@@ -1,0 +1,13 @@
+CREATE TABLE tags (
+    id UUID PRIMARY KEY,
+    name VARCHAR(255) NOT NULL UNIQUE,
+    color VARCHAR(7) NOT NULL DEFAULT '#6b7280',
+    category VARCHAR(255),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE node_tags (
+    node_id UUID NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+    tag_id UUID NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+    PRIMARY KEY (node_id, tag_id)
+);

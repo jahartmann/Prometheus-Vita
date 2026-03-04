@@ -1,0 +1,361 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/antigravity/prometheus/internal/api"
+	"github.com/antigravity/prometheus/internal/api/handler"
+	"github.com/antigravity/prometheus/internal/config"
+	"github.com/antigravity/prometheus/internal/llm"
+	"github.com/antigravity/prometheus/internal/proxmox"
+	"github.com/antigravity/prometheus/internal/repository"
+	"github.com/antigravity/prometheus/internal/scheduler"
+	"github.com/antigravity/prometheus/internal/service/agent"
+	"github.com/antigravity/prometheus/internal/service/anomaly"
+	"github.com/antigravity/prometheus/internal/service/auth"
+	"github.com/antigravity/prometheus/internal/service/backup"
+	"github.com/antigravity/prometheus/internal/service/briefing"
+	"github.com/antigravity/prometheus/internal/service/crypto"
+	"github.com/antigravity/prometheus/internal/service/drift"
+	"github.com/antigravity/prometheus/internal/service/environment"
+	"github.com/antigravity/prometheus/internal/service/gateway"
+	migrationService "github.com/antigravity/prometheus/internal/service/migration"
+	"github.com/antigravity/prometheus/internal/service/monitor"
+	nodeService "github.com/antigravity/prometheus/internal/service/node"
+	"github.com/antigravity/prometheus/internal/service/notification"
+	"github.com/antigravity/prometheus/internal/service/prediction"
+	"github.com/antigravity/prometheus/internal/service/recovery"
+	"github.com/antigravity/prometheus/internal/service/rightsizing"
+	topologyService "github.com/antigravity/prometheus/internal/service/topology"
+	"github.com/antigravity/prometheus/internal/service/sshkeys"
+	telegramService "github.com/antigravity/prometheus/internal/service/telegram"
+	"github.com/antigravity/prometheus/internal/service/updates"
+	userService "github.com/antigravity/prometheus/internal/service/user"
+	"github.com/antigravity/prometheus/internal/ssh"
+	"github.com/labstack/echo/v4"
+)
+
+func main() {
+	// Structured logging
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
+	slog.SetDefault(logger)
+
+	slog.Info("starting Prometheus server")
+
+	// Load config
+	cfg, err := config.Load()
+	if err != nil {
+		slog.Error("failed to load config", slog.Any("error", err))
+		os.Exit(1)
+	}
+
+	// Context with signal handling
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
+
+	// Database
+	dbPool, err := repository.NewPostgresPool(ctx, cfg.Database.DSN(), cfg.Database.MaxConns)
+	if err != nil {
+		slog.Error("failed to connect to PostgreSQL", slog.Any("error", err))
+		os.Exit(1)
+	}
+	defer dbPool.Close()
+
+	// Redis
+	redisClient, err := repository.NewRedisClient(ctx, cfg.Redis.Addr(), cfg.Redis.Password, cfg.Redis.DB)
+	if err != nil {
+		slog.Error("failed to connect to Redis", slog.Any("error", err))
+		os.Exit(1)
+	}
+	defer redisClient.Close()
+
+	// Run migrations
+	migrator := repository.NewMigrator(dbPool, "migrations")
+	if err := migrator.Run(ctx); err != nil {
+		slog.Error("failed to run migrations", slog.Any("error", err))
+		os.Exit(1)
+	}
+
+	// Encryption
+	encryptor, err := crypto.NewEncryptor(cfg.Encryption.Key)
+	if err != nil {
+		slog.Error("failed to create encryptor", slog.Any("error", err))
+		os.Exit(1)
+	}
+
+	// Repositories
+	userRepo := repository.NewUserRepository(dbPool)
+	nodeRepo := repository.NewNodeRepository(dbPool)
+	tokenRepo := repository.NewTokenRepository(dbPool)
+	backupRepo := repository.NewBackupRepository(dbPool)
+	backupFileRepo := repository.NewBackupFileRepository(dbPool)
+	scheduleRepo := repository.NewScheduleRepository(dbPool)
+	metricsRepo := repository.NewMetricsRepository(dbPool)
+	aliasRepo := repository.NewNetworkAliasRepository(dbPool)
+	tagRepo := repository.NewTagRepository(dbPool)
+
+	// Notification Repositories
+	channelRepo := repository.NewNotificationChannelRepository(dbPool)
+	historyRepo := repository.NewNotificationHistoryRepository(dbPool)
+	ruleRepo := repository.NewAlertRuleRepository(dbPool)
+
+	// Escalation & Incident Repositories
+	escalationPolicyRepo := repository.NewEscalationPolicyRepository(dbPool)
+	alertIncidentRepo := repository.NewAlertIncidentRepository(dbPool)
+
+	// Telegram Repositories
+	telegramLinkRepo := repository.NewTelegramLinkRepository(dbPool)
+	telegramConvRepo := repository.NewTelegramConversationRepository(dbPool)
+
+	// Migration Repository
+	migrationRepo := repository.NewMigrationRepository(dbPool)
+
+	// DR Repositories
+	profileRepo := repository.NewNodeProfileRepository(dbPool)
+	readinessRepo := repository.NewDRReadinessRepository(dbPool)
+	runbookRepo := repository.NewRunbookRepository(dbPool)
+
+	// Phase 4 Repositories
+	approvalRepo := repository.NewApprovalRepository(dbPool)
+	anomalyRepo := repository.NewAnomalyRepository(dbPool)
+	predictionRepo := repository.NewPredictionRepository(dbPool)
+	briefingRepo := repository.NewBriefingRepository(dbPool)
+
+	// Phase 6 Repositories
+	driftRepo := repository.NewDriftRepository(dbPool)
+	envRepo := repository.NewEnvironmentRepository(dbPool)
+	updateRepo := repository.NewUpdateRepository(dbPool)
+	recRepo := repository.NewRecommendationRepository(dbPool)
+	sshKeyRepo := repository.NewSSHKeyRepository(dbPool)
+	apiTokenRepo := repository.NewAPITokenRepository(dbPool)
+	auditRepo := repository.NewAuditRepository(dbPool)
+
+	// Services
+	jwtSvc := auth.NewJWTService(cfg.JWT.Secret, cfg.JWT.AccessTokenExpiry, cfg.JWT.RefreshTokenExpiry)
+	authService := auth.NewService(userRepo, tokenRepo, jwtSvc)
+	clientFactory := proxmox.NewClientFactory(encryptor)
+
+	// SSH Pool
+	sshPool := ssh.NewPool(ssh.PoolConfig{})
+
+	nodeSvc := nodeService.NewService(nodeRepo, encryptor, clientFactory, aliasRepo, tagRepo, sshPool)
+	monitorSvc := monitor.NewService(nodeRepo, redisClient, metricsRepo)
+
+	// Seed admin user
+	seedAdmin(ctx, authService)
+
+	// WebSocket hub
+	wsHub := monitor.NewWSHub()
+	go wsHub.Run()
+
+	// Backup Services
+	backupSvc := backup.NewService(backupRepo, backupFileRepo, nodeRepo, encryptor, sshPool, wsHub)
+	restoreSvc := backup.NewRestoreService(backupRepo, backupFileRepo, nodeRepo, encryptor, sshPool)
+
+	// User Service
+	userSvc := userService.NewService(userRepo)
+
+	// Notification Service
+	notifSvc := notification.NewService(channelRepo, historyRepo, encryptor)
+	alertSvc := notification.NewAlertService(ruleRepo, metricsRepo, nodeRepo, notifSvc, wsHub)
+
+	// Escalation Service
+	escalationSvc := notification.NewEscalationService(escalationPolicyRepo, alertIncidentRepo, ruleRepo, notifSvc)
+	alertSvc.SetEscalationService(escalationSvc)
+
+	// DR Services
+	profileSvc := recovery.NewProfileService(profileRepo, nodeRepo, encryptor, sshPool)
+	readinessSvc := recovery.NewReadinessService(readinessRepo, profileRepo, backupRepo, nodeRepo)
+	runbookSvc := recovery.NewRunbookService(runbookRepo, profileRepo, nodeRepo)
+
+	// Migration Service
+	migrationSvc := migrationService.NewService(migrationRepo, nodeRepo, encryptor, sshPool, clientFactory, wsHub)
+
+	// LLM Registry
+	llmRegistry := llm.NewRegistry()
+	if cfg.LLM.OllamaURL != "" {
+		llmRegistry.Register("ollama", llm.NewOllamaProvider(cfg.LLM.OllamaURL))
+	}
+	if cfg.LLM.OpenAIKey != "" {
+		llmRegistry.Register("openai", llm.NewOpenAIProvider(cfg.LLM.OpenAIKey, cfg.LLM.OpenAIURL))
+	}
+	if cfg.LLM.AnthropicKey != "" {
+		llmRegistry.Register("anthropic", llm.NewAnthropicProvider(cfg.LLM.AnthropicKey))
+	}
+	if cfg.LLM.DefaultModel != "" {
+		llmRegistry.SetDefault(cfg.LLM.DefaultModel)
+	}
+
+	// Phase 4 Services
+	anomalySvc := anomaly.NewService(anomalyRepo, metricsRepo, nodeRepo)
+	predictionSvc := prediction.NewService(predictionRepo, metricsRepo, nodeRepo)
+	briefingSvc := briefing.NewService(briefingRepo, nodeRepo, metricsRepo, anomalyRepo, predictionRepo, llmRegistry)
+
+	// Phase 6 Services
+	driftSvc := drift.NewService(driftRepo, backupRepo, backupFileRepo, nodeRepo, encryptor, sshPool)
+	envSvc := environment.NewService(envRepo, nodeRepo)
+	updateSvc := updates.NewService(updateRepo, nodeRepo, encryptor, sshPool)
+	rightsizingSvc := rightsizing.NewService(recRepo, nodeRepo, clientFactory)
+	sshkeySvc := sshkeys.NewService(sshKeyRepo, nodeRepo, encryptor, sshPool)
+	gatewaySvc := gateway.NewService(apiTokenRepo, userRepo)
+	topologySvc := topologyService.NewService(nodeRepo, clientFactory)
+
+	// Chat Repositories
+	chatConvRepo := repository.NewChatConversationRepository(dbPool)
+	chatMsgRepo := repository.NewChatMessageRepository(dbPool)
+	toolCallRepo := repository.NewToolCallRepository(dbPool)
+
+	// Agent Tool Registry
+	agentToolRegistry := agent.NewToolRegistry()
+	agentToolRegistry.Register(agent.NewListNodesTool(nodeSvc))
+	agentToolRegistry.Register(agent.NewNodeStatusTool(nodeSvc))
+	agentToolRegistry.Register(agent.NewGetVMsTool(nodeSvc))
+	agentToolRegistry.Register(agent.NewCreateBackupTool(backupSvc))
+	agentToolRegistry.Register(agent.NewGetMetricsTool(metricsRepo))
+	agentToolRegistry.Register(agent.NewGetStorageTool(nodeSvc))
+	agentToolRegistry.Register(agent.NewMigrateVMTool(migrationSvc))
+	agentToolRegistry.Register(agent.NewStartVMTool(nodeSvc))
+	agentToolRegistry.Register(agent.NewStopVMTool(nodeSvc))
+	agentToolRegistry.Register(agent.NewRestoreConfigTool(restoreSvc))
+	agentToolRegistry.Register(agent.NewRunSSHCommandTool(nodeSvc))
+	agentToolRegistry.Register(agent.NewGetNetworkTool(nodeSvc))
+	agentToolRegistry.Register(agent.NewGetAnomaliesTool(anomalySvc))
+	agentToolRegistry.Register(agent.NewGetPredictionsTool(predictionSvc))
+	agentToolRegistry.Register(agent.NewGetBriefingTool(briefingSvc))
+	agentToolRegistry.Register(agent.NewCheckDriftTool(driftSvc))
+	agentToolRegistry.Register(agent.NewCheckUpdatesTool(updateSvc))
+	agentToolRegistry.Register(agent.NewRightsizingTool(rightsizingSvc))
+
+	// Agent Service
+	agentSvc := agent.NewService(llmRegistry, agentToolRegistry, chatConvRepo, chatMsgRepo, toolCallRepo, approvalRepo, userRepo)
+
+	// Telegram Bot Service (conditional)
+	var telegramBotSvc *telegramService.BotService
+	telegramBotEnabled := cfg.Telegram.Enabled && cfg.Telegram.BotToken != ""
+	if telegramBotEnabled {
+		telegramBotSvc = telegramService.NewBotService(
+			cfg.Telegram.BotToken,
+			agentSvc,
+			telegramLinkRepo,
+			telegramConvRepo,
+		)
+		slog.Info("telegram bot enabled")
+	}
+
+	// Scheduler
+	sched := scheduler.New()
+	nodeStatusJob := scheduler.NewNodeStatusJob(nodeRepo, clientFactory, redisClient, wsHub, 30*time.Second)
+	sched.AddJob(nodeStatusJob)
+	metricsJob := scheduler.NewMetricsCollectionJob(nodeRepo, metricsRepo, clientFactory, wsHub, 60*time.Second)
+	sched.AddJob(metricsJob)
+	backupScheduleJob := scheduler.NewBackupScheduleJob(scheduleRepo, backupRepo, backupSvc, 60*time.Second)
+	sched.AddJob(backupScheduleJob)
+	alertEvalJob := scheduler.NewAlertEvaluationJob(alertSvc, 30*time.Second)
+	sched.AddJob(alertEvalJob)
+	drProfileJob := scheduler.NewDRProfileJob(nodeRepo, profileSvc, readinessSvc, 24*time.Hour)
+	sched.AddJob(drProfileJob)
+	escalationJob := scheduler.NewEscalationJob(escalationSvc, 30*time.Second)
+	sched.AddJob(escalationJob)
+	anomalyDetectionJob := scheduler.NewAnomalyDetectionJob(anomalySvc, 5*time.Minute)
+	sched.AddJob(anomalyDetectionJob)
+	predictionJob := scheduler.NewPredictionJob(predictionSvc, 6*time.Hour)
+	sched.AddJob(predictionJob)
+	if cfg.Briefing.Enabled {
+		briefingJob := scheduler.NewBriefingJob(briefingSvc, cfg.Briefing.Hour)
+		sched.AddJob(briefingJob)
+	}
+	// Phase 6 Scheduler Jobs
+	driftJob := scheduler.NewDriftCheckJob(driftSvc, nodeRepo, 6*time.Hour)
+	sched.AddJob(driftJob)
+	updateCheckJob := scheduler.NewUpdateCheckJob(updateSvc, nodeRepo, 24*time.Hour)
+	sched.AddJob(updateCheckJob)
+	rightsizingJob := scheduler.NewRightsizingJob(rightsizingSvc, nodeRepo, 24*time.Hour)
+	sched.AddJob(rightsizingJob)
+	keyRotationJob := scheduler.NewKeyRotationJob(sshkeySvc, 1*time.Hour)
+	sched.AddJob(keyRotationJob)
+
+	if telegramBotEnabled && telegramBotSvc != nil {
+		pollInterval := time.Duration(cfg.Telegram.PollInterval) * time.Second
+		if pollInterval < time.Second {
+			pollInterval = 3 * time.Second
+		}
+		telegramPollJob := scheduler.NewTelegramPollJob(telegramBotSvc, pollInterval)
+		sched.AddJob(telegramPollJob)
+	}
+	sched.Start(ctx)
+	defer sched.Stop()
+
+	// Integrate notifications into existing services
+	backupSvc.SetNotificationService(notifSvc)
+	nodeStatusJob.SetNotificationService(notifSvc)
+
+	// Echo setup
+	e := echo.New()
+	e.HideBanner = true
+	e.HidePort = true
+
+	// Handlers
+	handlers := api.Handlers{
+		Health:       handler.NewHealthHandler(dbPool, redisClient),
+		Auth:         handler.NewAuthHandler(authService, userRepo),
+		Node:         handler.NewNodeHandler(nodeSvc),
+		WS:           handler.NewWSHandler(wsHub, jwtSvc),
+		Backup:       handler.NewBackupHandler(backupSvc, restoreSvc),
+		Schedule:     handler.NewScheduleHandler(scheduleRepo),
+		Metrics:      handler.NewMetricsHandler(monitorSvc),
+		Tag:          handler.NewTagHandler(tagRepo),
+		PBS:          handler.NewPBSHandler(nodeRepo, encryptor),
+		User:         handler.NewUserHandler(userSvc),
+		Notification: handler.NewNotificationHandler(notifSvc, alertSvc),
+		DR:           handler.NewDRHandler(profileSvc, readinessSvc, runbookSvc),
+		Chat:         handler.NewChatHandler(agentSvc),
+		Migration:    handler.NewMigrationHandler(migrationSvc),
+		Escalation:   handler.NewEscalationHandler(escalationSvc),
+		Telegram:     handler.NewTelegramHandler(telegramLinkRepo, telegramBotSvc, telegramBotEnabled),
+		Anomaly:      handler.NewAnomalyHandler(anomalySvc),
+		Prediction:   handler.NewPredictionHandler(predictionSvc),
+		Briefing:     handler.NewBriefingHandler(briefingSvc),
+		Approval:     handler.NewApprovalHandler(approvalRepo, agentSvc),
+		Drift:        handler.NewDriftHandler(driftSvc),
+		Environment:  handler.NewEnvironmentHandler(envSvc),
+		Update:       handler.NewUpdateHandler(updateSvc),
+		Rightsizing:  handler.NewRightsizingHandler(rightsizingSvc),
+		SSHKey:       handler.NewSSHKeyHandler(sshkeySvc),
+		Gateway:      handler.NewGatewayHandler(gatewaySvc, auditRepo),
+		Topology:     handler.NewTopologyHandler(topologySvc),
+	}
+
+	// Setup routes
+	api.SetupRouter(e, cfg, jwtSvc, handlers, gatewaySvc, redisClient, auditRepo)
+
+	// Start server
+	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
+	slog.Info("server listening", slog.String("addr", addr))
+
+	go func() {
+		if err := e.Start(addr); err != nil {
+			slog.Info("server stopped", slog.Any("reason", err))
+		}
+	}()
+
+	// Wait for shutdown signal
+	<-ctx.Done()
+	slog.Info("shutting down server...")
+
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
+
+	if err := e.Shutdown(shutdownCtx); err != nil {
+		slog.Error("server shutdown error", slog.Any("error", err))
+	}
+
+	slog.Info("server shutdown complete")
+}

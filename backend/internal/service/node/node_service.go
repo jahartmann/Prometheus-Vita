@@ -1,0 +1,459 @@
+package node
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"log/slog"
+
+	"github.com/antigravity/prometheus/internal/model"
+	"github.com/antigravity/prometheus/internal/proxmox"
+	"github.com/antigravity/prometheus/internal/repository"
+	"github.com/antigravity/prometheus/internal/service/crypto"
+	"github.com/antigravity/prometheus/internal/ssh"
+	"github.com/google/uuid"
+)
+
+type NetworkInterfaceWithAlias struct {
+	proxmox.NetworkInterface
+	DisplayName string `json:"display_name,omitempty"`
+	Description string `json:"description,omitempty"`
+	Color       string `json:"color,omitempty"`
+}
+
+type Service struct {
+	nodeRepo      repository.NodeRepository
+	aliasRepo     repository.NetworkAliasRepository
+	tagRepo       repository.TagRepository
+	encryptor     *crypto.Encryptor
+	clientFactory proxmox.ClientFactory
+	sshPool       *ssh.Pool
+}
+
+func NewService(
+	nodeRepo repository.NodeRepository,
+	encryptor *crypto.Encryptor,
+	clientFactory proxmox.ClientFactory,
+	aliasRepo repository.NetworkAliasRepository,
+	tagRepo repository.TagRepository,
+	sshPool *ssh.Pool,
+) *Service {
+	return &Service{
+		nodeRepo:      nodeRepo,
+		aliasRepo:     aliasRepo,
+		tagRepo:       tagRepo,
+		encryptor:     encryptor,
+		clientFactory: clientFactory,
+		sshPool:       sshPool,
+	}
+}
+
+func (s *Service) Create(ctx context.Context, req model.CreateNodeRequest) (*model.Node, error) {
+	if !req.Type.IsValid() {
+		return nil, fmt.Errorf("invalid node type: %s", req.Type)
+	}
+
+	port := req.Port
+	if port == 0 {
+		port = 8006
+	}
+
+	sshPort := req.SSHPort
+	if sshPort == 0 {
+		sshPort = 22
+	}
+
+	sshUser := req.SSHUser
+	if sshUser == "" {
+		sshUser = "root"
+	}
+
+	encTokenID, err := s.encryptor.Encrypt(req.APITokenID)
+	if err != nil {
+		return nil, fmt.Errorf("encrypt token id: %w", err)
+	}
+
+	encTokenSecret, err := s.encryptor.Encrypt(req.APITokenSecret)
+	if err != nil {
+		return nil, fmt.Errorf("encrypt token secret: %w", err)
+	}
+
+	var encSSHPrivateKey string
+	if req.SSHPrivateKey != "" {
+		encSSHPrivateKey, err = s.encryptor.Encrypt(req.SSHPrivateKey)
+		if err != nil {
+			return nil, fmt.Errorf("encrypt ssh private key: %w", err)
+		}
+	}
+
+	metadata := req.Metadata
+	if metadata == nil {
+		metadata = json.RawMessage("{}")
+	}
+
+	node := &model.Node{
+		Name:           req.Name,
+		Type:           req.Type,
+		Hostname:       req.Hostname,
+		Port:           port,
+		APITokenID:     encTokenID,
+		APITokenSecret: encTokenSecret,
+		SSHPort:        sshPort,
+		SSHUser:        sshUser,
+		SSHPrivateKey:  encSSHPrivateKey,
+		IsOnline:       false,
+		Metadata:       metadata,
+	}
+
+	if err := s.nodeRepo.Create(ctx, node); err != nil {
+		return nil, fmt.Errorf("create node: %w", err)
+	}
+
+	slog.Info("node created", slog.String("name", node.Name), slog.String("id", node.ID.String()))
+	return node, nil
+}
+
+func (s *Service) GetByID(ctx context.Context, id uuid.UUID) (*model.Node, error) {
+	return s.nodeRepo.GetByID(ctx, id)
+}
+
+func (s *Service) List(ctx context.Context) ([]model.Node, error) {
+	return s.nodeRepo.List(ctx)
+}
+
+func (s *Service) Update(ctx context.Context, id uuid.UUID, req model.UpdateNodeRequest) (*model.Node, error) {
+	node, err := s.nodeRepo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	if req.Name != nil {
+		node.Name = *req.Name
+	}
+	if req.Hostname != nil {
+		node.Hostname = *req.Hostname
+	}
+	if req.Port != nil {
+		node.Port = *req.Port
+	}
+	if req.APITokenID != nil {
+		enc, err := s.encryptor.Encrypt(*req.APITokenID)
+		if err != nil {
+			return nil, fmt.Errorf("encrypt token id: %w", err)
+		}
+		node.APITokenID = enc
+	}
+	if req.APITokenSecret != nil {
+		enc, err := s.encryptor.Encrypt(*req.APITokenSecret)
+		if err != nil {
+			return nil, fmt.Errorf("encrypt token secret: %w", err)
+		}
+		node.APITokenSecret = enc
+	}
+	if req.SSHPort != nil {
+		node.SSHPort = *req.SSHPort
+	}
+	if req.SSHUser != nil {
+		node.SSHUser = *req.SSHUser
+	}
+	if req.SSHPrivateKey != nil {
+		if *req.SSHPrivateKey != "" {
+			enc, err := s.encryptor.Encrypt(*req.SSHPrivateKey)
+			if err != nil {
+				return nil, fmt.Errorf("encrypt ssh private key: %w", err)
+			}
+			node.SSHPrivateKey = enc
+		} else {
+			node.SSHPrivateKey = ""
+		}
+	}
+	if req.Metadata != nil {
+		node.Metadata = *req.Metadata
+	}
+
+	if err := s.nodeRepo.Update(ctx, node); err != nil {
+		return nil, fmt.Errorf("update node: %w", err)
+	}
+
+	return node, nil
+}
+
+func (s *Service) Delete(ctx context.Context, id uuid.UUID) error {
+	return s.nodeRepo.Delete(ctx, id)
+}
+
+func (s *Service) TestConnection(ctx context.Context, req model.TestConnectionRequest) *model.TestConnectionResponse {
+	port := req.Port
+	if port == 0 {
+		port = 8006
+	}
+
+	client := s.clientFactory.CreateClientFromCredentials(req.Hostname, port, req.APITokenID, req.APITokenSecret)
+
+	version, err := client.GetVersion(ctx)
+	if err != nil {
+		return &model.TestConnectionResponse{
+			Success: false,
+			Error:   err.Error(),
+		}
+	}
+
+	nodes, err := client.GetNodes(ctx)
+	nodeName := ""
+	if err == nil && len(nodes) > 0 {
+		nodeName = nodes[0]
+	}
+
+	return &model.TestConnectionResponse{
+		Success: true,
+		Version: version.Version,
+		Node:    nodeName,
+	}
+}
+
+func (s *Service) GetStatus(ctx context.Context, id uuid.UUID) (*proxmox.NodeStatus, error) {
+	node, err := s.nodeRepo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	client, err := s.clientFactory.CreateClient(node)
+	if err != nil {
+		return nil, fmt.Errorf("create proxmox client: %w", err)
+	}
+
+	nodes, err := client.GetNodes(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get nodes: %w", err)
+	}
+
+	if len(nodes) == 0 {
+		return nil, fmt.Errorf("no nodes found")
+	}
+
+	return client.GetNodeStatus(ctx, nodes[0])
+}
+
+func (s *Service) GetVMs(ctx context.Context, id uuid.UUID) ([]proxmox.VMInfo, error) {
+	node, err := s.nodeRepo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	client, err := s.clientFactory.CreateClient(node)
+	if err != nil {
+		return nil, fmt.Errorf("create proxmox client: %w", err)
+	}
+
+	nodes, err := client.GetNodes(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get nodes: %w", err)
+	}
+
+	if len(nodes) == 0 {
+		return nil, fmt.Errorf("no nodes found")
+	}
+
+	return client.GetVMs(ctx, nodes[0])
+}
+
+func (s *Service) GetStorage(ctx context.Context, id uuid.UUID) ([]proxmox.StorageInfo, error) {
+	node, err := s.nodeRepo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	client, err := s.clientFactory.CreateClient(node)
+	if err != nil {
+		return nil, fmt.Errorf("create proxmox client: %w", err)
+	}
+
+	nodes, err := client.GetNodes(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get nodes: %w", err)
+	}
+
+	if len(nodes) == 0 {
+		return nil, fmt.Errorf("no nodes found")
+	}
+
+	return client.GetStorage(ctx, nodes[0])
+}
+
+func (s *Service) GetNetworkInterfaces(ctx context.Context, id uuid.UUID) ([]NetworkInterfaceWithAlias, error) {
+	node, err := s.nodeRepo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	client, err := s.clientFactory.CreateClient(node)
+	if err != nil {
+		return nil, fmt.Errorf("create proxmox client: %w", err)
+	}
+
+	pveNodes, err := client.GetNodes(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get nodes: %w", err)
+	}
+
+	if len(pveNodes) == 0 {
+		return nil, fmt.Errorf("no nodes found")
+	}
+
+	ifaces, err := client.GetNetworkInterfaces(ctx, pveNodes[0])
+	if err != nil {
+		return nil, fmt.Errorf("get network interfaces: %w", err)
+	}
+
+	// Get aliases for this node
+	aliases, err := s.aliasRepo.GetByNode(ctx, id)
+	if err != nil {
+		slog.Warn("failed to get network aliases", slog.Any("error", err))
+		aliases = nil
+	}
+
+	aliasMap := make(map[string]model.NetworkAlias)
+	for _, a := range aliases {
+		aliasMap[a.InterfaceName] = a
+	}
+
+	result := make([]NetworkInterfaceWithAlias, 0, len(ifaces))
+	for _, iface := range ifaces {
+		entry := NetworkInterfaceWithAlias{
+			NetworkInterface: iface,
+		}
+		if alias, ok := aliasMap[iface.Iface]; ok {
+			entry.DisplayName = alias.DisplayName
+			entry.Description = alias.Description
+			entry.Color = alias.Color
+		}
+		result = append(result, entry)
+	}
+
+	return result, nil
+}
+
+func (s *Service) SetAlias(ctx context.Context, nodeID uuid.UUID, ifaceName string, req model.UpsertAliasRequest) error {
+	// Verify node exists
+	_, err := s.nodeRepo.GetByID(ctx, nodeID)
+	if err != nil {
+		return err
+	}
+
+	alias := &model.NetworkAlias{
+		NodeID:        nodeID,
+		InterfaceName: ifaceName,
+		DisplayName:   req.DisplayName,
+		Description:   req.Description,
+		Color:         req.Color,
+	}
+
+	return s.aliasRepo.Upsert(ctx, alias)
+}
+
+func (s *Service) GetDisks(ctx context.Context, id uuid.UUID) ([]proxmox.DiskInfo, error) {
+	node, err := s.nodeRepo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	client, err := s.clientFactory.CreateClient(node)
+	if err != nil {
+		return nil, fmt.Errorf("create proxmox client: %w", err)
+	}
+
+	pveNodes, err := client.GetNodes(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get nodes: %w", err)
+	}
+
+	if len(pveNodes) == 0 {
+		return nil, fmt.Errorf("no nodes found")
+	}
+
+	return client.GetDisks(ctx, pveNodes[0])
+}
+
+func (s *Service) StartVM(ctx context.Context, nodeID uuid.UUID, vmid int, vmType string) (string, error) {
+	node, err := s.nodeRepo.GetByID(ctx, nodeID)
+	if err != nil {
+		return "", err
+	}
+
+	client, err := s.clientFactory.CreateClient(node)
+	if err != nil {
+		return "", fmt.Errorf("create proxmox client: %w", err)
+	}
+
+	nodes, err := client.GetNodes(ctx)
+	if err != nil {
+		return "", fmt.Errorf("get nodes: %w", err)
+	}
+
+	if len(nodes) == 0 {
+		return "", fmt.Errorf("no nodes found")
+	}
+
+	return client.StartVM(ctx, nodes[0], vmid, vmType)
+}
+
+func (s *Service) StopVM(ctx context.Context, nodeID uuid.UUID, vmid int, vmType string) (string, error) {
+	node, err := s.nodeRepo.GetByID(ctx, nodeID)
+	if err != nil {
+		return "", err
+	}
+
+	client, err := s.clientFactory.CreateClient(node)
+	if err != nil {
+		return "", fmt.Errorf("create proxmox client: %w", err)
+	}
+
+	nodes, err := client.GetNodes(ctx)
+	if err != nil {
+		return "", fmt.Errorf("get nodes: %w", err)
+	}
+
+	if len(nodes) == 0 {
+		return "", fmt.Errorf("no nodes found")
+	}
+
+	return client.StopVM(ctx, nodes[0], vmid, vmType)
+}
+
+func (s *Service) RunSSHCommand(ctx context.Context, nodeID uuid.UUID, command string) (*ssh.CommandResult, error) {
+	node, err := s.nodeRepo.GetByID(ctx, nodeID)
+	if err != nil {
+		return nil, err
+	}
+
+	sshCfg, err := s.buildSSHConfig(node)
+	if err != nil {
+		return nil, fmt.Errorf("build ssh config: %w", err)
+	}
+
+	client, err := s.sshPool.Get(nodeID.String(), sshCfg)
+	if err != nil {
+		return nil, fmt.Errorf("get ssh client: %w", err)
+	}
+	defer s.sshPool.Return(nodeID.String(), client)
+
+	return client.RunCommand(ctx, command)
+}
+
+func (s *Service) buildSSHConfig(node *model.Node) (ssh.SSHConfig, error) {
+	cfg := ssh.SSHConfig{
+		Host: node.Hostname,
+		Port: node.SSHPort,
+		User: node.SSHUser,
+	}
+
+	if node.SSHPrivateKey != "" {
+		decrypted, err := s.encryptor.Decrypt(node.SSHPrivateKey)
+		if err != nil {
+			return ssh.SSHConfig{}, fmt.Errorf("decrypt ssh private key: %w", err)
+		}
+		cfg.PrivateKey = decrypted
+	}
+
+	return cfg, nil
+}

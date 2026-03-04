@@ -1,0 +1,152 @@
+package handler
+
+import (
+	"errors"
+
+	apiPkg "github.com/antigravity/prometheus/internal/api"
+	"github.com/antigravity/prometheus/internal/api/middleware"
+	"github.com/antigravity/prometheus/internal/model"
+	"github.com/antigravity/prometheus/internal/repository"
+	userService "github.com/antigravity/prometheus/internal/service/user"
+	"github.com/google/uuid"
+	"github.com/labstack/echo/v4"
+)
+
+type UserHandler struct {
+	service *userService.Service
+}
+
+func NewUserHandler(service *userService.Service) *UserHandler {
+	return &UserHandler{service: service}
+}
+
+func (h *UserHandler) List(c echo.Context) error {
+	users, err := h.service.List(c.Request().Context())
+	if err != nil {
+		return apiPkg.InternalError(c, "failed to list users")
+	}
+	return apiPkg.Success(c, users)
+}
+
+func (h *UserHandler) GetByID(c echo.Context) error {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return apiPkg.BadRequest(c, "invalid user id")
+	}
+
+	user, err := h.service.GetByID(c.Request().Context(), id)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return apiPkg.NotFound(c, "user not found")
+		}
+		return apiPkg.InternalError(c, "failed to get user")
+	}
+	return apiPkg.Success(c, user)
+}
+
+func (h *UserHandler) Create(c echo.Context) error {
+	var req model.CreateUserRequest
+	if err := c.Bind(&req); err != nil {
+		return apiPkg.BadRequest(c, "invalid request body")
+	}
+	if req.Username == "" || req.Password == "" {
+		return apiPkg.BadRequest(c, "username and password are required")
+	}
+	if !req.Role.IsValid() {
+		return apiPkg.BadRequest(c, "role must be 'admin', 'operator', or 'viewer'")
+	}
+
+	user, err := h.service.Create(c.Request().Context(), req)
+	if err != nil {
+		if errors.Is(err, userService.ErrUsernameTaken) {
+			return apiPkg.BadRequest(c, "username already taken")
+		}
+		return apiPkg.InternalError(c, "failed to create user")
+	}
+	return apiPkg.Created(c, user)
+}
+
+func (h *UserHandler) Update(c echo.Context) error {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return apiPkg.BadRequest(c, "invalid user id")
+	}
+
+	var req model.UpdateUserRequest
+	if err := c.Bind(&req); err != nil {
+		return apiPkg.BadRequest(c, "invalid request body")
+	}
+
+	user, err := h.service.Update(c.Request().Context(), id, req)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return apiPkg.NotFound(c, "user not found")
+		}
+		if errors.Is(err, userService.ErrUsernameTaken) {
+			return apiPkg.BadRequest(c, "username already taken")
+		}
+		return apiPkg.InternalError(c, "failed to update user")
+	}
+	return apiPkg.Success(c, user)
+}
+
+func (h *UserHandler) Delete(c echo.Context) error {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return apiPkg.BadRequest(c, "invalid user id")
+	}
+
+	currentUserID, ok := c.Get(middleware.ContextKeyUserID).(uuid.UUID)
+	if !ok {
+		return apiPkg.Unauthorized(c, "user not found in context")
+	}
+
+	if err := h.service.Delete(c.Request().Context(), id, currentUserID); err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return apiPkg.NotFound(c, "user not found")
+		}
+		if errors.Is(err, userService.ErrSelfDelete) {
+			return apiPkg.BadRequest(c, "cannot delete own account")
+		}
+		if errors.Is(err, userService.ErrLastAdmin) {
+			return apiPkg.BadRequest(c, "cannot delete last admin")
+		}
+		return apiPkg.InternalError(c, "failed to delete user")
+	}
+	return apiPkg.NoContent(c)
+}
+
+func (h *UserHandler) ChangePassword(c echo.Context) error {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return apiPkg.BadRequest(c, "invalid user id")
+	}
+
+	var req model.ChangePasswordRequest
+	if err := c.Bind(&req); err != nil {
+		return apiPkg.BadRequest(c, "invalid request body")
+	}
+	if req.NewPassword == "" {
+		return apiPkg.BadRequest(c, "new_password is required")
+	}
+
+	currentUserID, ok := c.Get(middleware.ContextKeyUserID).(uuid.UUID)
+	if !ok {
+		return apiPkg.Unauthorized(c, "user not found in context")
+	}
+	currentRole, _ := c.Get(middleware.ContextKeyRole).(model.UserRole)
+
+	if err := h.service.ChangePassword(c.Request().Context(), id, req, currentUserID, currentRole); err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return apiPkg.NotFound(c, "user not found")
+		}
+		if errors.Is(err, userService.ErrWrongPassword) {
+			return apiPkg.BadRequest(c, "current password is incorrect")
+		}
+		if errors.Is(err, userService.ErrPasswordRequired) {
+			return apiPkg.BadRequest(c, "current password is required")
+		}
+		return apiPkg.InternalError(c, "failed to change password")
+	}
+	return apiPkg.Success(c, map[string]string{"message": "password changed"})
+}

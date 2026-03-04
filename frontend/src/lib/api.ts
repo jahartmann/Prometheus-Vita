@@ -1,0 +1,393 @@
+import axios from "axios";
+import { useAuthStore } from "@/stores/auth-store";
+
+const api = axios.create({
+  baseURL: "/api/v1",
+  headers: {
+    "Content-Type": "application/json",
+  },
+});
+
+api.interceptors.request.use((config) => {
+  const token = useAuthStore.getState().accessToken;
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config;
+
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+
+      try {
+        const refreshToken = useAuthStore.getState().refreshToken;
+        if (!refreshToken) {
+          useAuthStore.getState().logout();
+          return Promise.reject(error);
+        }
+
+        const response = await axios.post("/api/v1/auth/refresh", {
+          refresh_token: refreshToken,
+        });
+
+        const { access_token, refresh_token } = response.data;
+        useAuthStore.getState().setAccessToken(access_token);
+        if (refresh_token) {
+          useAuthStore.getState().setRefreshToken(refresh_token);
+        }
+
+        originalRequest.headers.Authorization = `Bearer ${access_token}`;
+        return api(originalRequest);
+      } catch {
+        useAuthStore.getState().logout();
+        return Promise.reject(error);
+      }
+    }
+
+    return Promise.reject(error);
+  }
+);
+
+export default api;
+
+// Backup API
+export const backupApi = {
+  createBackup: (nodeId: string, data?: { backup_type?: string; notes?: string }) =>
+    api.post(`/nodes/${nodeId}/backup`, data || {}),
+  listBackups: (nodeId: string) =>
+    api.get(`/nodes/${nodeId}/backups`),
+  getBackup: (backupId: string) =>
+    api.get(`/backups/${backupId}`),
+  getBackupFiles: (backupId: string) =>
+    api.get(`/backups/${backupId}/files`),
+  getBackupFile: (backupId: string, filePath: string) =>
+    api.get(`/backups/${backupId}/files/${filePath}`),
+  diffBackup: (backupId: string) =>
+    api.get(`/backups/${backupId}/diff`),
+  deleteBackup: (backupId: string) =>
+    api.delete(`/backups/${backupId}`),
+  restoreBackup: (backupId: string, data: { file_paths: string[]; dry_run: boolean }) =>
+    api.post(`/backups/${backupId}/restore`, data),
+  downloadBackup: (backupId: string) =>
+    api.get(`/backups/${backupId}/download`, { responseType: "blob" }),
+};
+
+// Schedule API
+export const scheduleApi = {
+  listSchedules: (nodeId: string) =>
+    api.get(`/nodes/${nodeId}/backup-schedules`),
+  createSchedule: (nodeId: string, data: { cron_expression: string; is_active?: boolean; retention_count?: number }) =>
+    api.post(`/nodes/${nodeId}/backup-schedules`, data),
+  updateSchedule: (scheduleId: string, data: { cron_expression?: string; is_active?: boolean; retention_count?: number }) =>
+    api.put(`/backup-schedules/${scheduleId}`, data),
+  deleteSchedule: (scheduleId: string) =>
+    api.delete(`/backup-schedules/${scheduleId}`),
+};
+
+// Metrics API
+export const metricsApi = {
+  getHistory: (nodeId: string, since?: string, until?: string) => {
+    const params = new URLSearchParams();
+    if (since) params.set("since", since);
+    if (until) params.set("until", until);
+    return api.get(`/nodes/${nodeId}/metrics?${params.toString()}`);
+  },
+  getSummary: (nodeId: string, period?: string) =>
+    api.get(`/nodes/${nodeId}/metrics/summary${period ? `?period=${period}` : ""}`),
+};
+
+// Network API
+export const networkApi = {
+  getInterfaces: (nodeId: string) =>
+    api.get(`/nodes/${nodeId}/network`),
+  setAlias: (nodeId: string, iface: string, data: { display_name: string; description?: string; color?: string }) =>
+    api.put(`/nodes/${nodeId}/network/${iface}/alias`, data),
+};
+
+// Disk API
+export const diskApi = {
+  getDisks: (nodeId: string) =>
+    api.get(`/nodes/${nodeId}/disks`),
+};
+
+// Tag API
+export const tagApi = {
+  list: () => api.get("/tags"),
+  create: (data: { name: string; color?: string; category?: string }) =>
+    api.post("/tags", data),
+  delete: (tagId: string) => api.delete(`/tags/${tagId}`),
+  getNodeTags: (nodeId: string) => api.get(`/nodes/${nodeId}/tags`),
+  addToNode: (nodeId: string, tagId: string) =>
+    api.post(`/nodes/${nodeId}/tags`, { tag_id: tagId }),
+  removeFromNode: (nodeId: string, tagId: string) =>
+    api.delete(`/nodes/${nodeId}/tags/${tagId}`),
+};
+
+// PBS API
+export const pbsApi = {
+  getDatastores: (nodeId: string) =>
+    api.get(`/nodes/${nodeId}/pbs/datastores`),
+  getBackupJobs: (nodeId: string) =>
+    api.get(`/nodes/${nodeId}/pbs/backup-jobs`),
+};
+
+// DR API
+export const drApi = {
+  getProfile: (nodeId: string) =>
+    api.get(`/nodes/${nodeId}/dr/profile`),
+  collectProfile: (nodeId: string) =>
+    api.post(`/nodes/${nodeId}/dr/profile`),
+  getReadiness: (nodeId: string) =>
+    api.get(`/nodes/${nodeId}/dr/readiness`),
+  calculateReadiness: (nodeId: string) =>
+    api.post(`/nodes/${nodeId}/dr/readiness`),
+  listRunbooks: (nodeId: string) =>
+    api.get(`/nodes/${nodeId}/dr/runbooks`),
+  generateRunbook: (nodeId: string, scenario: string) =>
+    api.post(`/nodes/${nodeId}/dr/runbooks`, { scenario }),
+  getRunbook: (runbookId: string) =>
+    api.get(`/dr/runbooks/${runbookId}`),
+  updateRunbook: (runbookId: string, data: { title?: string; steps?: unknown }) =>
+    api.put(`/dr/runbooks/${runbookId}`, data),
+  deleteRunbook: (runbookId: string) =>
+    api.delete(`/dr/runbooks/${runbookId}`),
+  simulate: (nodeId: string, scenario: string) =>
+    api.post("/dr/simulate", { node_id: nodeId, scenario }),
+  listAllScores: () =>
+    api.get("/dr/scores"),
+};
+
+// Notification API
+export const notificationApi = {
+  listChannels: () => api.get("/notifications/channels"),
+  createChannel: (data: { name: string; type: string; config: Record<string, unknown> }) =>
+    api.post("/notifications/channels", data),
+  getChannel: (id: string) => api.get(`/notifications/channels/${id}`),
+  updateChannel: (id: string, data: { name?: string; config?: Record<string, unknown>; is_active?: boolean }) =>
+    api.put(`/notifications/channels/${id}`, data),
+  deleteChannel: (id: string) => api.delete(`/notifications/channels/${id}`),
+  testChannel: (id: string) => api.post(`/notifications/channels/${id}/test`),
+  listHistory: (limit?: number, offset?: number) => {
+    const params = new URLSearchParams();
+    if (limit) params.set("limit", String(limit));
+    if (offset) params.set("offset", String(offset));
+    return api.get(`/notifications/history?${params.toString()}`);
+  },
+};
+
+// Alert API
+export const alertApi = {
+  listRules: () => api.get("/alerts/rules"),
+  createRule: (data: {
+    name: string;
+    node_id: string;
+    metric: string;
+    operator: string;
+    threshold: number;
+    duration_seconds?: number;
+    severity: string;
+    channel_ids?: string[];
+    escalation_policy_id?: string;
+    is_active?: boolean;
+  }) => api.post("/alerts/rules", data),
+  getRule: (id: string) => api.get(`/alerts/rules/${id}`),
+  updateRule: (id: string, data: {
+    name?: string;
+    metric?: string;
+    operator?: string;
+    threshold?: number;
+    duration_seconds?: number;
+    severity?: string;
+    channel_ids?: string[];
+    escalation_policy_id?: string;
+    is_active?: boolean;
+  }) => api.put(`/alerts/rules/${id}`, data),
+  deleteRule: (id: string) => api.delete(`/alerts/rules/${id}`),
+};
+
+// Escalation API
+export const escalationApi = {
+  listPolicies: () => api.get("/escalation/policies"),
+  createPolicy: (data: {
+    name: string;
+    description?: string;
+    steps?: { step_order: number; delay_seconds: number; channel_ids: string[] }[];
+  }) => api.post("/escalation/policies", data),
+  getPolicy: (id: string) => api.get(`/escalation/policies/${id}`),
+  updatePolicy: (id: string, data: {
+    name?: string;
+    description?: string;
+    is_active?: boolean;
+    steps?: { step_order: number; delay_seconds: number; channel_ids: string[] }[];
+  }) => api.put(`/escalation/policies/${id}`, data),
+  deletePolicy: (id: string) => api.delete(`/escalation/policies/${id}`),
+  listIncidents: (limit?: number, offset?: number) => {
+    const params = new URLSearchParams();
+    if (limit) params.set("limit", String(limit));
+    if (offset) params.set("offset", String(offset));
+    return api.get(`/escalation/incidents?${params.toString()}`);
+  },
+  getIncident: (id: string) => api.get(`/escalation/incidents/${id}`),
+  acknowledgeIncident: (id: string) => api.post(`/escalation/incidents/${id}/acknowledge`),
+  resolveIncident: (id: string) => api.post(`/escalation/incidents/${id}/resolve`),
+};
+
+// Telegram API
+export const telegramApi = {
+  link: () => api.post("/telegram/link"),
+  status: () => api.get("/telegram/status"),
+  unlink: () => api.delete("/telegram/unlink"),
+};
+
+// Chat API
+export const chatApi = {
+  chat: (data: { conversation_id?: string; message: string; model?: string }) =>
+    api.post("/chat", data).then((r) => r.data.data),
+  listConversations: () =>
+    api.get("/chat/conversations").then((r) => r.data.data),
+  getConversation: (id: string) =>
+    api.get(`/chat/conversations/${id}`).then((r) => r.data.data),
+  getMessages: (id: string) =>
+    api.get(`/chat/conversations/${id}/messages`).then((r) => r.data.data),
+  deleteConversation: (id: string) =>
+    api.delete(`/chat/conversations/${id}`),
+};
+
+// Migration API
+export const migrationApi = {
+  start: (data: {
+    source_node_id: string;
+    target_node_id: string;
+    vmid: number;
+    target_storage: string;
+    mode?: string;
+    new_vmid?: number;
+    cleanup_source?: boolean;
+    cleanup_target?: boolean;
+  }) => api.post("/migrations", data),
+  list: () => api.get("/migrations"),
+  get: (id: string) => api.get(`/migrations/${id}`),
+  cancel: (id: string) => api.post(`/migrations/${id}/cancel`),
+  delete: (id: string) => api.delete(`/migrations/${id}`),
+  listByNode: (nodeId: string) => api.get(`/nodes/${nodeId}/migrations`),
+};
+
+// User API
+export const userApi = {
+  list: () => api.get("/users"),
+  getById: (id: string) => api.get(`/users/${id}`),
+  create: (data: { username: string; email?: string; password: string; role: string }) =>
+    api.post("/users", data),
+  update: (id: string, data: { username?: string; email?: string; role?: string; is_active?: boolean; autonomy_level?: number }) =>
+    api.put(`/users/${id}`, data),
+  delete: (id: string) => api.delete(`/users/${id}`),
+  changePassword: (id: string, data: { current_password?: string; new_password: string }) =>
+    api.post(`/users/${id}/password`, data),
+};
+
+// Anomaly API
+export const anomalyApi = {
+  listUnresolved: () => api.get("/anomalies").then((r) => r.data.data),
+  listByNode: (nodeId: string) =>
+    api.get(`/nodes/${nodeId}/anomalies`).then((r) => r.data.data),
+  resolve: (id: string) => api.post(`/anomalies/${id}/resolve`),
+};
+
+// Prediction API
+export const predictionApi = {
+  listCritical: () => api.get("/predictions").then((r) => r.data.data),
+  listByNode: (nodeId: string) =>
+    api.get(`/nodes/${nodeId}/predictions`).then((r) => r.data.data),
+};
+
+// Briefing API
+export const briefingApi = {
+  getLatest: () => api.get("/briefings/latest").then((r) => r.data.data),
+  list: (limit?: number) => {
+    const params = limit ? `?limit=${limit}` : "";
+    return api.get(`/briefings${params}`).then((r) => r.data.data);
+  },
+};
+
+// Approval API
+export const approvalApi = {
+  listPending: () => api.get("/approvals").then((r) => r.data.data),
+  approve: (id: string) => api.post(`/approvals/${id}/approve`),
+  reject: (id: string) => api.post(`/approvals/${id}/reject`),
+};
+
+// Drift Detection API
+export const driftApi = {
+  listAll: () => api.get("/drift"),
+  listByNode: (nodeId: string) => api.get(`/nodes/${nodeId}/drift`),
+  triggerCheck: (nodeId: string) => api.post(`/nodes/${nodeId}/drift/check`),
+};
+
+// Environment API
+export const environmentApi = {
+  list: () => api.get("/environments"),
+  get: (id: string) => api.get(`/environments/${id}`),
+  create: (data: { name: string; description?: string; color?: string }) =>
+    api.post("/environments", data),
+  update: (id: string, data: { name?: string; description?: string; color?: string }) =>
+    api.put(`/environments/${id}`, data),
+  delete: (id: string) => api.delete(`/environments/${id}`),
+  assignNode: (nodeId: string, environmentId: string) =>
+    api.put(`/nodes/${nodeId}/environment`, { environment_id: environmentId }),
+};
+
+// Update Intelligence API
+export const updateApi = {
+  listAll: () => api.get("/updates"),
+  listByNode: (nodeId: string) => api.get(`/nodes/${nodeId}/updates`),
+  triggerCheck: (nodeId: string) => api.post(`/nodes/${nodeId}/updates/check`),
+};
+
+// Right-Sizing API
+export const rightsizingApi = {
+  listAll: () => api.get("/rightsizing"),
+  listByNode: (nodeId: string) => api.get(`/nodes/${nodeId}/rightsizing`),
+  triggerAnalysis: (nodeId: string) => api.post(`/nodes/${nodeId}/rightsizing/analyze`),
+};
+
+// SSH Key API
+export const sshKeyApi = {
+  listByNode: (nodeId: string) => api.get(`/nodes/${nodeId}/ssh-keys`),
+  generate: (nodeId: string, data: { name: string; key_type?: string; expires_at?: string; deploy?: boolean }) =>
+    api.post(`/nodes/${nodeId}/ssh-keys`, data),
+  deploy: (nodeId: string, keyId: string) =>
+    api.post(`/nodes/${nodeId}/ssh-keys/${keyId}/deploy`),
+  rotate: (nodeId: string) =>
+    api.post(`/nodes/${nodeId}/ssh-keys/rotate`),
+  delete: (nodeId: string, keyId: string) =>
+    api.delete(`/nodes/${nodeId}/ssh-keys/${keyId}`),
+  getRotationSchedule: (nodeId: string) =>
+    api.get(`/nodes/${nodeId}/ssh-keys/rotation`),
+  createRotationSchedule: (nodeId: string, data: { interval_days: number; is_active: boolean }) =>
+    api.post(`/nodes/${nodeId}/ssh-keys/rotation`, data),
+};
+
+// API Gateway API
+export const gatewayApi = {
+  listTokens: () => api.get("/gateway/tokens"),
+  createToken: (data: { name: string; permissions?: string[]; expires_at?: string }) =>
+    api.post("/gateway/tokens", data),
+  revokeToken: (id: string) => api.post(`/gateway/tokens/${id}/revoke`),
+  deleteToken: (id: string) => api.delete(`/gateway/tokens/${id}`),
+  listAuditLog: (limit?: number, offset?: number) => {
+    const params = new URLSearchParams();
+    if (limit) params.set("limit", String(limit));
+    if (offset) params.set("offset", String(offset));
+    return api.get(`/gateway/audit?${params.toString()}`);
+  },
+};
+
+// Topology API
+export const topologyApi = {
+  get: () => api.get("/topology"),
+};

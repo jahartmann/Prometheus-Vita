@@ -1,0 +1,155 @@
+package monitor
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"math"
+	"time"
+
+	"github.com/antigravity/prometheus/internal/model"
+	"github.com/antigravity/prometheus/internal/proxmox"
+	"github.com/antigravity/prometheus/internal/repository"
+	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
+)
+
+type Service struct {
+	nodeRepo    repository.NodeRepository
+	metricsRepo repository.MetricsRepository
+	redis       *redis.Client
+}
+
+func NewService(nodeRepo repository.NodeRepository, redisClient *redis.Client, metricsRepo repository.MetricsRepository) *Service {
+	return &Service{
+		nodeRepo:    nodeRepo,
+		metricsRepo: metricsRepo,
+		redis:       redisClient,
+	}
+}
+
+func (s *Service) GetCachedStatus(ctx context.Context, nodeID uuid.UUID) (*proxmox.NodeStatus, error) {
+	key := fmt.Sprintf("node:status:%s", nodeID.String())
+
+	data, err := s.redis.Get(ctx, key).Bytes()
+	if err != nil {
+		if err == redis.Nil {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("get cached status: %w", err)
+	}
+
+	var status proxmox.NodeStatus
+	if err := json.Unmarshal(data, &status); err != nil {
+		return nil, fmt.Errorf("unmarshal cached status: %w", err)
+	}
+
+	return &status, nil
+}
+
+type NodeStatusSummary struct {
+	NodeID   uuid.UUID             `json:"node_id"`
+	NodeName string                `json:"node_name"`
+	IsOnline bool                  `json:"is_online"`
+	Status   *proxmox.NodeStatus   `json:"status,omitempty"`
+}
+
+func (s *Service) GetAllNodesStatus(ctx context.Context) ([]NodeStatusSummary, error) {
+	nodes, err := s.nodeRepo.List(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list nodes: %w", err)
+	}
+
+	summaries := make([]NodeStatusSummary, 0, len(nodes))
+	for _, node := range nodes {
+		summary := NodeStatusSummary{
+			NodeID:   node.ID,
+			NodeName: node.Name,
+			IsOnline: node.IsOnline,
+		}
+
+		if node.IsOnline {
+			status, _ := s.GetCachedStatus(ctx, node.ID)
+			summary.Status = status
+		}
+
+		summaries = append(summaries, summary)
+	}
+
+	return summaries, nil
+}
+
+func (s *Service) GetMetricsHistory(ctx context.Context, nodeID uuid.UUID, since, until time.Time) ([]model.MetricsRecord, error) {
+	records, err := s.metricsRepo.GetByNode(ctx, nodeID, since, until)
+	if err != nil {
+		return nil, fmt.Errorf("get metrics history: %w", err)
+	}
+	if records == nil {
+		records = []model.MetricsRecord{}
+	}
+	return records, nil
+}
+
+func (s *Service) GetMetricsSummary(ctx context.Context, nodeID uuid.UUID, since, until time.Time) (*model.MetricsSummary, error) {
+	records, err := s.metricsRepo.GetByNode(ctx, nodeID, since, until)
+	if err != nil {
+		return nil, fmt.Errorf("get metrics for summary: %w", err)
+	}
+
+	summary := &model.MetricsSummary{
+		NodeID: nodeID,
+	}
+
+	if len(records) == 0 {
+		return summary, nil
+	}
+
+	var cpuSum, memPctSum, diskPctSum float64
+	cpuMin := math.MaxFloat64
+	cpuMax := -math.MaxFloat64
+	memPctMax := -math.MaxFloat64
+	diskPctMax := -math.MaxFloat64
+
+	for _, r := range records {
+		cpuSum += r.CPUUsage
+		if r.CPUUsage < cpuMin {
+			cpuMin = r.CPUUsage
+		}
+		if r.CPUUsage > cpuMax {
+			cpuMax = r.CPUUsage
+		}
+
+		var memPct float64
+		if r.MemTotal > 0 {
+			memPct = float64(r.MemUsed) / float64(r.MemTotal) * 100
+		}
+		memPctSum += memPct
+		if memPct > memPctMax {
+			memPctMax = memPct
+		}
+
+		var diskPct float64
+		if r.DiskTotal > 0 {
+			diskPct = float64(r.DiskUsed) / float64(r.DiskTotal) * 100
+		}
+		diskPctSum += diskPct
+		if diskPct > diskPctMax {
+			diskPctMax = diskPct
+		}
+	}
+
+	n := float64(len(records))
+	summary.CPUAvg = cpuSum / n
+	summary.CPUMax = cpuMax
+	summary.CPUMin = cpuMin
+	summary.MemAvg = memPctSum / n
+	summary.MemMax = memPctMax
+	summary.DiskAvg = diskPctSum / n
+	summary.DiskMax = diskPctMax
+
+	// Get current values from the latest record
+	latest := records[len(records)-1]
+	summary.CPUCurrent = latest.CPUUsage
+
+	return summary, nil
+}
