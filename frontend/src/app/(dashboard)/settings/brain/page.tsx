@@ -22,9 +22,8 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { brainApi, toArray } from "@/lib/api";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 
 interface BrainEntry {
   id: string;
@@ -43,19 +42,17 @@ export default function BrainSettingsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [newEntry, setNewEntry] = useState({ category: "", subject: "", content: "" });
   const [creating, setCreating] = useState(false);
-  const { toast } = useToast();
-
   const fetchEntries = useCallback(async () => {
     try {
       setLoading(true);
       const res = await brainApi.list();
       setEntries(toArray<BrainEntry>(res.data));
     } catch {
-      toast({ title: "Fehler", description: "Eintraege konnten nicht geladen werden.", variant: "destructive" });
+      toast.error("Eintraege konnten nicht geladen werden.");
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, []);
 
   const handleSearch = useCallback(async () => {
     if (!searchQuery.trim()) {
@@ -67,11 +64,11 @@ export default function BrainSettingsPage() {
       const res = await brainApi.search(searchQuery);
       setEntries(toArray<BrainEntry>(res.data));
     } catch {
-      toast({ title: "Fehler", description: "Suche fehlgeschlagen.", variant: "destructive" });
+      toast.error("Suche fehlgeschlagen.");
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, fetchEntries, toast]);
+  }, [searchQuery, fetchEntries]);
 
   useEffect(() => {
     fetchEntries();
@@ -82,12 +79,12 @@ export default function BrainSettingsPage() {
     try {
       setCreating(true);
       await brainApi.create(newEntry);
-      toast({ title: "Erstellt", description: "Wissenseintrag wurde gespeichert." });
+      toast.success("Wissenseintrag wurde gespeichert.");
       setCreateOpen(false);
       setNewEntry({ category: "", subject: "", content: "" });
       fetchEntries();
     } catch {
-      toast({ title: "Fehler", description: "Eintrag konnte nicht erstellt werden.", variant: "destructive" });
+      toast.error("Eintrag konnte nicht erstellt werden.");
     } finally {
       setCreating(false);
     }
@@ -96,10 +93,10 @@ export default function BrainSettingsPage() {
   const handleDelete = async (id: string) => {
     try {
       await brainApi.delete(id);
-      toast({ title: "Geloescht", description: "Eintrag wurde entfernt." });
+      toast.success("Eintrag wurde entfernt.");
       setEntries((prev) => prev.filter((e) => e.id !== id));
     } catch {
-      toast({ title: "Fehler", description: "Eintrag konnte nicht geloescht werden.", variant: "destructive" });
+      toast.error("Eintrag konnte nicht geloescht werden.");
     }
   };
 
@@ -211,7 +208,8 @@ export default function BrainSettingsPage() {
             </div>
             <div className="space-y-2">
               <Label>Inhalt</Label>
-              <Textarea
+              <textarea
+                className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                 placeholder="Wissensinhalt..."
                 value={newEntry.content}
                 onChange={(e) => setNewEntry((p) => ({ ...p, content: e.target.value }))}
