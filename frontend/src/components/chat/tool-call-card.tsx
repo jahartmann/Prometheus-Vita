@@ -54,13 +54,13 @@ export function ToolCallCard({ toolCall }: ToolCallCardProps) {
                 : JSON.stringify(toolCall.arguments, null, 2)}
             </pre>
           </div>
-          {toolCall.result && (
+          {toolCall.result != null && (
             <div>
               <div className="font-medium text-muted-foreground">Ergebnis:</div>
               <pre className="mt-1 max-h-48 overflow-auto rounded bg-muted p-2">
                 {typeof toolCall.result === "string"
                   ? toolCall.result
-                  : JSON.stringify(toolCall.result, null, 2)}
+                  : JSON.stringify(toolCall.result, null, 2) as string}
               </pre>
             </div>
           )}
