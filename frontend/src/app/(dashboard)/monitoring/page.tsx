@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import Link from "next/link";
-import { Activity, Cpu, MemoryStick, HardDrive, Server } from "lucide-react";
+import { Activity, Cpu, MemoryStick, HardDrive, Server, Monitor, Box } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -46,7 +46,7 @@ export default function MonitoringPage() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-5">
         <Card>
           <CardContent className="flex items-center gap-4 p-4">
             <Activity className="h-8 w-8 text-green-500" />
@@ -73,6 +73,28 @@ export default function MonitoringPage() {
             <div>
               <p className="text-2xl font-bold">{avgMemory.toFixed(1)}%</p>
               <p className="text-sm text-muted-foreground">RAM (Durchschnitt)</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="flex items-center gap-4 p-4">
+            <Monitor className="h-8 w-8 text-orange-500" />
+            <div>
+              <p className="text-2xl font-bold">
+                {statuses.reduce((s, st) => s + st.vm_running, 0)} / {statuses.reduce((s, st) => s + st.vm_count, 0)}
+              </p>
+              <p className="text-sm text-muted-foreground">VMs aktiv</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="flex items-center gap-4 p-4">
+            <Box className="h-8 w-8 text-teal-500" />
+            <div>
+              <p className="text-2xl font-bold">
+                {statuses.reduce((s, st) => s + st.ct_running, 0)} / {statuses.reduce((s, st) => s + st.ct_count, 0)}
+              </p>
+              <p className="text-sm text-muted-foreground">CTs aktiv</p>
             </div>
           </CardContent>
         </Card>
@@ -124,6 +146,9 @@ export default function MonitoringPage() {
                             <span>{cpuPercent.toFixed(1)}%</span>
                           </div>
                           <Progress value={cpuPercent} className="h-2" />
+                          <p className="text-xs text-muted-foreground">
+                            {status.cpu_cores} Cores &middot; {status.cpu_model}
+                          </p>
                         </div>
 
                         <div className="space-y-1">
@@ -138,6 +163,18 @@ export default function MonitoringPage() {
                           <Progress value={memPercent} className="h-2" />
                         </div>
 
+                        {status.swap_total > 0 && (
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between text-sm">
+                              <span>Swap</span>
+                              <span>
+                                {formatBytes(status.swap_used)} / {formatBytes(status.swap_total)}
+                              </span>
+                            </div>
+                            <Progress value={(status.swap_used / status.swap_total) * 100} className="h-2" />
+                          </div>
+                        )}
+
                         <div className="space-y-1">
                           <div className="flex items-center justify-between text-sm">
                             <span className="flex items-center gap-1">
@@ -150,9 +187,15 @@ export default function MonitoringPage() {
                           <Progress value={diskPercent} className="h-2" />
                         </div>
 
-                        <p className="text-xs text-muted-foreground">
-                          Uptime: {Math.floor(status.uptime / 86400)}d {Math.floor((status.uptime % 86400) / 3600)}h
-                        </p>
+                        <div className="flex items-center justify-between text-xs text-muted-foreground">
+                          <span>Load: {status.load_average?.map((l) => l.toFixed(2)).join(", ")}</span>
+                          <span>VMs: {status.vm_running}/{status.vm_count} &middot; CTs: {status.ct_running}/{status.ct_count}</span>
+                        </div>
+
+                        <div className="flex items-center justify-between text-xs text-muted-foreground">
+                          <span>Uptime: {Math.floor(status.uptime / 86400)}d {Math.floor((status.uptime % 86400) / 3600)}h</span>
+                          <span>PVE {status.pve_version}</span>
+                        </div>
                       </div>
                     ) : (
                       <p className="text-sm text-muted-foreground">

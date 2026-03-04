@@ -12,14 +12,16 @@ export function TelegramLinkCard() {
   const [loading, setLoading] = useState(false);
   const [linkCode, setLinkCode] = useState<string | null>(null);
   const [botUsername, setBotUsername] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchStatus = useCallback(async () => {
     try {
       const resp = await telegramApi.status();
       const data = resp.data?.data || resp.data;
       setStatus(data);
+      setError(null);
     } catch {
-      // Telegram might not be enabled
+      setError("Telegram-Service ist nicht erreichbar. Bitte pruefen Sie, ob der Dienst laeuft.");
     }
   }, []);
 
@@ -29,6 +31,7 @@ export function TelegramLinkCard() {
 
   const handleLink = async () => {
     setLoading(true);
+    setError(null);
     try {
       const resp = await telegramApi.link();
       const data = resp.data?.data || resp.data;
@@ -36,7 +39,7 @@ export function TelegramLinkCard() {
       setBotUsername(data.bot_username);
       fetchStatus();
     } catch {
-      // Error handled silently
+      setError("Telegram-Verknuepfung fehlgeschlagen. Bitte versuchen Sie es spaeter erneut.");
     } finally {
       setLoading(false);
     }
@@ -44,18 +47,19 @@ export function TelegramLinkCard() {
 
   const handleUnlink = async () => {
     setLoading(true);
+    setError(null);
     try {
       await telegramApi.unlink();
       setStatus(null);
       setLinkCode(null);
     } catch {
-      // Error handled silently
+      setError("Verknuepfung konnte nicht aufgehoben werden.");
     } finally {
       setLoading(false);
     }
   };
 
-  if (!status?.bot_enabled && !status) return null;
+  if (!status?.bot_enabled && !status && !error) return null;
 
   return (
     <Card>
@@ -63,6 +67,11 @@ export function TelegramLinkCard() {
         <CardTitle className="text-base">Telegram-Verknuepfung</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
+        {error && (
+          <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+            {error}
+          </div>
+        )}
         {status?.is_verified ? (
           <div className="space-y-2">
             <div className="flex items-center gap-2">

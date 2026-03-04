@@ -5,7 +5,7 @@ import type {
   ChatResponse,
   AgentToolCall,
 } from "@/types/api";
-import { chatApi } from "@/lib/api";
+import { chatApi, toArray } from "@/lib/api";
 
 interface ChatState {
   conversations: ChatConversation[];
@@ -43,7 +43,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const convs = await chatApi.listConversations();
-      set({ conversations: convs || [], isLoading: false });
+      set({ conversations: toArray<ChatConversation>(convs), isLoading: false });
     } catch {
       set({ error: "Konversationen konnten nicht geladen werden", isLoading: false });
     }
@@ -58,7 +58,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       ]);
       set({
         currentConversation: conv,
-        messages: msgs || [],
+        messages: toArray<ChatMessage>(msgs),
         isLoading: false,
       });
     } catch {
@@ -92,13 +92,13 @@ export const useChatStore = create<ChatState>()((set, get) => ({
 
       // If new conversation, update state
       if (!currentConversation) {
-        const convs = await chatApi.listConversations();
-        const newConv = (convs || []).find(
+        const convs = toArray<ChatConversation>(await chatApi.listConversations());
+        const newConv = convs.find(
           (c: ChatConversation) => c.id === resp.conversation_id
         );
         set({
           currentConversation: newConv || null,
-          conversations: convs || [],
+          conversations: convs,
         });
       }
 

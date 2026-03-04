@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { UpdateCheck } from "@/types/api";
-import { updateApi } from "@/lib/api";
+import { updateApi, toArray } from "@/lib/api";
 
 interface UpdateState {
   checks: UpdateCheck[];
@@ -22,7 +22,7 @@ export const useUpdateStore = create<UpdateState>()((set) => ({
     set({ isLoading: true, error: null });
     try {
       const resp = await updateApi.listAll();
-      set({ checks: resp.data?.data || resp.data || [], isLoading: false });
+      set({ checks: toArray<UpdateCheck>(resp.data), isLoading: false });
     } catch {
       set({ error: "Updates konnten nicht geladen werden", isLoading: false });
     }
@@ -31,7 +31,7 @@ export const useUpdateStore = create<UpdateState>()((set) => ({
   fetchByNode: async (nodeId: string) => {
     try {
       const resp = await updateApi.listByNode(nodeId);
-      const data = resp.data?.data || resp.data || [];
+      const data = toArray<UpdateCheck>(resp.data);
       set((state) => ({
         nodeChecks: { ...state.nodeChecks, [nodeId]: data },
       }));

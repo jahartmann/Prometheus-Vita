@@ -81,13 +81,25 @@ interface SidebarProps {
 export function Sidebar({ collapsed = false }: SidebarProps) {
   const pathname = usePathname();
   const { nodes, fetchNodes } = useNodeStore();
-  const [nodesOpen, setNodesOpen] = useState(true);
+  const [nodesOpen, setNodesOpen] = useState(pathname.startsWith("/nodes"));
   const [openNodes, setOpenNodes] = useState<Record<string, boolean>>({});
   const [onboardOpen, setOnboardOpen] = useState(false);
 
   useEffect(() => {
     fetchNodes();
   }, [fetchNodes]);
+
+  // Auto-open only the active node when path changes
+  useEffect(() => {
+    if (pathname.startsWith("/nodes/")) {
+      const segments = pathname.split("/");
+      const activeNodeId = segments[2];
+      if (activeNodeId) {
+        setNodesOpen(true);
+        setOpenNodes((prev) => ({ ...prev, [activeNodeId]: true }));
+      }
+    }
+  }, [pathname]);
 
   const isActive = (href: string, matchPrefix?: string) => {
     if (matchPrefix) {

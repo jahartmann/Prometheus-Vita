@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { X, Plus, Trash2, MessageSquare } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { X, Plus, Trash2, MessageSquare, Menu } from "lucide-react";
 import { useChatStore } from "@/stores/chat-store";
 import { ChatMessage } from "./chat-message";
 import { ChatInput } from "./chat-input";
@@ -27,6 +27,7 @@ export function ChatPanel() {
   } = useChatStore();
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [showSidebar, setShowSidebar] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -41,9 +42,12 @@ export function ChatPanel() {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-y-0 right-0 z-50 flex w-[420px] max-w-full shadow-xl">
+    <div className="fixed inset-y-0 right-0 z-50 flex w-full sm:w-[420px] max-w-full shadow-xl">
       {/* Conversation sidebar */}
-      <div className="flex w-[140px] flex-col border-l border-r bg-card">
+      <div className={cn(
+        "flex-col border-l border-r bg-card w-[140px]",
+        showSidebar ? "flex" : "hidden sm:flex"
+      )}>
         <div className="flex items-center justify-between border-b px-2 py-2">
           <span className="text-xs font-semibold">Chats</span>
           <Button
@@ -64,7 +68,7 @@ export function ChatPanel() {
                 "group flex cursor-pointer items-center gap-1 border-b px-2 py-2 text-xs hover:bg-accent",
                 currentConversation?.id === conv.id && "bg-accent"
               )}
-              onClick={() => selectConversation(conv.id)}
+              onClick={() => { selectConversation(conv.id); setShowSidebar(false); }}
             >
               <MessageSquare className="h-3 w-3 shrink-0 text-muted-foreground" />
               <span className="flex-1 truncate">{conv.title}</span>
@@ -86,9 +90,19 @@ export function ChatPanel() {
       <div className="flex flex-1 flex-col border-l bg-background">
         {/* Header */}
         <div className="flex items-center justify-between border-b px-4 py-2">
-          <h3 className="text-sm font-semibold">
-            {currentConversation?.title || "AI Assistent"}
-          </h3>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 sm:hidden"
+              onClick={() => setShowSidebar((v) => !v)}
+            >
+              <Menu className="h-4 w-4" />
+            </Button>
+            <h3 className="text-sm font-semibold">
+              {currentConversation?.title || "AI Assistent"}
+            </h3>
+          </div>
           <Button
             variant="ghost"
             size="icon"

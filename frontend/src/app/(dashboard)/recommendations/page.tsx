@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { RefreshCw, TrendingDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { rightsizingApi } from "@/lib/api";
+import { rightsizingApi, toArray } from "@/lib/api";
 import { useNodeStore } from "@/stores/node-store";
 import { RecommendationList } from "@/components/recommendations/recommendation-list";
 import type { ResourceRecommendation } from "@/types/api";
@@ -18,7 +18,7 @@ export default function RecommendationsPage() {
     setIsLoading(true);
     try {
       const resp = await rightsizingApi.listAll();
-      setRecommendations(resp.data?.data || resp.data || []);
+      setRecommendations(toArray<ResourceRecommendation>(resp.data));
     } catch {
       // Fehler
     } finally {
