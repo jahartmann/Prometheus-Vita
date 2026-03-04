@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 import type { ConfigBackup, BackupSchedule } from "@/types/api";
-import { backupApi, scheduleApi } from "@/lib/api";
+import { backupApi, scheduleApi, toArray } from "@/lib/api";
 
 interface BackupState {
   backups: ConfigBackup[];
@@ -25,7 +25,7 @@ export const useBackupStore = create<BackupState>()((set) => ({
     set({ isLoading: true, error: null });
     try {
       const response = await backupApi.listBackups(nodeId);
-      set({ backups: response.data?.data || response.data || [], isLoading: false });
+      set({ backups: toArray<ConfigBackup>(response.data), isLoading: false });
     } catch {
       set({ error: "Backups konnten nicht geladen werden", isLoading: false });
     }
@@ -51,7 +51,7 @@ export const useBackupStore = create<BackupState>()((set) => ({
   fetchSchedules: async (nodeId: string) => {
     try {
       const response = await scheduleApi.listSchedules(nodeId);
-      set({ schedules: response.data?.data || response.data || [] });
+      set({ schedules: toArray<BackupSchedule>(response.data) });
     } catch {
       // Schedules nicht verfuegbar
     }

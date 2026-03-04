@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { EscalationPolicy, AlertIncident } from "@/types/api";
-import { escalationApi } from "@/lib/api";
+import { escalationApi, toArray } from "@/lib/api";
 
 interface EscalationState {
   policies: EscalationPolicy[];
@@ -22,7 +22,7 @@ export const useEscalationStore = create<EscalationState>()((set) => ({
     set({ isLoading: true, error: null });
     try {
       const response = await escalationApi.listPolicies();
-      set({ policies: response.data?.data || response.data || [], isLoading: false });
+      set({ policies: toArray<EscalationPolicy>(response.data), isLoading: false });
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : "Eskalationsrichtlinien konnten nicht geladen werden";
@@ -34,7 +34,7 @@ export const useEscalationStore = create<EscalationState>()((set) => ({
     set({ isLoading: true, error: null });
     try {
       const response = await escalationApi.listIncidents(limit, offset);
-      set({ incidents: response.data?.data || response.data || [], isLoading: false });
+      set({ incidents: toArray<AlertIncident>(response.data), isLoading: false });
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : "Vorfaelle konnten nicht geladen werden";

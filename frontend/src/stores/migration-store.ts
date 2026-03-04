@@ -1,7 +1,7 @@
 "use client";
 
 import { create } from "zustand";
-import { migrationApi } from "@/lib/api";
+import { migrationApi, toArray } from "@/lib/api";
 import type { VMMigration } from "@/types/api";
 
 interface MigrationState {
@@ -37,12 +37,11 @@ export const useMigrationStore = create<MigrationState>()((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const res = await migrationApi.list();
-      const migrations = res.data.data || [];
+      const migrations = toArray<VMMigration>(res.data);
       set({
         migrations,
         activeMigrations: migrations.filter(
-          (m: VMMigration) =>
-            !["completed", "failed", "cancelled"].includes(m.status)
+          (m) => !["completed", "failed", "cancelled"].includes(m.status)
         ),
         isLoading: false,
       });
@@ -55,12 +54,11 @@ export const useMigrationStore = create<MigrationState>()((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const res = await migrationApi.listByNode(nodeId);
-      const migrations = res.data.data || [];
+      const migrations = toArray<VMMigration>(res.data);
       set({
         migrations,
         activeMigrations: migrations.filter(
-          (m: VMMigration) =>
-            !["completed", "failed", "cancelled"].includes(m.status)
+          (m) => !["completed", "failed", "cancelled"].includes(m.status)
         ),
         isLoading: false,
       });
@@ -71,7 +69,7 @@ export const useMigrationStore = create<MigrationState>()((set, get) => ({
 
   startMigration: async (data) => {
     const res = await migrationApi.start(data);
-    const migration = res.data.data;
+    const migration = res.data?.data || res.data;
     set((state) => ({
       migrations: [migration, ...state.migrations],
       activeMigrations: [migration, ...state.activeMigrations],

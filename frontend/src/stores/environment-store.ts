@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { Environment } from "@/types/api";
-import { environmentApi } from "@/lib/api";
+import { environmentApi, toArray } from "@/lib/api";
 
 interface EnvironmentState {
   environments: Environment[];
@@ -22,7 +22,7 @@ export const useEnvironmentStore = create<EnvironmentState>()((set) => ({
     set({ isLoading: true, error: null });
     try {
       const resp = await environmentApi.list();
-      set({ environments: resp.data?.data || resp.data || [], isLoading: false });
+      set({ environments: toArray<Environment>(resp.data), isLoading: false });
     } catch {
       set({ error: "Umgebungen konnten nicht geladen werden", isLoading: false });
     }

@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 import type { NodeProfile, DRReadinessScore, RecoveryRunbook, DRSimulationResult } from "@/types/api";
-import { drApi } from "@/lib/api";
+import { drApi, toArray } from "@/lib/api";
 
 interface DRState {
   profile: NodeProfile | null;
@@ -70,7 +70,7 @@ export const useDRStore = create<DRState>()((set) => ({
     set({ isLoading: true, error: null });
     try {
       const response = await drApi.listAllScores();
-      set({ scores: response.data?.data || response.data || [], isLoading: false });
+      set({ scores: toArray<DRReadinessScore>(response.data), isLoading: false });
     } catch {
       set({ error: "DR Scores konnten nicht geladen werden", isLoading: false });
     }
@@ -80,7 +80,7 @@ export const useDRStore = create<DRState>()((set) => ({
     set({ isLoading: true, error: null });
     try {
       const response = await drApi.listRunbooks(nodeId);
-      set({ runbooks: response.data?.data || response.data || [], isLoading: false });
+      set({ runbooks: toArray<RecoveryRunbook>(response.data), isLoading: false });
     } catch {
       set({ error: "Runbooks konnten nicht geladen werden", isLoading: false });
     }

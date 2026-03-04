@@ -62,6 +62,19 @@ api.interceptors.response.use(
 
 export default api;
 
+/**
+ * Safely extract an array from an API response, handling both
+ * interceptor-unwrapped and raw envelope responses.
+ */
+export function toArray<T>(data: unknown): T[] {
+  if (Array.isArray(data)) return data;
+  if (data && typeof data === "object" && "data" in (data as Record<string, unknown>)) {
+    const inner = (data as Record<string, unknown>).data;
+    if (Array.isArray(inner)) return inner;
+  }
+  return [];
+}
+
 // Backup API
 export const backupApi = {
   listAll: () => api.get("/backups"),

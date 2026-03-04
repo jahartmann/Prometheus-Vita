@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { Node, NodeStatus, VM } from "@/types/api";
-import api from "@/lib/api";
+import api, { toArray } from "@/lib/api";
 
 interface NodeState {
   nodes: Node[];
@@ -29,7 +29,7 @@ export const useNodeStore = create<NodeState>()((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const response = await api.get<Node[]>("/nodes");
-      set({ nodes: response.data || [], isLoading: false });
+      set({ nodes: toArray<Node>(response.data), isLoading: false });
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : "Nodes konnten nicht geladen werden";
@@ -52,7 +52,7 @@ export const useNodeStore = create<NodeState>()((set, get) => ({
     try {
       const response = await api.get<VM[]>(`/nodes/${nodeId}/vms`);
       set((state) => ({
-        nodeVMs: { ...state.nodeVMs, [nodeId]: response.data || [] },
+        nodeVMs: { ...state.nodeVMs, [nodeId]: toArray<VM>(response.data) },
       }));
     } catch {
       // VMs nicht verfuegbar

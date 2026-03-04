@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { AnomalyRecord } from "@/types/api";
-import { anomalyApi } from "@/lib/api";
+import { anomalyApi, toArray } from "@/lib/api";
 
 interface AnomalyState {
   anomalies: AnomalyRecord[];
@@ -23,7 +23,7 @@ export const useAnomalyStore = create<AnomalyState>()((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const data = await anomalyApi.listUnresolved();
-      set({ anomalies: data || [], isLoading: false });
+      set({ anomalies: toArray<AnomalyRecord>(data), isLoading: false });
     } catch {
       set({ error: "Anomalien konnten nicht geladen werden", isLoading: false });
     }
@@ -33,7 +33,7 @@ export const useAnomalyStore = create<AnomalyState>()((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const data = await anomalyApi.listByNode(nodeId);
-      set({ nodeAnomalies: data || [], isLoading: false });
+      set({ nodeAnomalies: toArray<AnomalyRecord>(data), isLoading: false });
     } catch {
       set({ error: "Node-Anomalien konnten nicht geladen werden", isLoading: false });
     }
