@@ -16,19 +16,46 @@ import (
 
 const maxToolIterations = 10
 
-const systemPrompt = `Du bist ein Prometheus AI-Assistent fuer Proxmox-Infrastruktur-Management.
-Du kannst Nodes ueberwachen, VMs auflisten, Backups erstellen, Metriken abfragen und Storage-Informationen abrufen.
-Antworte immer auf Deutsch. Sei praezise und hilfreich.
-Wenn du Informationen ueber die Infrastruktur brauchst, nutze die verfuegbaren Tools.`
+func buildSystemPrompt(autonomyLevel int) string {
+	autonomyDesc := ""
+	switch autonomyLevel {
+	case model.AutonomyReadOnly:
+		autonomyDesc = "Dein Autonomie-Level ist 'Nur Lesen'. Du darfst nur lesende Tools verwenden. Schreibende Aktionen sind nicht erlaubt."
+	case model.AutonomyConfirm:
+		autonomyDesc = "Dein Autonomie-Level ist 'Mit Bestaetigung'. Schreibende Aktionen erfordern eine Genehmigung des Benutzers."
+	case model.AutonomyFullAuto:
+		autonomyDesc = "Dein Autonomie-Level ist 'Voll-Automatisch'. Du darfst alle Aktionen sofort ausfuehren."
+	}
+
+	return fmt.Sprintf(`Du bist Prometheus, ein autonomer KI-Assistent fuer Proxmox-Infrastruktur-Management.
+
+Deine Faehigkeiten:
+- Nodes und VMs ueberwachen und verwalten
+- VMs starten, stoppen und migrieren
+- Backups erstellen und wiederherstellen
+- SSH-Befehle auf Nodes ausfuehren
+- Metriken und Anomalien analysieren
+- Konfigurationsdrift erkennen
+- Updates pruefen und Empfehlungen geben
+- Wissen speichern und abrufen
+
+%s
+
+Du bist proaktiv: Wenn der Benutzer eine Aufgabe beschreibt, fuehre sie eigenstaendig aus.
+Nutze deine Tools um Informationen zu sammeln und Aktionen durchzufuehren.
+Erklaere was du tust und warum.
+Antworte immer auf Deutsch. Sei praezise und hilfreich.`, autonomyDesc)
+}
 
 type Service struct {
-	llmRegistry  *llm.Registry
-	toolRegistry *ToolRegistry
-	convRepo     repository.ChatConversationRepository
-	msgRepo      repository.ChatMessageRepository
-	toolCallRepo repository.ToolCallRepository
-	approvalRepo repository.ApprovalRepository
-	userRepo     repository.UserRepository
+	llmRegistry     *llm.Registry
+	toolRegistry    *ToolRegistry
+	convRepo        repository.ChatConversationRepository
+	msgRepo         repository.ChatMessageRepository
+	toolCallRepo    repository.ToolCallRepository
+	approvalRepo    repository.ApprovalRepository
+	userRepo        repository.UserRepository
+	agentConfigRepo repository.AgentConfigRepository
 }
 
 func NewService(
@@ -39,15 +66,17 @@ func NewService(
 	toolCallRepo repository.ToolCallRepository,
 	approvalRepo repository.ApprovalRepository,
 	userRepo repository.UserRepository,
+	agentConfigRepo repository.AgentConfigRepository,
 ) *Service {
 	return &Service{
-		llmRegistry:  llmRegistry,
-		toolRegistry: toolRegistry,
-		convRepo:     convRepo,
-		msgRepo:      msgRepo,
-		toolCallRepo: toolCallRepo,
-		approvalRepo: approvalRepo,
-		userRepo:     userRepo,
+		llmRegistry:     llmRegistry,
+		toolRegistry:    toolRegistry,
+		convRepo:        convRepo,
+		msgRepo:         msgRepo,
+		toolCallRepo:    toolCallRepo,
+		approvalRepo:    approvalRepo,
+		userRepo:        userRepo,
+		agentConfigRepo: agentConfigRepo,
 	}
 }
 
@@ -55,26 +84,49 @@ func (s *Service) GetTool(name string) (Tool, bool) {
 	return s.toolRegistry.Get(name)
 }
 
+// getConfiguredModel reads the model from agent_config table. Returns empty string if not configured.
+func (s *Service) getConfiguredModel(ctx context.Context) string {
+	if s.agentConfigRepo == nil {
+		return ""
+	}
+	model, err := s.agentConfigRepo.Get(ctx, "llm_model")
+	if err != nil {
+		return ""
+	}
+	return model
+}
+
 func (s *Service) Chat(ctx context.Context, userID uuid.UUID, req model.ChatRequest) (*model.ChatResponse, error) {
+	// Resolve model: request > agent_config > registry default
+	resolvedModel := req.Model
+	if resolvedModel == "" || resolvedModel == "default" {
+		resolvedModel = s.getConfiguredModel(ctx)
+	}
+	if resolvedModel == "" {
+		resolvedModel = s.llmRegistry.DefaultModel()
+	}
+
+	// Get user autonomy level for system prompt
+	autonomyLevel := model.AutonomyConfirm // default
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err == nil {
+		autonomyLevel = user.AutonomyLevel
+	}
+
 	// 1. Get or create conversation
 	var conv *model.ChatConversation
 	isNew := false
 
 	if req.ConversationID != nil {
-		var err error
 		conv, err = s.convRepo.GetByID(ctx, *req.ConversationID)
 		if err != nil {
 			return nil, fmt.Errorf("get conversation: %w", err)
 		}
 	} else {
-		modelName := req.Model
-		if modelName == "" {
-			modelName = s.llmRegistry.DefaultModel()
-		}
 		conv = &model.ChatConversation{
 			UserID: userID,
 			Title:  "Neue Konversation",
-			Model:  modelName,
+			Model:  resolvedModel,
 		}
 		if err := s.convRepo.Create(ctx, conv); err != nil {
 			return nil, fmt.Errorf("create conversation: %w", err)
@@ -88,9 +140,9 @@ func (s *Service) Chat(ctx context.Context, userID uuid.UUID, req model.ChatRequ
 		return nil, fmt.Errorf("list messages: %w", err)
 	}
 
-	// 3. Build LLM messages
+	// 3. Build LLM messages with autonomy-aware system prompt
 	llmMessages := []llm.Message{
-		{Role: "system", Content: systemPrompt},
+		{Role: "system", Content: buildSystemPrompt(autonomyLevel)},
 	}
 	for _, m := range existingMsgs {
 		msg := llm.Message{
@@ -122,8 +174,11 @@ func (s *Service) Chat(ctx context.Context, userID uuid.UUID, req model.ChatRequ
 		Content: req.Message,
 	})
 
-	// 5. Get LLM provider
-	modelName := conv.Model
+	// 5. Get LLM provider - use resolved model, fallback to conversation model
+	modelName := resolvedModel
+	if modelName == "" {
+		modelName = conv.Model
+	}
 	if modelName == "" || modelName == "default" {
 		modelName = s.llmRegistry.DefaultModel()
 	}
@@ -239,28 +294,31 @@ func (s *Service) executeTool(ctx context.Context, userID uuid.UUID, convID uuid
 		return fmt.Sprintf(`{"error": "Tool '%s' nicht gefunden"}`, tc.Function.Name)
 	}
 
-	// Check autonomy level
-	user, err := s.userRepo.GetByID(ctx, userID)
-	if err == nil && !tool.ReadOnly() {
-		switch user.AutonomyLevel {
-		case model.AutonomyReadOnly:
-			return `{"error": "Dein Autonomie-Level erlaubt keine schreibenden Operationen. Bitte erhoehe das Level in den Einstellungen."}`
-		case model.AutonomyConfirm:
-			// Create pending approval
-			approval := &model.AgentPendingApproval{
-				UserID:         userID,
-				ConversationID: convID,
-				MessageID:      msgID,
-				ToolName:       tc.Function.Name,
-				Arguments:      json.RawMessage(tc.Function.Arguments),
-				Status:         model.ApprovalPending,
-			}
-			if s.approvalRepo != nil {
-				if err := s.approvalRepo.Create(ctx, approval); err != nil {
-					slog.Warn("failed to create approval", slog.Any("error", err))
+	// Check autonomy level for write tools
+	if !tool.ReadOnly() {
+		user, err := s.userRepo.GetByID(ctx, userID)
+		if err == nil {
+			switch user.AutonomyLevel {
+			case model.AutonomyReadOnly:
+				return `{"error": "Dein Autonomie-Level erlaubt keine schreibenden Operationen. Bitte erhoehe das Level in den Einstellungen."}`
+			case model.AutonomyConfirm:
+				// Create pending approval
+				approval := &model.AgentPendingApproval{
+					UserID:         userID,
+					ConversationID: convID,
+					MessageID:      msgID,
+					ToolName:       tc.Function.Name,
+					Arguments:      json.RawMessage(tc.Function.Arguments),
+					Status:         model.ApprovalPending,
 				}
+				if s.approvalRepo != nil {
+					if err := s.approvalRepo.Create(ctx, approval); err != nil {
+						slog.Warn("failed to create approval", slog.Any("error", err))
+					}
+				}
+				return fmt.Sprintf(`{"pending_approval": true, "approval_id": "%s", "message": "Diese Aktion erfordert eine Genehmigung. Bitte genehmige sie im Approval-Bereich."}`, approval.ID.String())
+			// AutonomyFullAuto: fall through to execute
 			}
-			return fmt.Sprintf(`{"pending_approval": true, "approval_id": "%s", "message": "Diese Aktion erfordert eine Genehmigung. Bitte genehmige sie im Approval-Bereich."}`, approval.ID.String())
 		}
 	}
 

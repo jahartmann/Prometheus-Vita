@@ -17,11 +17,20 @@ import (
 )
 
 type BotService struct {
-	botToken   string
-	agentSvc   *agent.Service
-	linkRepo   repository.TelegramLinkRepository
-	convRepo   repository.TelegramConversationRepository
-	lastOffset int64
+	botToken        string
+	agentSvc        *agent.Service
+	linkRepo        repository.TelegramLinkRepository
+	convRepo        repository.TelegramConversationRepository
+	agentConfigRepo repository.AgentConfigRepository
+	lastOffset      int64
+	// pendingConfirmations tracks chatID -> pending action for autonomy level 1
+	pendingConfirmations map[int64]*pendingAction
+}
+
+type pendingAction struct {
+	chatID  int64
+	userID  uuid.UUID
+	request model.ChatRequest
 }
 
 func NewBotService(
@@ -29,12 +38,15 @@ func NewBotService(
 	agentSvc *agent.Service,
 	linkRepo repository.TelegramLinkRepository,
 	convRepo repository.TelegramConversationRepository,
+	agentConfigRepo repository.AgentConfigRepository,
 ) *BotService {
 	return &BotService{
-		botToken: botToken,
-		agentSvc: agentSvc,
-		linkRepo: linkRepo,
-		convRepo: convRepo,
+		botToken:             botToken,
+		agentSvc:             agentSvc,
+		linkRepo:             linkRepo,
+		convRepo:             convRepo,
+		agentConfigRepo:      agentConfigRepo,
+		pendingConfirmations: make(map[int64]*pendingAction),
 	}
 }
 
@@ -98,6 +110,18 @@ func (s *BotService) GetBotUsername(ctx context.Context) (string, error) {
 	return result.Result.Username, nil
 }
 
+// getConfiguredModel reads the model from agent_config table.
+func (s *BotService) getConfiguredModel(ctx context.Context) string {
+	if s.agentConfigRepo == nil {
+		return ""
+	}
+	model, err := s.agentConfigRepo.Get(ctx, "llm_model")
+	if err != nil {
+		return ""
+	}
+	return model
+}
+
 // PollUpdates fetches new messages from Telegram.
 func (s *BotService) PollUpdates(ctx context.Context) error {
 	url := fmt.Sprintf("https://api.telegram.org/bot%s/getUpdates?offset=%d&timeout=1&limit=20",
@@ -141,6 +165,19 @@ func (s *BotService) processUpdate(ctx context.Context, msg *Message) {
 	// Handle commands
 	if strings.HasPrefix(text, "/") {
 		s.handleCommand(ctx, chatID, text, msg.From)
+		return
+	}
+
+	// Check for pending confirmation (autonomy level 1)
+	if pending, ok := s.pendingConfirmations[chatID]; ok {
+		delete(s.pendingConfirmations, chatID)
+		lower := strings.ToLower(text)
+		if lower == "ja" || lower == "yes" || lower == "j" || lower == "y" {
+			s.sendMessage(ctx, chatID, "Aktion wird ausgefuehrt...")
+			s.executeChatRequest(ctx, chatID, pending.userID, pending.request)
+		} else {
+			s.sendMessage(ctx, chatID, "Aktion abgebrochen.")
+		}
 		return
 	}
 
@@ -247,13 +284,21 @@ func (s *BotService) handleChatMessage(ctx context.Context, chatID int64, text s
 		}
 	}
 
+	// Use configured model from agent_config
+	configuredModel := s.getConfiguredModel(ctx)
+
 	// Build chat request
 	chatReq := model.ChatRequest{
 		Message:        text,
 		ConversationID: tc.ConversationID,
+		Model:          configuredModel,
 	}
 
-	resp, err := s.agentSvc.Chat(ctx, link.UserID, chatReq)
+	s.executeChatRequest(ctx, chatID, link.UserID, chatReq)
+}
+
+func (s *BotService) executeChatRequest(ctx context.Context, chatID int64, userID uuid.UUID, chatReq model.ChatRequest) {
+	resp, err := s.agentSvc.Chat(ctx, userID, chatReq)
 	if err != nil {
 		slog.Error("agent chat failed for telegram",
 			slog.Int64("chat_id", chatID),
@@ -263,16 +308,67 @@ func (s *BotService) handleChatMessage(ctx context.Context, chatID int64, text s
 	}
 
 	// Update conversation mapping if new
-	if tc.ConversationID == nil {
+	tc, _ := s.convRepo.GetByChatID(ctx, chatID)
+	if tc != nil && tc.ConversationID == nil {
 		convID := resp.ConversationID
 		if err := s.convRepo.UpdateConversationID(ctx, tc.ID, convID); err != nil {
 			slog.Error("failed to update telegram conversation mapping", slog.Any("error", err))
 		}
 	}
 
+	// Format tool calls for Telegram
+	var parts []string
+	if len(resp.ToolCalls) > 0 {
+		parts = append(parts, formatToolCallsForTelegram(resp.ToolCalls))
+	}
+
 	// Format and send response
-	formatted := FormatAgentResponse(resp.Message.Content)
-	s.sendMessage(ctx, chatID, formatted)
+	if resp.Message.Content != "" {
+		parts = append(parts, FormatAgentResponse(resp.Message.Content))
+	}
+
+	if len(parts) == 0 {
+		s.sendMessage(ctx, chatID, "Keine Antwort erhalten.")
+		return
+	}
+
+	fullResponse := strings.Join(parts, "\n\n")
+	s.sendMessage(ctx, chatID, fullResponse)
+}
+
+// formatToolCallsForTelegram formats tool call results nicely for Telegram.
+func formatToolCallsForTelegram(toolCalls []model.AgentToolCall) string {
+	if len(toolCalls) == 0 {
+		return ""
+	}
+
+	var sb strings.Builder
+	for _, tc := range toolCalls {
+		icon := "✅"
+		if tc.Status == "error" {
+			icon = "❌"
+		} else if tc.Status == "running" {
+			icon = "⏳"
+		}
+
+		sb.WriteString(fmt.Sprintf("%s *%s*", icon, escapeTelegramMarkdown(tc.ToolName)))
+		if tc.DurationMs > 0 {
+			sb.WriteString(fmt.Sprintf(" (%dms)", tc.DurationMs))
+		}
+		sb.WriteString("\n")
+
+		// Show brief result for errors
+		if tc.Status == "error" && tc.Result != nil {
+			var errResult map[string]string
+			if json.Unmarshal(tc.Result, &errResult) == nil {
+				if errMsg, ok := errResult["error"]; ok {
+					sb.WriteString(fmt.Sprintf("  _Fehler: %s_\n", escapeTelegramMarkdown(errMsg)))
+				}
+			}
+		}
+	}
+
+	return sb.String()
 }
 
 func (s *BotService) sendMessage(ctx context.Context, chatID int64, text string) {

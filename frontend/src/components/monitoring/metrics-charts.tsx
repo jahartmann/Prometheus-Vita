@@ -13,7 +13,7 @@ import {
   Area,
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { formatBytes } from "@/lib/utils";
+import { formatBandwidth } from "@/lib/utils";
 import type { MetricsRecord } from "@/types/api";
 
 interface MetricsChartsProps {
@@ -163,16 +163,19 @@ export function MetricsCharts({ metrics }: MetricsChartsProps) {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Netzwerk I/O</CardTitle>
+          <CardTitle className="text-base">Netzwerk I/O (Rate)</CardTitle>
         </CardHeader>
         <CardContent>
           <ResponsiveContainer width="100%" height={250}>
             <LineChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
               <XAxis dataKey="time" tick={{ fontSize: 10 }} />
-              <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => formatBytes(v)} />
+              <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => formatBandwidth(v)} />
               <Tooltip
-                formatter={(v: number) => formatBytes(v)}
+                formatter={(v: number, name: string) => {
+                  const label = name === "Eingehend" ? "Eingehend" : "Ausgehend";
+                  return [formatBandwidth(v), label];
+                }}
                 contentStyle={{
                   backgroundColor: "hsl(var(--card))",
                   border: "1px solid hsl(var(--border))",
@@ -182,7 +185,7 @@ export function MetricsCharts({ metrics }: MetricsChartsProps) {
               <Line
                 type="monotone"
                 dataKey="netIn"
-                stroke="hsl(142, 71%, 45%)"
+                stroke="hsl(210, 80%, 55%)"
                 strokeWidth={2}
                 dot={false}
                 name="Eingehend"
@@ -190,7 +193,7 @@ export function MetricsCharts({ metrics }: MetricsChartsProps) {
               <Line
                 type="monotone"
                 dataKey="netOut"
-                stroke="hsl(0, 84%, 60%)"
+                stroke="hsl(142, 71%, 45%)"
                 strokeWidth={2}
                 dot={false}
                 name="Ausgehend"

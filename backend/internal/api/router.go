@@ -108,6 +108,9 @@ func SetupRouter(e *echo.Echo, cfg *config.Config, jwtSvc *auth.JWTService, h Ha
 	nodes.GET("/:id/isos", h.Node.ListISOs)
 	nodes.GET("/:id/templates", h.Node.ListTemplates)
 
+	// VM tags (read)
+	nodes.GET("/:id/vms/:vmid/tags", h.Tag.GetVMTags)
+
 	// Node backups (read)
 	nodes.GET("/:id/backups", h.Backup.ListBackups)
 	nodes.GET("/:id/backup-schedules", h.Schedule.ListSchedules)
@@ -115,6 +118,12 @@ func SetupRouter(e *echo.Echo, cfg *config.Config, jwtSvc *auth.JWTService, h Ha
 	// Node metrics
 	nodes.GET("/:id/metrics", h.Metrics.GetMetricsHistory)
 	nodes.GET("/:id/metrics/summary", h.Metrics.GetMetricsSummary)
+	nodes.GET("/:id/network-summary", h.Metrics.GetNodeNetworkSummary)
+	nodes.GET("/:id/vms/:vmid/metrics", h.Metrics.GetVMMetricsHistory)
+	nodes.GET("/:id/vms/:vmid/network-summary", h.Metrics.GetVMNetworkSummary)
+
+	// Cluster-wide network summary
+	protected.GET("/network-summary", h.Metrics.GetClusterNetworkSummary)
 
 	// PBS (read)
 	nodes.GET("/:id/pbs/datastores", h.PBS.GetDatastores)
@@ -151,6 +160,10 @@ func SetupRouter(e *echo.Echo, cfg *config.Config, jwtSvc *auth.JWTService, h Ha
 	adminOp.POST("/:id/tags", h.Tag.AddTagToNode)
 	adminOp.DELETE("/:id/tags/:tagId", h.Tag.RemoveTagFromNode)
 
+	// VM tag assignment (admin/operator)
+	adminOp.POST("/:id/vms/:vmid/tags", h.Tag.AddTagToVM)
+	adminOp.DELETE("/:id/vms/:vmid/tags/:tagId", h.Tag.RemoveTagFromVM)
+
 	// Admin only
 	admin := nodes.Group("")
 	admin.Use(middleware.RequireRole(model.RoleAdmin))
@@ -180,10 +193,13 @@ func SetupRouter(e *echo.Echo, cfg *config.Config, jwtSvc *auth.JWTService, h Ha
 	// Tags
 	tags := protected.Group("/tags")
 	tags.GET("", h.Tag.ListTags)
+	tags.GET("/:id/vms", h.Tag.GetVMsByTag)
 
 	tagsAdmin := tags.Group("")
 	tagsAdmin.Use(middleware.RequireRole(model.RoleAdmin, model.RoleOperator))
 	tagsAdmin.POST("", h.Tag.CreateTag)
+	tagsAdmin.POST("/:id/bulk-assign", h.Tag.BulkAssignTag)
+	tagsAdmin.POST("/:id/bulk-remove", h.Tag.BulkRemoveTag)
 
 	tagsAdminOnly := tags.Group("")
 	tagsAdminOnly.Use(middleware.RequireRole(model.RoleAdmin))

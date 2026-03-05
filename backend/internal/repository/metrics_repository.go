@@ -17,6 +17,14 @@ type MetricsRepository interface {
 	GetByNode(ctx context.Context, nodeID uuid.UUID, since, until time.Time) ([]model.MetricsRecord, error)
 	GetLatest(ctx context.Context, nodeID uuid.UUID) (*model.MetricsRecord, error)
 	DeleteOlderThan(ctx context.Context, before time.Time) (int64, error)
+
+	// VM metrics
+	InsertVMMetrics(ctx context.Context, record *model.VMMetricsRecord) error
+	GetVMMetricsHistory(ctx context.Context, nodeID uuid.UUID, vmid int, start, end time.Time) ([]model.VMMetricsRecord, error)
+	GetVMNetworkSummary(ctx context.Context, nodeID uuid.UUID, vmid int, start, end time.Time) (*model.NetworkSummary, error)
+	GetNodeNetworkSummary(ctx context.Context, nodeID uuid.UUID, start, end time.Time) (*model.NetworkSummary, error)
+	GetClusterNetworkSummary(ctx context.Context, start, end time.Time) (*model.NetworkSummary, error)
+	CleanupVMMetrics(ctx context.Context, before time.Time) (int64, error)
 }
 
 type pgMetricsRepository struct {
@@ -93,6 +101,104 @@ func (r *pgMetricsRepository) DeleteOlderThan(ctx context.Context, before time.T
 	ct, err := r.db.Exec(ctx, "DELETE FROM metrics_records WHERE recorded_at < $1", before)
 	if err != nil {
 		return 0, fmt.Errorf("delete old metrics: %w", err)
+	}
+	return ct.RowsAffected(), nil
+}
+
+func (r *pgMetricsRepository) InsertVMMetrics(ctx context.Context, record *model.VMMetricsRecord) error {
+	_, err := r.db.Exec(ctx,
+		`INSERT INTO vm_metrics_history (node_id, vmid, vm_type, cpu_usage, mem_used, mem_total,
+		        net_in, net_out, disk_read, disk_write, recorded_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+		record.NodeID, record.VMID, record.VMType, record.CPUUsage,
+		record.MemUsed, record.MemTotal,
+		record.NetIn, record.NetOut,
+		record.DiskRead, record.DiskWrite, record.RecordedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("insert vm metrics: %w", err)
+	}
+	return nil
+}
+
+func (r *pgMetricsRepository) GetVMMetricsHistory(ctx context.Context, nodeID uuid.UUID, vmid int, start, end time.Time) ([]model.VMMetricsRecord, error) {
+	rows, err := r.db.Query(ctx,
+		`SELECT id, node_id, vmid, vm_type, cpu_usage, mem_used, mem_total,
+		        net_in, net_out, disk_read, disk_write, recorded_at
+		 FROM vm_metrics_history
+		 WHERE node_id = $1 AND vmid = $2 AND recorded_at BETWEEN $3 AND $4
+		 ORDER BY recorded_at ASC`, nodeID, vmid, start, end)
+	if err != nil {
+		return nil, fmt.Errorf("get vm metrics history: %w", err)
+	}
+	defer rows.Close()
+
+	var records []model.VMMetricsRecord
+	for rows.Next() {
+		var m model.VMMetricsRecord
+		if err := rows.Scan(&m.ID, &m.NodeID, &m.VMID, &m.VMType, &m.CPUUsage,
+			&m.MemUsed, &m.MemTotal,
+			&m.NetIn, &m.NetOut,
+			&m.DiskRead, &m.DiskWrite, &m.RecordedAt); err != nil {
+			return nil, fmt.Errorf("scan vm metrics record: %w", err)
+		}
+		records = append(records, m)
+	}
+	return records, rows.Err()
+}
+
+func (r *pgMetricsRepository) GetVMNetworkSummary(ctx context.Context, nodeID uuid.UUID, vmid int, start, end time.Time) (*model.NetworkSummary, error) {
+	var s model.NetworkSummary
+	err := r.db.QueryRow(ctx,
+		`SELECT COALESCE(SUM(net_in), 0), COALESCE(SUM(net_out), 0),
+		        COALESCE(AVG(net_in), 0)::bigint, COALESCE(AVG(net_out), 0)::bigint,
+		        COALESCE(MAX(net_in), 0), COALESCE(MAX(net_out), 0)
+		 FROM vm_metrics_history
+		 WHERE node_id = $1 AND vmid = $2 AND recorded_at BETWEEN $3 AND $4`,
+		nodeID, vmid, start, end,
+	).Scan(&s.TotalIn, &s.TotalOut, &s.AvgInRate, &s.AvgOutRate, &s.PeakInRate, &s.PeakOutRate)
+	if err != nil {
+		return nil, fmt.Errorf("get vm network summary: %w", err)
+	}
+	return &s, nil
+}
+
+func (r *pgMetricsRepository) GetNodeNetworkSummary(ctx context.Context, nodeID uuid.UUID, start, end time.Time) (*model.NetworkSummary, error) {
+	var s model.NetworkSummary
+	err := r.db.QueryRow(ctx,
+		`SELECT COALESCE(SUM(net_in), 0), COALESCE(SUM(net_out), 0),
+		        COALESCE(AVG(net_in), 0)::bigint, COALESCE(AVG(net_out), 0)::bigint,
+		        COALESCE(MAX(net_in), 0), COALESCE(MAX(net_out), 0)
+		 FROM metrics_records
+		 WHERE node_id = $1 AND recorded_at BETWEEN $2 AND $3`,
+		nodeID, start, end,
+	).Scan(&s.TotalIn, &s.TotalOut, &s.AvgInRate, &s.AvgOutRate, &s.PeakInRate, &s.PeakOutRate)
+	if err != nil {
+		return nil, fmt.Errorf("get node network summary: %w", err)
+	}
+	return &s, nil
+}
+
+func (r *pgMetricsRepository) GetClusterNetworkSummary(ctx context.Context, start, end time.Time) (*model.NetworkSummary, error) {
+	var s model.NetworkSummary
+	err := r.db.QueryRow(ctx,
+		`SELECT COALESCE(SUM(net_in), 0), COALESCE(SUM(net_out), 0),
+		        COALESCE(AVG(net_in), 0)::bigint, COALESCE(AVG(net_out), 0)::bigint,
+		        COALESCE(MAX(net_in), 0), COALESCE(MAX(net_out), 0)
+		 FROM metrics_records
+		 WHERE recorded_at BETWEEN $1 AND $2`,
+		start, end,
+	).Scan(&s.TotalIn, &s.TotalOut, &s.AvgInRate, &s.AvgOutRate, &s.PeakInRate, &s.PeakOutRate)
+	if err != nil {
+		return nil, fmt.Errorf("get cluster network summary: %w", err)
+	}
+	return &s, nil
+}
+
+func (r *pgMetricsRepository) CleanupVMMetrics(ctx context.Context, before time.Time) (int64, error) {
+	ct, err := r.db.Exec(ctx, "DELETE FROM vm_metrics_history WHERE recorded_at < $1", before)
+	if err != nil {
+		return 0, fmt.Errorf("cleanup vm metrics: %w", err)
 	}
 	return ct.RowsAffected(), nil
 }

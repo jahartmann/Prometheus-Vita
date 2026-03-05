@@ -88,10 +88,11 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     }));
 
     try {
+      // Send without model - backend picks it from agent_config
       const resp: ChatResponse = await chatApi.chat({
         conversation_id: currentConversation?.id,
         message,
-        model,
+        model: model || undefined,
       });
 
       // If new conversation, update state

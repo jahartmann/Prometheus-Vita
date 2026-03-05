@@ -22,6 +22,7 @@ import { useBackupStore } from "@/stores/backup-store";
 import { VmList } from "./vm-list";
 import { BackupList } from "@/components/backup/backup-list";
 import { MetricsCharts } from "@/components/monitoring/metrics-charts";
+import { NetworkTraffic } from "@/components/monitoring/network-traffic";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { NetworkInterfaces } from "@/components/nodes/network-interfaces";
 import { StorageOverview } from "@/components/nodes/storage-overview";
@@ -34,6 +35,7 @@ import {
   formatBytes,
   formatUptime,
   formatPercentage,
+  formatBandwidth,
   getUsageBgColor,
 } from "@/lib/utils";
 
@@ -71,7 +73,7 @@ export function NodeDetail({ node }: NodeDetailProps) {
   const { nodeStatus, nodeVMs, nodeErrors, fetchNodeVMs } = useNodeStore();
   const status = nodeStatus[node.id];
   const vms = nodeVMs[node.id] || [];
-  const { metrics } = useNodeMetrics(node.id, node.is_online);
+  const { metrics, latestMetrics } = useNodeMetrics(node.id, node.is_online);
   const { fetchBackups, fetchSchedules } = useBackupStore();
   const [metricsHistory, setMetricsHistory] = useState<MetricsRecord[]>([]);
   const [networkIfaces, setNetworkIfaces] = useState<NetworkInterface[]>([]);
@@ -244,11 +246,11 @@ export function NodeDetail({ node }: NodeDetailProps) {
               <Network className="h-5 w-5 text-primary" />
               <div>
                 <p className="text-xs text-muted-foreground">Netzwerk</p>
-                <p className="text-sm font-bold text-green-600">
-                  In: {formatBytes(status.net_in ?? 0)}
+                <p className="text-sm font-bold text-blue-500">
+                  &darr; {formatBandwidth(latestMetrics?.network_in ?? 0)}
                 </p>
-                <p className="text-sm font-bold text-red-500">
-                  Out: {formatBytes(status.net_out ?? 0)}
+                <p className="text-sm font-bold text-green-500">
+                  &uarr; {formatBandwidth(latestMetrics?.network_out ?? 0)}
                 </p>
               </div>
             </CardContent>
@@ -420,9 +422,12 @@ export function NodeDetail({ node }: NodeDetailProps) {
           <BackupList nodeId={node.id} />
         </TabsContent>
 
-        <TabsContent value="monitoring">
+        <TabsContent value="monitoring" className="space-y-6">
           <ErrorBoundary>
             <MetricsCharts metrics={metricsHistory} />
+          </ErrorBoundary>
+          <ErrorBoundary>
+            <NetworkTraffic nodeId={node.id} />
           </ErrorBoundary>
         </TabsContent>
 

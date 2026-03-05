@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import {
   Search,
   ArrowUpDown,
@@ -16,6 +16,8 @@ import {
   ArrowRightLeft,
   Loader2,
   CheckSquare,
+  Tag,
+  Tags,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -49,11 +51,13 @@ import {
 import { MigrateVmDialog } from "@/components/migration/migrate-vm-dialog";
 import { SnapshotDialog } from "@/components/nodes/snapshot-dialog";
 import { VmConsole } from "@/components/nodes/vm-console";
+import { VMTagAssignDialog } from "@/components/tags/vm-tag-assign-dialog";
+import { BulkTagDialog } from "@/components/tags/bulk-tag-dialog";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { useNodeStore } from "@/stores/node-store";
-import { vmApi, bulkVmApi, toArray } from "@/lib/api";
+import { vmApi, bulkVmApi, tagApi, toArray } from "@/lib/api";
 import { toast } from "sonner";
-import type { VM, BulkVMResult } from "@/types/api";
+import type { VM, BulkVMResult, Tag as TagType } from "@/types/api";
 import { formatBytes, formatUptime, formatPercentage } from "@/lib/utils";
 
 interface VmListProps {
@@ -77,8 +81,35 @@ export function VmList({ vms, nodeId, onRefresh }: VmListProps) {
   const [selectedVmIds, setSelectedVmIds] = useState<Set<number>>(new Set());
   const [bulkAction, setBulkAction] = useState<string | null>(null);
   const [bulkLoading, setBulkLoading] = useState(false);
+  const [tagDialogVm, setTagDialogVm] = useState<VM | null>(null);
+  const [bulkTagOpen, setBulkTagOpen] = useState(false);
+  const [vmTagsMap, setVmTagsMap] = useState<Record<number, TagType[]>>({});
   const { nodes, nodeStatus } = useNodeStore();
   const currentNode = nodes.find((n) => n.id === nodeId);
+
+  // Fetch tags for all VMs
+  const fetchAllVmTags = useCallback(async () => {
+    const tagPromises = vms.map(async (vm) => {
+      try {
+        const res = await tagApi.getVMTags(nodeId, vm.vmid);
+        return { vmid: vm.vmid, tags: toArray<TagType>(res.data) };
+      } catch {
+        return { vmid: vm.vmid, tags: [] };
+      }
+    });
+    const results = await Promise.all(tagPromises);
+    const map: Record<number, TagType[]> = {};
+    for (const r of results) {
+      map[r.vmid] = r.tags;
+    }
+    setVmTagsMap(map);
+  }, [nodeId, vms]);
+
+  useEffect(() => {
+    if (vms.length > 0) {
+      fetchAllVmTags();
+    }
+  }, [vms, fetchAllVmTags]);
 
   const toggleSort = (field: SortField) => {
     if (sortField === field) {
@@ -320,6 +351,15 @@ export function VmList({ vms, nodeId, onRefresh }: VmListProps) {
             </Button>
             <Button
               size="sm"
+              variant="outline"
+              onClick={() => setBulkTagOpen(true)}
+              disabled={bulkLoading}
+            >
+              <Tags className="mr-1 h-3 w-3" />
+              Tags zuweisen
+            </Button>
+            <Button
+              size="sm"
               variant="ghost"
               onClick={() => setSelectedVmIds(new Set())}
             >
@@ -346,6 +386,7 @@ export function VmList({ vms, nodeId, onRefresh }: VmListProps) {
               <TableHead>
                 <SortButton field="name">Name</SortButton>
               </TableHead>
+              <TableHead>Tags</TableHead>
               <TableHead>
                 <SortButton field="status">Status</SortButton>
               </TableHead>
@@ -379,6 +420,27 @@ export function VmList({ vms, nodeId, onRefresh }: VmListProps) {
                   )}
                 </TableCell>
                 <TableCell className="font-medium">{vm.name}</TableCell>
+                <TableCell>
+                  <div className="flex flex-wrap gap-1 items-center">
+                    {(vmTagsMap[vm.vmid] || []).map((tag) => (
+                      <Badge
+                        key={tag.id}
+                        className="text-[10px] px-1.5 py-0 h-5 cursor-pointer"
+                        style={{ backgroundColor: tag.color, color: "white" }}
+                        onClick={() => setTagDialogVm(vm)}
+                      >
+                        {tag.name}
+                      </Badge>
+                    ))}
+                    <button
+                      className="h-5 w-5 rounded-full border border-dashed border-muted-foreground/40 flex items-center justify-center hover:bg-accent transition-colors"
+                      onClick={() => setTagDialogVm(vm)}
+                      title="Tags verwalten"
+                    >
+                      <Tag className="h-2.5 w-2.5 text-muted-foreground" />
+                    </button>
+                  </div>
+                </TableCell>
                 <TableCell>
                   <Badge variant={statusVariant(vm.status)}>{vm.status}</Badge>
                 </TableCell>
@@ -465,6 +527,11 @@ export function VmList({ vms, nodeId, onRefresh }: VmListProps) {
                         )}
 
                         <DropdownMenuSeparator />
+
+                        <DropdownMenuItem onClick={() => setTagDialogVm(vm)}>
+                          <Tag className="h-4 w-4" />
+                          Tags
+                        </DropdownMenuItem>
 
                         <DropdownMenuItem onClick={() => setMigrateVm(vm)}>
                           <ArrowRightLeft className="h-4 w-4" />
@@ -591,6 +658,33 @@ export function VmList({ vms, nodeId, onRefresh }: VmListProps) {
           />
         </ErrorBoundary>
       )}
+
+      {/* VM Tag Assign Dialog */}
+      {tagDialogVm && (
+        <VMTagAssignDialog
+          open={!!tagDialogVm}
+          onOpenChange={(open) => !open && setTagDialogVm(null)}
+          nodeId={nodeId}
+          vmid={tagDialogVm.vmid}
+          vmType={tagDialogVm.type}
+          vmName={tagDialogVm.name}
+          onTagsChanged={fetchAllVmTags}
+        />
+      )}
+
+      {/* Bulk Tag Dialog */}
+      <BulkTagDialog
+        open={bulkTagOpen}
+        onOpenChange={setBulkTagOpen}
+        preselectedVMs={Array.from(selectedVmIds).map((vmid) => {
+          const vm = vms.find((v) => v.vmid === vmid);
+          return { nodeId, vmid, vmType: vm?.type || "qemu" };
+        })}
+        onComplete={() => {
+          fetchAllVmTags();
+          setSelectedVmIds(new Set());
+        }}
+      />
     </div>
   );
 }

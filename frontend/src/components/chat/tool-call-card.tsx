@@ -1,7 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronRight, Wrench, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Wrench,
+  CheckCircle2,
+  XCircle,
+  Loader2,
+  Clock,
+} from "lucide-react";
 import type { AgentToolCall } from "@/types/api";
 import { cn } from "@/lib/utils";
 
@@ -12,29 +20,49 @@ interface ToolCallCardProps {
 export function ToolCallCard({ toolCall }: ToolCallCardProps) {
   const [expanded, setExpanded] = useState(false);
 
-  const statusIcon = {
-    success: <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />,
-    error: <XCircle className="h-3.5 w-3.5 text-destructive" />,
-    running: <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500" />,
-    pending: <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />,
-  }[toolCall.status] || null;
+  const statusConfig = {
+    success: {
+      icon: <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />,
+      bg: "border-green-500/20 bg-green-500/5",
+    },
+    error: {
+      icon: <XCircle className="h-3.5 w-3.5 text-destructive" />,
+      bg: "border-destructive/20 bg-destructive/5",
+    },
+    running: {
+      icon: <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500" />,
+      bg: "border-blue-500/20 bg-blue-500/5",
+    },
+    pending: {
+      icon: <Clock className="h-3.5 w-3.5 text-muted-foreground" />,
+      bg: "border-muted bg-muted/30",
+    },
+  }[toolCall.status] || {
+    icon: null,
+    bg: "border-muted bg-muted/30",
+  };
 
   return (
-    <div className="mx-4 my-1 rounded-md border bg-muted/30 text-xs">
+    <div
+      className={cn(
+        "mx-4 md:mx-6 my-1.5 rounded-lg border text-xs transition-colors",
+        statusConfig.bg
+      )}
+    >
       <button
         onClick={() => setExpanded(!expanded)}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-muted/50"
+        className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-muted/30 rounded-lg transition-colors"
       >
         {expanded ? (
-          <ChevronDown className="h-3 w-3 shrink-0" />
+          <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
         ) : (
-          <ChevronRight className="h-3 w-3 shrink-0" />
+          <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" />
         )}
         <Wrench className="h-3 w-3 shrink-0 text-muted-foreground" />
-        <span className="font-medium">{toolCall.tool_name}</span>
-        {statusIcon}
+        <span className="font-medium font-mono">{toolCall.tool_name}</span>
+        {statusConfig.icon}
         {toolCall.duration_ms > 0 && (
-          <span className="ml-auto text-muted-foreground">
+          <span className="ml-auto text-muted-foreground tabular-nums">
             {toolCall.duration_ms}ms
           </span>
         )}
@@ -42,11 +70,11 @@ export function ToolCallCard({ toolCall }: ToolCallCardProps) {
       {expanded && (
         <div className="space-y-2 border-t px-3 py-2">
           <div>
-            <div className="font-medium text-muted-foreground">Argumente:</div>
+            <div className="font-medium text-muted-foreground mb-1">Argumente:</div>
             <pre
               className={cn(
-                "mt-1 overflow-auto rounded bg-muted p-2",
-                "max-h-32"
+                "overflow-auto rounded-md bg-muted/50 p-2 text-[11px]",
+                "max-h-32 scrollbar-thin"
               )}
             >
               {typeof toolCall.arguments === "string"
@@ -56,11 +84,11 @@ export function ToolCallCard({ toolCall }: ToolCallCardProps) {
           </div>
           {toolCall.result != null && (
             <div>
-              <div className="font-medium text-muted-foreground">Ergebnis:</div>
-              <pre className="mt-1 max-h-48 overflow-auto rounded bg-muted p-2">
+              <div className="font-medium text-muted-foreground mb-1">Ergebnis:</div>
+              <pre className="max-h-48 overflow-auto rounded-md bg-muted/50 p-2 text-[11px] scrollbar-thin">
                 {typeof toolCall.result === "string"
                   ? toolCall.result
-                  : JSON.stringify(toolCall.result, null, 2) as string}
+                  : (JSON.stringify(toolCall.result, null, 2) as string)}
               </pre>
             </div>
           )}

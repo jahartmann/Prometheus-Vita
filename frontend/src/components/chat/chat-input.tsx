@@ -35,32 +35,38 @@ export function ChatInput({ onSend, disabled, isSending }: ChatInputProps) {
     setValue(e.target.value);
     const el = e.target;
     el.style.height = "auto";
-    el.style.height = Math.min(el.scrollHeight, 150) + "px";
+    el.style.height = Math.min(el.scrollHeight, 200) + "px";
   };
 
   return (
-    <div className="flex items-end gap-2 border-t bg-background p-3">
-      <textarea
-        ref={textareaRef}
-        value={value}
-        onChange={handleInput}
-        onKeyDown={handleKeyDown}
-        placeholder="Nachricht eingeben..."
-        disabled={disabled || isSending}
-        rows={1}
-        className="flex-1 resize-none rounded-md border bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-      />
-      <Button
-        size="icon"
-        onClick={handleSubmit}
-        disabled={!value.trim() || disabled || isSending}
-      >
-        {isSending ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
-        ) : (
-          <Send className="h-4 w-4" />
-        )}
-      </Button>
+    <div className="border-t bg-background p-3 md:p-4">
+      <div className="flex items-end gap-2">
+        <textarea
+          ref={textareaRef}
+          value={value}
+          onChange={handleInput}
+          onKeyDown={handleKeyDown}
+          placeholder="Nachricht eingeben... (Shift+Enter fuer Zeilenumbruch)"
+          disabled={disabled || isSending}
+          rows={1}
+          className="flex-1 resize-none rounded-xl border bg-muted/50 px-4 py-2.5 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:bg-background disabled:opacity-50 transition-colors"
+        />
+        <Button
+          size="icon"
+          className="h-10 w-10 rounded-xl shrink-0"
+          onClick={handleSubmit}
+          disabled={!value.trim() || disabled || isSending}
+        >
+          {isSending ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Send className="h-4 w-4" />
+          )}
+        </Button>
+      </div>
+      <p className="mt-1.5 text-[10px] text-muted-foreground text-center hidden md:block">
+        Prometheus kann Fehler machen. Bitte ueberpruefe wichtige Informationen.
+      </p>
     </div>
   );
 }

@@ -252,7 +252,7 @@ func main() {
 	agentToolRegistry.Register(agent.NewRecallKnowledgeTool(brainSvc))
 
 	// Agent Service
-	agentSvc := agent.NewService(llmRegistry, agentToolRegistry, chatConvRepo, chatMsgRepo, toolCallRepo, approvalRepo, userRepo)
+	agentSvc := agent.NewService(llmRegistry, agentToolRegistry, chatConvRepo, chatMsgRepo, toolCallRepo, approvalRepo, userRepo, agentConfigRepo)
 
 	// Telegram Bot Service (conditional)
 	var telegramBotSvc *telegramService.BotService
@@ -263,6 +263,7 @@ func main() {
 			agentSvc,
 			telegramLinkRepo,
 			telegramConvRepo,
+			agentConfigRepo,
 		)
 		slog.Info("telegram bot enabled")
 	}

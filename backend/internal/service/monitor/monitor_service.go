@@ -169,3 +169,26 @@ func (s *Service) GetMetricsSummary(ctx context.Context, nodeID uuid.UUID, since
 
 	return summary, nil
 }
+
+func (s *Service) GetVMMetricsHistory(ctx context.Context, nodeID uuid.UUID, vmid int, start, end time.Time) ([]model.VMMetricsRecord, error) {
+	records, err := s.metricsRepo.GetVMMetricsHistory(ctx, nodeID, vmid, start, end)
+	if err != nil {
+		return nil, fmt.Errorf("get vm metrics history: %w", err)
+	}
+	if records == nil {
+		records = []model.VMMetricsRecord{}
+	}
+	return records, nil
+}
+
+func (s *Service) GetVMNetworkSummary(ctx context.Context, nodeID uuid.UUID, vmid int, start, end time.Time) (*model.NetworkSummary, error) {
+	return s.metricsRepo.GetVMNetworkSummary(ctx, nodeID, vmid, start, end)
+}
+
+func (s *Service) GetNodeNetworkSummary(ctx context.Context, nodeID uuid.UUID, start, end time.Time) (*model.NetworkSummary, error) {
+	return s.metricsRepo.GetNodeNetworkSummary(ctx, nodeID, start, end)
+}
+
+func (s *Service) GetClusterNetworkSummary(ctx context.Context, start, end time.Time) (*model.NetworkSummary, error) {
+	return s.metricsRepo.GetClusterNetworkSummary(ctx, start, end)
+}

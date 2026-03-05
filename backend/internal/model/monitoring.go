@@ -76,3 +76,47 @@ type NodeTag struct {
 type AssignTagRequest struct {
 	TagID string `json:"tag_id" validate:"required"`
 }
+
+type VMTag struct {
+	NodeID    uuid.UUID `json:"node_id"`
+	VMID      int       `json:"vmid"`
+	VMType    string    `json:"vm_type"`
+	TagID     uuid.UUID `json:"tag_id"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type BulkVMTarget struct {
+	NodeID string `json:"node_id"`
+	VMID   int    `json:"vmid"`
+	VMType string `json:"vm_type,omitempty"`
+}
+
+type BulkTagRequest struct {
+	Targets []BulkVMTarget `json:"targets"`
+}
+
+// VMMetricsRecord stores per-VM metrics with network rates (bytes/sec).
+type VMMetricsRecord struct {
+	ID         string    `json:"id"`
+	NodeID     uuid.UUID `json:"node_id"`
+	VMID       int       `json:"vmid"`
+	VMType     string    `json:"vm_type"`
+	CPUUsage   float64   `json:"cpu_usage"`
+	MemUsed    int64     `json:"memory_used"`
+	MemTotal   int64     `json:"memory_total"`
+	NetIn      int64     `json:"net_in"`
+	NetOut     int64     `json:"net_out"`
+	DiskRead   int64     `json:"disk_read"`
+	DiskWrite  int64     `json:"disk_write"`
+	RecordedAt time.Time `json:"recorded_at"`
+}
+
+// NetworkSummary provides aggregated network metrics for a period.
+type NetworkSummary struct {
+	TotalIn     int64 `json:"total_in"`
+	TotalOut    int64 `json:"total_out"`
+	AvgInRate   int64 `json:"avg_in_rate"`
+	AvgOutRate  int64 `json:"avg_out_rate"`
+	PeakInRate  int64 `json:"peak_in_rate"`
+	PeakOutRate int64 `json:"peak_out_rate"`
+}

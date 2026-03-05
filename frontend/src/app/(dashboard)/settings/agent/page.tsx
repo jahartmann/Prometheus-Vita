@@ -78,7 +78,7 @@ export default function AgentSettingsPage() {
     setIsLoading(true);
     try {
       const resp = await agentConfigApi.get();
-      const data = resp.data?.data || resp.data || resp;
+      const data = resp?.data || resp;
       if (data && typeof data === "object") {
         const cfg = data as Record<string, string>;
         setProvider(cfg.llm_provider || "ollama");

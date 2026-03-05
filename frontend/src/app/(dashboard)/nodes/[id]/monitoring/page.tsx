@@ -5,8 +5,11 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useNodeStore } from "@/stores/node-store";
 import { MetricsCharts } from "@/components/monitoring/metrics-charts";
+import { NetworkTraffic } from "@/components/monitoring/network-traffic";
+import { VMNetworkTraffic } from "@/components/monitoring/vm-network-traffic";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { MetricsSummaryCards } from "@/components/monitoring/metrics-summary";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -63,23 +66,46 @@ export default function NodeMonitoringPage() {
           </Button>
           <h1 className="text-2xl font-bold">Monitoring - {node.name}</h1>
         </div>
-        <div className="flex gap-1">
-          {periods.map((p) => (
-            <Button
-              key={p.value}
-              variant={period === p.value ? "default" : "outline"}
-              size="sm"
-              onClick={() => setPeriod(p.value)}
-            >
-              {p.label}
-            </Button>
-          ))}
-        </div>
       </div>
-      {summary && <MetricsSummaryCards summary={summary} />}
-      <ErrorBoundary>
-        <MetricsCharts metrics={metrics} />
-      </ErrorBoundary>
+
+      <Tabs defaultValue="overview">
+        <TabsList>
+          <TabsTrigger value="overview">Uebersicht</TabsTrigger>
+          <TabsTrigger value="network">Netzwerk</TabsTrigger>
+          <TabsTrigger value="vm-traffic">VM Traffic</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview" className="space-y-6">
+          <div className="flex justify-end gap-1">
+            {periods.map((p) => (
+              <Button
+                key={p.value}
+                variant={period === p.value ? "default" : "outline"}
+                size="sm"
+                onClick={() => setPeriod(p.value)}
+              >
+                {p.label}
+              </Button>
+            ))}
+          </div>
+          {summary && <MetricsSummaryCards summary={summary} />}
+          <ErrorBoundary>
+            <MetricsCharts metrics={metrics} />
+          </ErrorBoundary>
+        </TabsContent>
+
+        <TabsContent value="network">
+          <ErrorBoundary>
+            <NetworkTraffic nodeId={nodeId} />
+          </ErrorBoundary>
+        </TabsContent>
+
+        <TabsContent value="vm-traffic">
+          <ErrorBoundary>
+            <VMNetworkTraffic nodeId={nodeId} />
+          </ErrorBoundary>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

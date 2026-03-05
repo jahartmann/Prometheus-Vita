@@ -13,15 +13,17 @@ import {
   ShieldAlert,
   ChevronDown,
   ChevronRight,
+  Tags,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { BulkTagDialog } from "@/components/tags/bulk-tag-dialog";
 import { tagApi, nodeApi, toArray } from "@/lib/api";
 import { toast } from "sonner";
-import type { Tag as TagType, Node, TagSyncAllResult } from "@/types/api";
+import type { Tag as TagType, Node, VMTag, TagSyncAllResult } from "@/types/api";
 
 const colorPresets = [
   "#ef4444",
@@ -37,6 +39,8 @@ const colorPresets = [
 interface TagWithCounts extends TagType {
   nodeCount: number;
   nodeIds: string[];
+  vmCount: number;
+  vmTags: VMTag[];
 }
 
 // Tag policy definitions (UI-only, future-ready)
@@ -95,6 +99,13 @@ export default function TagsPage() {
   // Policies section
   const [policiesOpen, setPoliciesOpen] = useState(false);
 
+  // Bulk tag dialog
+  const [bulkTagOpen, setBulkTagOpen] = useState(false);
+  const [bulkPreselectedTag, setBulkPreselectedTag] = useState<string | undefined>();
+
+  // Expanded VM lists
+  const [expandedTags, setExpandedTags] = useState<Set<string>>(new Set());
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
@@ -107,20 +118,31 @@ export default function TagsPage() {
       const nodeList = toArray<Node>(nodesRes.data);
       setNodes(nodeList);
 
-      // Enrich tags with node counts
+      // Enrich tags with node counts and VM counts
       const enriched: TagWithCounts[] = await Promise.all(
         tagList.map(async (tag) => {
           try {
-            const nodeTagPromises = nodeList.map(async (node) => {
-              const res = await tagApi.getNodeTags(node.id);
-              const nodeTags = toArray<TagType>(res.data);
-              return nodeTags.some((t) => t.id === tag.id) ? node.id : null;
-            });
-            const results = await Promise.all(nodeTagPromises);
-            const nodeIds = results.filter((id): id is string => id !== null);
-            return { ...tag, nodeCount: nodeIds.length, nodeIds };
+            const [nodeResults, vmTagsRes] = await Promise.all([
+              Promise.all(
+                nodeList.map(async (node) => {
+                  const res = await tagApi.getNodeTags(node.id);
+                  const nodeTags = toArray<TagType>(res.data);
+                  return nodeTags.some((t) => t.id === tag.id) ? node.id : null;
+                })
+              ),
+              tagApi.getVMsByTag(tag.id).catch(() => ({ data: [] })),
+            ]);
+            const nodeIds = nodeResults.filter((id): id is string => id !== null);
+            const vmTagList = toArray<VMTag>(vmTagsRes.data);
+            return {
+              ...tag,
+              nodeCount: nodeIds.length,
+              nodeIds,
+              vmCount: vmTagList.length,
+              vmTags: vmTagList,
+            };
           } catch {
-            return { ...tag, nodeCount: 0, nodeIds: [] };
+            return { ...tag, nodeCount: 0, nodeIds: [], vmCount: 0, vmTags: [] };
           }
         })
       );
@@ -339,23 +361,87 @@ export default function TagsPage() {
                           </span>
                           <span className="flex items-center gap-1">
                             <Monitor className="h-3 w-3" />
-                            -- VMs
+                            {tag.vmCount} VMs
                           </span>
                         </div>
-                        {tag.nodeCount > 0 && (
-                          <div className="mt-2 flex flex-wrap gap-1">
-                            {tag.nodeIds.map((nid) => {
-                              const node = nodes.find((n) => n.id === nid);
-                              return (
-                                <Badge
-                                  key={nid}
-                                  variant="outline"
-                                  className="text-xs"
-                                >
-                                  {node?.name || nid.slice(0, 8)}
-                                </Badge>
-                              );
-                            })}
+                        <div className="mt-2 flex items-center gap-2 flex-wrap">
+                          {tag.nodeIds.map((nid) => {
+                            const node = nodes.find((n) => n.id === nid);
+                            return (
+                              <Badge
+                                key={nid}
+                                variant="outline"
+                                className="text-xs"
+                              >
+                                {node?.name || nid.slice(0, 8)}
+                              </Badge>
+                            );
+                          })}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-6 text-xs px-2"
+                            onClick={() => {
+                              setBulkPreselectedTag(tag.id);
+                              setBulkTagOpen(true);
+                            }}
+                          >
+                            <Tags className="mr-1 h-3 w-3" />
+                            VMs zuweisen
+                          </Button>
+                        </div>
+                        {tag.vmCount > 0 && (
+                          <div className="mt-2">
+                            <button
+                              className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+                              onClick={() =>
+                                setExpandedTags((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(tag.id)) {
+                                    next.delete(tag.id);
+                                  } else {
+                                    next.add(tag.id);
+                                  }
+                                  return next;
+                                })
+                              }
+                            >
+                              {expandedTags.has(tag.id) ? (
+                                <ChevronDown className="h-3 w-3" />
+                              ) : (
+                                <ChevronRight className="h-3 w-3" />
+                              )}
+                              {tag.vmCount} VMs anzeigen
+                            </button>
+                            {expandedTags.has(tag.id) && (
+                              <div className="mt-1 space-y-0.5 pl-4">
+                                {tag.vmTags.map((vt) => {
+                                  const node = nodes.find(
+                                    (n) => n.id === vt.node_id
+                                  );
+                                  return (
+                                    <div
+                                      key={`${vt.node_id}-${vt.vmid}`}
+                                      className="flex items-center gap-2 text-xs text-muted-foreground"
+                                    >
+                                      <Monitor className="h-3 w-3" />
+                                      <span className="font-mono">
+                                        {vt.vmid}
+                                      </span>
+                                      <span>
+                                        ({node?.name || vt.node_id.slice(0, 8)})
+                                      </span>
+                                      <Badge
+                                        variant="outline"
+                                        className="text-[10px] h-4 px-1"
+                                      >
+                                        {vt.vm_type}
+                                      </Badge>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
                         )}
                       </CardContent>
@@ -445,6 +531,17 @@ export default function TagsPage() {
           </Button>
         </CardContent>
       </Card>
+
+      {/* Bulk VM Tag Dialog */}
+      <BulkTagDialog
+        open={bulkTagOpen}
+        onOpenChange={(open) => {
+          setBulkTagOpen(open);
+          if (!open) setBulkPreselectedTag(undefined);
+        }}
+        preselectedTagId={bulkPreselectedTag}
+        onComplete={fetchData}
+      />
 
       {/* Tag Policies (future-ready) */}
       <Card>

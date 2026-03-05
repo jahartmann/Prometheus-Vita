@@ -43,3 +43,34 @@ export function getUsageBgColor(percentage: number): string {
   if (percentage >= 75) return "bg-amber-500";
   return "bg-green-500";
 }
+
+/**
+ * Format bytes/sec rate into human-readable bandwidth string.
+ */
+export function formatBandwidth(bytesPerSec: number): string {
+  if (bytesPerSec == null || isNaN(bytesPerSec) || bytesPerSec === 0) return "0 B/s";
+  const k = 1024;
+  const sizes = ["B/s", "KB/s", "MB/s", "GB/s", "TB/s"];
+  const i = Math.floor(Math.log(Math.abs(bytesPerSec)) / Math.log(k));
+  const idx = Math.min(i, sizes.length - 1);
+  return `${parseFloat((bytesPerSec / Math.pow(k, idx)).toFixed(1))} ${sizes[idx]}`;
+}
+
+/**
+ * Format total byte count into human-readable traffic string.
+ */
+export function formatTraffic(bytes: number): string {
+  if (bytes == null || isNaN(bytes) || bytes === 0) return "0 B";
+  const k = 1024;
+  const sizes = ["B", "KB", "MB", "GB", "TB", "PB"];
+  const i = Math.floor(Math.log(Math.abs(bytes)) / Math.log(k));
+  const idx = Math.min(i, sizes.length - 1);
+  return `${parseFloat((bytes / Math.pow(k, idx)).toFixed(1))} ${sizes[idx]}`;
+}
+
+/**
+ * Convert bytes/sec to Mbit/s.
+ */
+export function bytesToMbits(bytesPerSec: number): number {
+  return (bytesPerSec * 8) / (1024 * 1024);
+}

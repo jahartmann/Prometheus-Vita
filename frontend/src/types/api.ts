@@ -309,6 +309,14 @@ export interface Tag {
   created_at: string;
 }
 
+export interface VMTag {
+  node_id: string;
+  vmid: number;
+  vm_type: string;
+  tag_id: string;
+  created_at: string;
+}
+
 // PBS types
 export interface PBSDatastore {
   name: string;
@@ -959,6 +967,31 @@ export interface VNCProxyTicket {
   upid: string;
 }
 
+
+// VM Metrics types
+export interface VMMetricsRecord {
+  id: string;
+  node_id: string;
+  vmid: number;
+  vm_type: string;
+  cpu_usage: number;
+  memory_used: number;
+  memory_total: number;
+  net_in: number;
+  net_out: number;
+  disk_read: number;
+  disk_write: number;
+  recorded_at: string;
+}
+
+export interface NetworkSummary {
+  total_in: number;
+  total_out: number;
+  avg_in_rate: number;
+  avg_out_rate: number;
+  peak_in_rate: number;
+  peak_out_rate: number;
+}
 
 // Cluster Storage types
 export interface ClusterStorageItem {

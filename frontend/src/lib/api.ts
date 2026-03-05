@@ -172,6 +172,14 @@ export const metricsApi = {
     api.get(`/nodes/${nodeId}/metrics`, { params: { since, until } }),
   getSummary: (nodeId: string, period?: string) =>
     api.get(`/nodes/${nodeId}/metrics/summary`, { params: { period } }),
+  getVMMetrics: (nodeId: string, vmid: number, start?: string, end?: string) =>
+    api.get(`/nodes/${nodeId}/vms/${vmid}/metrics`, { params: { start, end } }),
+  getVMNetworkSummary: (nodeId: string, vmid: number, period: string) =>
+    api.get(`/nodes/${nodeId}/vms/${vmid}/network-summary`, { params: { period } }),
+  getNodeNetworkSummary: (nodeId: string, period: string) =>
+    api.get(`/nodes/${nodeId}/network-summary`, { params: { period } }),
+  getClusterNetworkSummary: (period: string) =>
+    api.get(`/network-summary`, { params: { period } }),
 };
 
 // Network API
@@ -207,6 +215,19 @@ export const tagApi = {
   syncFromProxmox: (nodeId: string) =>
     api.post(`/nodes/${nodeId}/tags/sync`),
   syncAll: () => api.post("/tags/sync-all"),
+  // VM tag methods
+  getVMTags: (nodeId: string, vmid: number) =>
+    api.get(`/nodes/${nodeId}/vms/${vmid}/tags`),
+  addToVM: (nodeId: string, vmid: number, tagId: string, vmType?: string) =>
+    api.post(`/nodes/${nodeId}/vms/${vmid}/tags`, { tag_id: tagId, vm_type: vmType }),
+  removeFromVM: (nodeId: string, vmid: number, tagId: string) =>
+    api.delete(`/nodes/${nodeId}/vms/${vmid}/tags/${tagId}`),
+  getVMsByTag: (tagId: string) =>
+    api.get(`/tags/${tagId}/vms`),
+  bulkAssign: (tagId: string, targets: Array<{ node_id: string; vmid: number; vm_type: string }>) =>
+    api.post(`/tags/${tagId}/bulk-assign`, { targets }),
+  bulkRemove: (tagId: string, targets: Array<{ node_id: string; vmid: number }>) =>
+    api.post(`/tags/${tagId}/bulk-remove`, { targets }),
 };
 
 // PBS API
@@ -468,7 +489,7 @@ export const gatewayApi = {
 
 // Agent Config API
 export const agentConfigApi = {
-  get: () => api.get("/agent/config"),
+  get: () => api.get("/agent/config").then((r) => r.data),
   update: (data: Record<string, string>) => api.put("/agent/config", data),
   getModels: () => api.get("/agent/models"),
 };
