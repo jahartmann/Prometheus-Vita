@@ -561,9 +561,15 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 	if m.NewVMID != nil {
 		restoreVMID = *m.NewVMID
 	}
-	s.broadcastLog(m.ID, fmt.Sprintf("Starte Restore auf %s (VMID: %d, Storage: %s)...", targetNode.Name, restoreVMID, m.TargetStorage))
 
-	restoreUPID, err := tgtClient.RestoreVM(ctx, tgtPVENode, targetVzdumpPath, m.TargetStorage, restoreVMID)
+	// Convert filesystem path to Proxmox volume ID format.
+	// API tokens cannot use raw filesystem paths (only root can).
+	// /var/lib/vz/dump/vzdump-qemu-11000-... → local:backup/vzdump-qemu-11000-...
+	restoreArchive := "local:backup/" + vzdumpFilename
+	s.broadcastLog(m.ID, fmt.Sprintf("Starte Restore auf %s (VMID: %d, Storage: %s, Archive: %s)...",
+		targetNode.Name, restoreVMID, m.TargetStorage, restoreArchive))
+
+	restoreUPID, err := tgtClient.RestoreVM(ctx, tgtPVENode, restoreArchive, m.TargetStorage, restoreVMID)
 	if err != nil {
 		// Cleanup vzdump on target
 		_, _ = tgtSSHClient.RunCommand(ctx, fmt.Sprintf("rm -f %q", targetVzdumpPath))
