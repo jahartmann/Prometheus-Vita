@@ -16,13 +16,19 @@ interface AppLayoutProps {
 export function AppLayout({ children }: AppLayoutProps) {
   const [collapsed, setCollapsed] = useState(false);
   const router = useRouter();
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, _hasHydrated } = useAuthStore();
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    // Wait for Zustand to rehydrate from localStorage before checking auth
+    if (_hasHydrated && !isAuthenticated) {
       router.push("/login");
     }
-  }, [isAuthenticated, router]);
+  }, [isAuthenticated, _hasHydrated, router]);
+
+  // Show nothing until hydration is complete (prevents flash)
+  if (!_hasHydrated) {
+    return null;
+  }
 
   if (!isAuthenticated) {
     return null;
