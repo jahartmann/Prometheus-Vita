@@ -562,32 +562,43 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 		restoreVMID = *m.NewVMID
 	}
 
-	// Remove any existing VM config on target (e.g. from a previous failed attempt).
-	// We use SSH because the API may not list broken/partially restored VMs.
-	s.broadcastLog(m.ID, fmt.Sprintf("Prüfe ob VM %d auf Target existiert...", restoreVMID))
+	// In a Proxmox cluster, VMIDs are unique across ALL nodes.
+	// If we restore with the same VMID, we must first unregister the VM from the source.
+	// We save the source config so we can re-register on failure.
+	var sourceConfigBackup string
+	if restoreVMID == m.VMID {
+		s.broadcastLog(m.ID, fmt.Sprintf("Entregistriere VM %d von Source-Node (Cluster-VMID-Konflikt)...", m.VMID))
+
+		// Save the config for rollback
+		configResult, _ := srcSSHClient.RunCommand(ctx, fmt.Sprintf("cat /etc/pve/nodes/%s/qemu-server/%d.conf 2>/dev/null", srcPVENode, m.VMID))
+		if configResult != nil && configResult.ExitCode == 0 {
+			sourceConfigBackup = configResult.Stdout
+		}
+
+		// Remove VM registration from source (config only, not disks)
+		_, _ = srcSSHClient.RunCommand(ctx, fmt.Sprintf("mv /etc/pve/nodes/%s/qemu-server/%d.conf /etc/pve/nodes/%s/qemu-server/%d.conf.mig-backup 2>/dev/null",
+			srcPVENode, m.VMID, srcPVENode, m.VMID))
+		time.Sleep(2 * time.Second)
+		s.broadcastLog(m.ID, fmt.Sprintf("✓ VM %d von Source entregistriert (Config gesichert)", m.VMID))
+	}
+
+	// Also check for leftover config on target
 	checkResult, _ := tgtSSHClient.RunCommand(ctx, fmt.Sprintf("test -f /etc/pve/nodes/%s/qemu-server/%d.conf && echo exists || echo no", tgtPVENode, restoreVMID))
 	if checkResult != nil && strings.Contains(checkResult.Stdout, "exists") {
-		s.broadcastLog(m.ID, fmt.Sprintf("⚠ VM %d Config existiert auf Target - entferne...", restoreVMID))
-		destroyResult, _ := tgtSSHClient.RunCommand(ctx, fmt.Sprintf("qm destroy %d --purge 2>&1 || rm -f /etc/pve/nodes/%s/qemu-server/%d.conf", restoreVMID, tgtPVENode, restoreVMID))
-		if destroyResult != nil && destroyResult.Stdout != "" {
-			s.broadcastLog(m.ID, fmt.Sprintf("  qm destroy: %s", strings.TrimSpace(destroyResult.Stdout)))
-		}
-		time.Sleep(2 * time.Second)
-		s.broadcastLog(m.ID, fmt.Sprintf("✓ Alte VM %d Config entfernt", restoreVMID))
-	} else {
-		s.broadcastLog(m.ID, fmt.Sprintf("✓ VM %d existiert nicht auf Target", restoreVMID))
+		s.broadcastLog(m.ID, fmt.Sprintf("⚠ Alte VM %d Config auf Target gefunden - entferne...", restoreVMID))
+		_, _ = tgtSSHClient.RunCommand(ctx, fmt.Sprintf("rm -f /etc/pve/nodes/%s/qemu-server/%d.conf", tgtPVENode, restoreVMID))
+		time.Sleep(1 * time.Second)
 	}
 
 	// Convert filesystem path to Proxmox volume ID format.
-	// API tokens cannot use raw filesystem paths (only root can).
-	// /var/lib/vz/dump/vzdump-qemu-11000-... → local:backup/vzdump-qemu-11000-...
 	restoreArchive := "local:backup/" + vzdumpFilename
 	s.broadcastLog(m.ID, fmt.Sprintf("Starte Restore auf %s (VMID: %d, Storage: %s, Archive: %s)...",
 		targetNode.Name, restoreVMID, m.TargetStorage, restoreArchive))
 
 	restoreUPID, err := tgtClient.RestoreVM(ctx, tgtPVENode, restoreArchive, m.TargetStorage, restoreVMID)
 	if err != nil {
-		// Cleanup vzdump on target
+		// Restore source config on failure
+		s.rollbackSourceConfig(ctx, srcSSHClient, srcPVENode, m.VMID, sourceConfigBackup)
 		_, _ = tgtSSHClient.RunCommand(ctx, fmt.Sprintf("rm -f %q", targetVzdumpPath))
 		handleError("restoring", fmt.Errorf("restore konnte nicht gestartet werden: %w", err))
 		return
@@ -598,10 +609,15 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 
 	if err := s.pollTaskWithProgress(ctx, tgtClient, tgtPVENode, restoreUPID, m, 81, 94); err != nil {
 		taskLog := s.getTaskLogForError(ctx, tgtClient, tgtPVENode, restoreUPID)
+		// Restore source config on failure
+		s.rollbackSourceConfig(ctx, srcSSHClient, srcPVENode, m.VMID, sourceConfigBackup)
 		_, _ = tgtSSHClient.RunCommand(ctx, fmt.Sprintf("rm -f %q", targetVzdumpPath))
 		handleError("restoring", fmt.Errorf("restore fehlgeschlagen: %w\n\nTask-Log:\n%s", err, taskLog))
 		return
 	}
+
+	// Restore succeeded - delete the backup config on source
+	_, _ = srcSSHClient.RunCommand(ctx, fmt.Sprintf("rm -f /etc/pve/nodes/%s/qemu-server/%d.conf.mig-backup", srcPVENode, m.VMID))
 	s.broadcastLog(m.ID, "✓ VM erfolgreich wiederhergestellt")
 	s.updatePhase(ctx, m, model.MigrationStatusRestoring, "Wiederherstellung abgeschlossen", 95)
 
@@ -975,6 +991,26 @@ func (s *Service) cachePVENodeName(ctx context.Context, node *model.Node, pveNod
 	if err := s.nodeRepo.Update(ctx, node); err != nil {
 		slog.Warn("migration: failed to cache pve_node", slog.Any("error", err))
 	}
+}
+
+// rollbackSourceConfig restores the VM config on the source node if restore on target failed.
+func (s *Service) rollbackSourceConfig(ctx context.Context, srcSSHClient *ssh.Client, srcPVENode string, vmid int, configBackup string) {
+	if configBackup == "" {
+		// Try to restore from .mig-backup file
+		_, _ = srcSSHClient.RunCommand(ctx, fmt.Sprintf(
+			"mv /etc/pve/nodes/%s/qemu-server/%d.conf.mig-backup /etc/pve/nodes/%s/qemu-server/%d.conf 2>/dev/null",
+			srcPVENode, vmid, srcPVENode, vmid))
+		return
+	}
+	// Write back the saved config
+	_, _ = srcSSHClient.RunCommand(ctx, fmt.Sprintf(
+		"cat > /etc/pve/nodes/%s/qemu-server/%d.conf << 'CONFIGEOF'\n%s\nCONFIGEOF",
+		srcPVENode, vmid, configBackup))
+	// Remove backup
+	_, _ = srcSSHClient.RunCommand(ctx, fmt.Sprintf(
+		"rm -f /etc/pve/nodes/%s/qemu-server/%d.conf.mig-backup",
+		srcPVENode, vmid))
+	slog.Info("migration: rolled back source VM config", slog.Int("vmid", vmid))
 }
 
 func (s *Service) tryRestartSourceVM(ctx context.Context, m *model.VMMigration) {
