@@ -77,9 +77,21 @@ func (h *AgentConfigHandler) UpdateConfig(c echo.Context) error {
 
 // GetModels handles GET /agent/models.
 // It discovers available models from the active Ollama instance.
+// Accepts optional ?url= query parameter to test a specific URL before saving.
 func (h *AgentConfigHandler) GetModels(c echo.Context) error {
 	if h.ollamaProvider == nil {
 		return apiPkg.InternalError(c, "Ollama ist nicht konfiguriert. Bitte stelle sicher, dass Ollama laeuft.")
+	}
+
+	// If a URL is provided as query param, temporarily use it for discovery
+	testURL := c.QueryParam("url")
+	if testURL != "" {
+		tempProvider := llm.NewOllamaProvider(testURL)
+		models, err := tempProvider.DiscoverModels(c.Request().Context())
+		if err != nil {
+			return apiPkg.InternalError(c, "Ollama nicht erreichbar unter "+testURL+". Bitte pruefen, ob Ollama laeuft.")
+		}
+		return apiPkg.Success(c, models)
 	}
 
 	models, err := h.ollamaProvider.DiscoverModels(c.Request().Context())

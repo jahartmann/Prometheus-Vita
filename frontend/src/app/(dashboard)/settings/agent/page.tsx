@@ -125,7 +125,7 @@ export default function AgentSettingsPage() {
     setConnectionStatus("idle");
     setConnectionError("");
     try {
-      const resp = await agentConfigApi.getModels();
+      const resp = await agentConfigApi.getModels(ollamaUrl);
       const models = resp.data?.data || resp.data || resp;
       if (Array.isArray(models)) {
         setOllamaModels(models);

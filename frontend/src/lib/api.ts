@@ -491,7 +491,7 @@ export const gatewayApi = {
 export const agentConfigApi = {
   get: () => api.get("/agent/config").then((r) => r.data),
   update: (data: Record<string, string>) => api.put("/agent/config", data),
-  getModels: () => api.get("/agent/models"),
+  getModels: (url?: string) => api.get("/agent/models", { params: url ? { url } : undefined }),
 };
 
 // ISO/Template API
