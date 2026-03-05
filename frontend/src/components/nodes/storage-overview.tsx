@@ -53,14 +53,20 @@ function isZfsType(type: string): boolean {
 export function StorageOverview({ nodeId, status }: StorageOverviewProps) {
   const [storages, setStorages] = useState<StorageItem[]>([]);
   const [showDetails, setShowDetails] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
+    setError("");
     api
       .get(`/nodes/${nodeId}/storage`)
       .then((res) => {
         setStorages(toArray<StorageItem>(res.data));
       })
-      .catch(() => {});
+      .catch((err) => {
+        const msg = err?.response?.data?.error || err?.message || "Storage-Abfrage fehlgeschlagen";
+        console.error("[StorageOverview] Fehler:", msg);
+        setError(msg);
+      });
   }, [nodeId]);
 
   const totalSpace = storages.reduce((acc, s) => acc + s.total, 0);
@@ -70,6 +76,22 @@ export function StorageOverview({ nodeId, status }: StorageOverviewProps) {
 
   const zfsPools = storages.filter((s) => isZfsType(s.type));
   const otherStorages = storages.filter((s) => !isZfsType(s.type));
+
+  if (error) {
+    return (
+      <Card>
+        <CardContent className="p-6">
+          <div className="flex items-center gap-3 text-destructive">
+            <Database className="h-5 w-5" />
+            <div>
+              <p className="font-medium">Storage konnte nicht geladen werden</p>
+              <p className="text-sm text-muted-foreground">{error}</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <div className="space-y-4">
