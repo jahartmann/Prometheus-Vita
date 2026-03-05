@@ -56,10 +56,36 @@ func NewClient(cfg SSHConfig) (*Client, error) {
 	}
 
 	addr := net.JoinHostPort(cfg.Host, fmt.Sprintf("%d", port))
-	client, err := ssh.Dial("tcp", addr, sshConfig)
+	conn, err := net.DialTimeout("tcp", addr, timeout)
 	if err != nil {
-		return nil, fmt.Errorf("dial ssh %s: %w", addr, err)
+		return nil, fmt.Errorf("dial tcp %s: %w", addr, err)
 	}
+
+	// Enable TCP keepalive to prevent connection drops during long transfers
+	if tcpConn, ok := conn.(*net.TCPConn); ok {
+		_ = tcpConn.SetKeepAlive(true)
+		_ = tcpConn.SetKeepAlivePeriod(30 * time.Second)
+	}
+
+	sshConn, chans, reqs, err := ssh.NewClientConn(conn, addr, sshConfig)
+	if err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("ssh handshake %s: %w", addr, err)
+	}
+
+	client := ssh.NewClient(sshConn, chans, reqs)
+
+	// Start SSH-level keepalive (sends request every 30s)
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			_, _, err := client.SendRequest("keepalive@prometheus", true, nil)
+			if err != nil {
+				return
+			}
+		}
+	}()
 
 	return &Client{client: client}, nil
 }
