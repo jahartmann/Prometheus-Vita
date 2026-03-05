@@ -157,8 +157,8 @@ function buildReactFlowGraph(
 }
 
 export function TopologyMap() {
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<RFNode>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<RFEdge>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { nodeStatus, fetchNodes, fetchNodeStatus } = useNodeStore();
