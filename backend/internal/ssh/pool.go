@@ -72,6 +72,13 @@ func (p *Pool) Return(nodeID string, client *Client) {
 	}
 }
 
+// NewDirect creates a fresh SSH connection bypassing the pool.
+// The caller is responsible for closing it. Use for long-running operations
+// like file transfers where pooled connections may be stale.
+func (p *Pool) NewDirect(sshCfg SSHConfig) (*Client, error) {
+	return NewClient(sshCfg)
+}
+
 // CloseAll closes all connections in the pool.
 func (p *Pool) CloseAll() {
 	p.mu.Lock()

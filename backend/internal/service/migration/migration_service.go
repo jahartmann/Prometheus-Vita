@@ -496,7 +496,6 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 
 	// PHASE 3: TRANSFERRING (40-80%)
 	s.updatePhase(ctx, m, model.MigrationStatusTransferring, "Datei wird übertragen...", 41)
-	s.broadcastLog(m.ID, "Starte Transfer von Source zu Target...")
 
 	// Target path: /var/lib/vz/dump/<filename>
 	vzdumpFilename := vzdumpPath
@@ -508,13 +507,30 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 	// Ensure target directory exists
 	_, _ = tgtSSHClient.RunCommand(ctx, "mkdir -p /var/lib/vz/dump")
 
+	// Create fresh SSH connections for the transfer (pooled connections may be stale/dropped)
+	s.broadcastLog(m.ID, "Erstelle dedizierte SSH-Verbindungen für Transfer...")
+	transferSrcClient, err := s.sshPool.NewDirect(srcSSHCfg)
+	if err != nil {
+		handleError("transferring", fmt.Errorf("SSH-Verbindung zu Source für Transfer: %w", err))
+		return
+	}
+	defer transferSrcClient.Close()
+	transferTgtClient, err := s.sshPool.NewDirect(tgtSSHCfg)
+	if err != nil {
+		handleError("transferring", fmt.Errorf("SSH-Verbindung zu Target für Transfer: %w", err))
+		return
+	}
+	defer transferTgtClient.Close()
+	s.broadcastLog(m.ID, "✓ Dedizierte Transfer-Verbindungen hergestellt")
+
 	totalSize := int64(0)
 	if m.VzdumpFileSize != nil {
 		totalSize = *m.VzdumpFileSize
 	}
 
+	s.broadcastLog(m.ID, fmt.Sprintf("Starte Transfer: %s → %s (%s)", sourceNode.Name, targetNode.Name, formatBytesLog(totalSize)))
 	lastLogTime := time.Now()
-	transferred, err := ssh.StreamCopyNodeToNode(ctx, srcSSHClient, tgtSSHClient, vzdumpPath, targetVzdumpPath,
+	transferred, err := ssh.StreamCopyNodeToNode(ctx, transferSrcClient, transferTgtClient, vzdumpPath, targetVzdumpPath,
 		func(bytesSent int64) {
 			m.TransferBytesSent = bytesSent
 			if totalSize > 0 {
