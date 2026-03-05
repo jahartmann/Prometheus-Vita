@@ -2,6 +2,8 @@ package handler
 
 import (
 	"errors"
+	"fmt"
+	"log/slog"
 
 	apiPkg "github.com/antigravity/prometheus/internal/api/response"
 	"github.com/antigravity/prometheus/internal/api/middleware"
@@ -36,7 +38,13 @@ func (h *ChatHandler) Chat(c echo.Context) error {
 
 	resp, err := h.service.Chat(c.Request().Context(), userID, req)
 	if err != nil {
-		return apiPkg.InternalError(c, "chat request failed")
+		slog.Error("chat request failed",
+			slog.String("user_id", userID.String()),
+			slog.String("message", req.Message),
+			slog.String("model", req.Model),
+			slog.Any("error", err),
+		)
+		return apiPkg.InternalError(c, fmt.Sprintf("Chat-Fehler: %v", err))
 	}
 
 	return apiPkg.Success(c, resp)

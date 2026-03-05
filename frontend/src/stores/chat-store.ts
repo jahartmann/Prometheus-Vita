@@ -124,11 +124,16 @@ export const useChatStore = create<ChatState>()((set, get) => ({
 
       // Refresh conversation list
       get().fetchConversations();
-    } catch {
-      toast.error("Nachricht konnte nicht gesendet werden");
+    } catch (err: unknown) {
+      const apiError =
+        err && typeof err === "object" && "response" in err
+          ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
+          : null;
+      const errorMsg = apiError || "Nachricht konnte nicht gesendet werden";
+      toast.error(errorMsg);
       set((s) => ({
         messages: s.messages.filter((m) => m.id !== tempUserMsg.id),
-        error: "Nachricht konnte nicht gesendet werden",
+        error: errorMsg,
         isSending: false,
       }));
     }

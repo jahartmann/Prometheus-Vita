@@ -37,10 +37,10 @@ type VMInfo struct {
 	MaxDisk   int64   `json:"maxdisk"`
 	Disk      int64   `json:"disk"`
 	Uptime    int64   `json:"uptime"`
-	NetIn     int64   `json:"netin"`
-	NetOut    int64   `json:"netout"`
-	DiskRead  int64   `json:"diskread"`
-	DiskWrite int64   `json:"diskwrite"`
+	NetIn     float64 `json:"netin"`
+	NetOut    float64 `json:"netout"`
+	DiskRead  float64 `json:"diskread"`
+	DiskWrite float64 `json:"diskwrite"`
 	Tags      string  `json:"tags"`
 }
 
@@ -76,10 +76,10 @@ func (v VMInfo) ToResponse() VMResponse {
 		DiskTotal:   v.MaxDisk,
 		DiskUsed:    v.Disk,
 		Uptime:      v.Uptime,
-		NetIn:       v.NetIn,
-		NetOut:      v.NetOut,
-		DiskRead:    v.DiskRead,
-		DiskWrite:   v.DiskWrite,
+		NetIn:       int64(v.NetIn),
+		NetOut:      int64(v.NetOut),
+		DiskRead:    int64(v.DiskRead),
+		DiskWrite:   int64(v.DiskWrite),
 		Tags:        v.Tags,
 	}
 }

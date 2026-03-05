@@ -269,7 +269,7 @@ func (j *MetricsCollectionJob) collectVMMetrics(ctx context.Context, client *pro
 
 		vmKey := fmt.Sprintf("%s:%d", nodeID.String(), vm.VMID)
 		netInRate, netOutRate, diskReadRate, diskWriteRate, valid := j.cache.calculateDelta(
-			vmKey, vm.NetIn, vm.NetOut, vm.DiskRead, vm.DiskWrite, now,
+			vmKey, int64(vm.NetIn), int64(vm.NetOut), int64(vm.DiskRead), int64(vm.DiskWrite), now,
 		)
 
 		if !valid {
@@ -299,5 +299,11 @@ func (j *MetricsCollectionJob) collectVMMetrics(ctx context.Context, client *pro
 				slog.Any("error", err),
 			)
 		}
+
+		// Broadcast VM metrics via WebSocket for live frontend updates
+		j.wsHub.BroadcastMessage(monitor.WSMessage{
+			Type: "vm_metrics",
+			Data: vmRecord,
+		})
 	}
 }

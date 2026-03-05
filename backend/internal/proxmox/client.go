@@ -115,8 +115,8 @@ func (c *Client) GetNodeStatus(ctx context.Context, node string) (*NodeStatus, e
 			CPUs  int    `json:"cpus"`
 			Model string `json:"model"`
 		} `json:"cpuinfo"`
-		NetIn      int64    `json:"netin"`
-		NetOut     int64    `json:"netout"`
+		NetIn      float64  `json:"netin"`
+		NetOut     float64  `json:"netout"`
 		LoadAvg    []string `json:"loadavg"`
 		Uptime     int64    `json:"uptime"`
 		KVersion   string   `json:"kversion"`
@@ -148,8 +148,8 @@ func (c *Client) GetNodeStatus(ctx context.Context, node string) (*NodeStatus, e
 		SwapUsed:   raw.Swap.Used,
 		DiskTotal:  raw.RootFS.Total,
 		DiskUsed:   raw.RootFS.Used,
-		NetIn:      raw.NetIn,
-		NetOut:     raw.NetOut,
+		NetIn:      int64(raw.NetIn),
+		NetOut:     int64(raw.NetOut),
 		LoadAvg:    loadAvg,
 		KVersion:   raw.KVersion,
 		PVEVersion: raw.PVEVersion,
