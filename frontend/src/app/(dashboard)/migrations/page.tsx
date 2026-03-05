@@ -40,13 +40,12 @@ import {
   Search,
   AlertTriangle,
   ChevronRight,
-  Info,
 } from "lucide-react";
 import api, { toArray } from "@/lib/api";
 import type { VM, VMMigration, MigrationMode } from "@/types/api";
 import { formatBytes, cn } from "@/lib/utils";
-import { toast } from "sonner";
 
+// StorageInfo matches the backend proxmox.StorageInfo JSON response
 interface StorageInfo {
   storage: string;
   type: string;
@@ -125,12 +124,13 @@ export default function MigrationsPage() {
   const [cleanupTarget, setCleanupTarget] = useState(true);
   const [vmSearch, setVmSearch] = useState("");
 
-  const [targetStorages, setTargetStorages] = useState<StorageInfo[]>([]);
-  const [sourceStorages, setSourceStorages] = useState<StorageInfo[]>([]);
+  // Storages loaded once from the source node.
+  // In a Proxmox cluster, storage config is shared across all nodes
+  // via /etc/pve/storage.cfg, so source storages = target storages.
+  const [storages, setStorages] = useState<StorageInfo[]>([]);
   const [loadingStorages, setLoadingStorages] = useState(false);
-  const [storageLoadError, setStorageLoadError] = useState("");
-  const [usingFallback, setUsingFallback] = useState(false);
-  const [manualStorageName, setManualStorageName] = useState("");
+  const [storageError, setStorageError] = useState("");
+
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
 
@@ -139,57 +139,47 @@ export default function MigrationsPage() {
     fetchMigrations();
   }, [nodes.length, fetchNodes, fetchMigrations]);
 
-  // Load VMs + source storages when source node changes
+  // Load VMs and storages when source node changes.
+  // We use the source node's API connection for storages because it's proven
+  // to work (if we can list VMs, we can list storages from the same node).
   useEffect(() => {
-    if (!sourceNodeId) return;
-    fetchNodeVMs(sourceNodeId);
-    setSelectedVmid("");
-    api
-      .get(`/nodes/${sourceNodeId}/storage`)
-      .then((res) => setSourceStorages(toArray<StorageInfo>(res.data)))
-      .catch(() => setSourceStorages([]));
-  }, [sourceNodeId, fetchNodeVMs]);
-
-  // Load target storages when target node changes
-  useEffect(() => {
-    if (!targetNodeId) {
-      setTargetStorages([]);
-      setStorageLoadError("");
+    if (!sourceNodeId) {
+      setStorages([]);
+      setStorageError("");
       return;
     }
-    setTargetStorage("");
-    setStorageLoadError("");
-    setUsingFallback(false);
-    setManualStorageName("");
+    fetchNodeVMs(sourceNodeId);
+    setSelectedVmid("");
     setLoadingStorages(true);
+    setStorageError("");
 
     api
-      .get(`/nodes/${targetNodeId}/storage`)
+      .get(`/nodes/${sourceNodeId}/storage`)
       .then((res) => {
         const data = toArray<StorageInfo>(res.data);
-        setTargetStorages(data);
-        setStorageLoadError("");
-        setUsingFallback(false);
+        // Filter to storages that can hold VM disk images
+        const vmStorages = data.filter(
+          (s) =>
+            s.content.includes("images") ||
+            s.content.includes("rootdir") ||
+            s.content.includes("backup")
+        );
+        setStorages(vmStorages.length > 0 ? vmStorages : data);
+        setStorageError("");
       })
       .catch((err) => {
-        const status = err?.response?.status;
-        const msg = err?.response?.data?.error || err?.message || "";
-        console.error("[Migration] Target storage failed:", status, msg);
-
-        // Fallback: use source storages as reference
-        if (sourceStorages.length > 0) {
-          setTargetStorages(sourceStorages);
-          setUsingFallback(true);
-          setStorageLoadError("");
-        } else {
-          setTargetStorages([]);
-          setStorageLoadError(
-            `Storage-Abfrage fehlgeschlagen (${status || "Netzwerk"}): ${msg || "Unbekannter Fehler"}`
-          );
-        }
+        const msg = err?.response?.data?.error || err?.message || "Unbekannt";
+        console.error("[Migration] Storage load failed:", msg);
+        setStorages([]);
+        setStorageError(`Storage-Abfrage fehlgeschlagen: ${msg}`);
       })
       .finally(() => setLoadingStorages(false));
-  }, [targetNodeId, sourceStorages]);
+  }, [sourceNodeId, fetchNodeVMs]);
+
+  // Reset target storage when target node changes
+  useEffect(() => {
+    setTargetStorage("");
+  }, [targetNodeId]);
 
   // WebSocket for live migration updates
   const handleWsMessage = useCallback(
@@ -224,20 +214,17 @@ export default function MigrationsPage() {
   const selectedVM = sourceVMs.find((vm) => String(vm.vmid) === selectedVmid);
   const sourceNode = nodes.find((n) => n.id === sourceNodeId);
   const targetNode = nodes.find((n) => n.id === targetNodeId);
-  const selectedStorageInfo = targetStorages.find(
+  const selectedStorageInfo = storages.find(
     (s) => s.storage === targetStorage
   );
   const selectedMode = MODE_CONFIG.find((m) => m.value === mode);
-
-  // Effective storage name (from selection or manual input)
-  const effectiveStorage = targetStorage || manualStorageName;
 
   const canProceed = (s: number) => {
     switch (s) {
       case 1:
         return !!sourceNodeId && !!selectedVmid;
       case 2:
-        return !!targetNodeId && !!effectiveStorage;
+        return !!targetNodeId && !!targetStorage;
       case 3:
         return !!mode;
       default:
@@ -253,7 +240,7 @@ export default function MigrationsPage() {
         source_node_id: sourceNodeId,
         target_node_id: targetNodeId,
         vmid: parseInt(selectedVmid),
-        target_storage: effectiveStorage,
+        target_storage: targetStorage,
         mode,
         new_vmid: newVmid ? parseInt(newVmid) : undefined,
         cleanup_source: cleanupSource,
@@ -510,131 +497,6 @@ export default function MigrationsPage() {
     </div>
   );
 
-  const renderStorageList = () => {
-    if (loadingStorages) {
-      return (
-        <div className="flex items-center justify-center py-8">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-          <span className="ml-2 text-sm text-muted-foreground">
-            Storages werden geladen...
-          </span>
-        </div>
-      );
-    }
-
-    return (
-      <div className="space-y-3">
-        {/* Fallback-Hinweis */}
-        {usingFallback && (
-          <div className="flex items-start gap-2 rounded-lg border border-amber-400/50 bg-amber-50 dark:bg-amber-950/30 p-3">
-            <Info className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
-            <p className="text-xs text-amber-700 dark:text-amber-400">
-              Ziel-Node Storages konnten nicht direkt geladen werden. Es werden
-              die Storages des Quell-Nodes als Referenz angezeigt (in
-              Proxmox-Clustern sind diese meist identisch).
-            </p>
-          </div>
-        )}
-
-        {/* Fehler mit manueller Eingabe */}
-        {storageLoadError && (
-          <div className="space-y-4">
-            <div className="flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-4">
-              <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
-              <p className="text-sm text-destructive">{storageLoadError}</p>
-            </div>
-          </div>
-        )}
-
-        {/* Storage-Karten */}
-        {targetStorages.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {targetStorages.map((s) => {
-              const isSelected = s.storage === targetStorage;
-              const usedPercent =
-                s.total > 0 ? Math.round((s.used / s.total) * 100) : 0;
-              return (
-                <button
-                  key={s.storage}
-                  type="button"
-                  onClick={() => {
-                    setTargetStorage(s.storage);
-                    setManualStorageName("");
-                  }}
-                  className={cn(
-                    "flex flex-col gap-2 rounded-lg border p-4 text-left transition-all hover:bg-accent/50",
-                    isSelected
-                      ? "border-primary ring-2 ring-primary/20 bg-primary/5"
-                      : "border-border"
-                  )}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <HardDrive className="h-4 w-4 text-muted-foreground" />
-                      <span className="font-medium text-sm">{s.storage}</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      {s.shared && (
-                        <Badge variant="secondary" className="text-[10px]">
-                          shared
-                        </Badge>
-                      )}
-                      <Badge variant="outline" className="text-[10px]">
-                        {s.type}
-                      </Badge>
-                    </div>
-                  </div>
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>Belegt: {usedPercent}%</span>
-                      <span>Frei: {formatBytes(s.available)}</span>
-                    </div>
-                    <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                      <div
-                        className={cn(
-                          "h-full rounded-full transition-all",
-                          usedPercent > 90
-                            ? "bg-red-500"
-                            : usedPercent > 70
-                            ? "bg-amber-500"
-                            : "bg-green-500"
-                        )}
-                        style={{ width: `${usedPercent}%` }}
-                      />
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      {formatBytes(s.used)} / {formatBytes(s.total)}
-                    </p>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        ) : !storageLoadError ? (
-          <div className="text-center py-6 text-muted-foreground text-sm">
-            Keine Storages gefunden.
-          </div>
-        ) : null}
-
-        {/* Manuelle Eingabe - immer sichtbar als Alternative */}
-        <div className="border-t pt-3 mt-3">
-          <Label className="text-xs text-muted-foreground">
-            Oder Storage-Name manuell eingeben:
-          </Label>
-          <Input
-            className="mt-1 max-w-md"
-            placeholder="z.B. local-lvm, ceph-pool, nfs-share"
-            value={manualStorageName}
-            onChange={(e) => {
-              setManualStorageName(e.target.value);
-              if (e.target.value) setTargetStorage("");
-            }}
-          />
-        </div>
-      </div>
-    );
-  };
-
   const renderStep2 = () => (
     <div className="space-y-6">
       <div className="space-y-2">
@@ -659,7 +521,89 @@ export default function MigrationsPage() {
       {targetNodeId && (
         <div className="space-y-3">
           <Label className="text-sm font-medium">Ziel-Storage</Label>
-          {renderStorageList()}
+
+          {loadingStorages ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              <span className="ml-2 text-sm text-muted-foreground">
+                Storages werden geladen...
+              </span>
+            </div>
+          ) : storageError ? (
+            <div className="flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-4">
+              <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm text-destructive">{storageError}</p>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Tipp: Pruefe die API-Token-Berechtigungen des Quell-Nodes.
+                </p>
+              </div>
+            </div>
+          ) : storages.length === 0 ? (
+            <div className="text-center py-6 text-muted-foreground text-sm">
+              Keine Storages gefunden. Waehle zuerst einen Quell-Node in Schritt 1.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {storages.map((s) => {
+                const isSelected = s.storage === targetStorage;
+                const usedPercent =
+                  s.total > 0 ? Math.round((s.used / s.total) * 100) : 0;
+                return (
+                  <button
+                    key={s.storage}
+                    type="button"
+                    onClick={() => setTargetStorage(s.storage)}
+                    className={cn(
+                      "flex flex-col gap-2 rounded-lg border p-4 text-left transition-all hover:bg-accent/50",
+                      isSelected
+                        ? "border-primary ring-2 ring-primary/20 bg-primary/5"
+                        : "border-border"
+                    )}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <HardDrive className="h-4 w-4 text-muted-foreground" />
+                        <span className="font-medium text-sm">{s.storage}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {s.shared && (
+                          <Badge variant="secondary" className="text-[10px]">
+                            shared
+                          </Badge>
+                        )}
+                        <Badge variant="outline" className="text-[10px]">
+                          {s.type}
+                        </Badge>
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>Belegt: {usedPercent}%</span>
+                        <span>Frei: {formatBytes(s.available)}</span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                        <div
+                          className={cn(
+                            "h-full rounded-full transition-all",
+                            usedPercent > 90
+                              ? "bg-red-500"
+                              : usedPercent > 70
+                              ? "bg-amber-500"
+                              : "bg-green-500"
+                          )}
+                          style={{ width: `${usedPercent}%` }}
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {formatBytes(s.used)} / {formatBytes(s.total)}
+                      </p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -808,7 +752,7 @@ export default function MigrationsPage() {
           <CardContent className="text-sm space-y-1">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Storage</span>
-              <span className="font-medium">{effectiveStorage || "-"}</span>
+              <span className="font-medium">{targetStorage || "-"}</span>
             </div>
             {selectedStorageInfo && (
               <>
@@ -821,11 +765,6 @@ export default function MigrationsPage() {
                   <span>{formatBytes(selectedStorageInfo.available)}</span>
                 </div>
               </>
-            )}
-            {usingFallback && (
-              <p className="text-xs text-amber-600 mt-1">
-                Storage-Daten vom Quell-Node
-              </p>
             )}
           </CardContent>
         </Card>

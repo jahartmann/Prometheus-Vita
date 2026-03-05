@@ -28,7 +28,6 @@ import {
   CheckCircle2,
   AlertTriangle,
 } from "lucide-react";
-import { toast } from "sonner";
 
 interface MigrateVmDialogProps {
   open: boolean;
@@ -92,12 +91,12 @@ export function MigrateVmDialog({
   const [step, setStep] = useState<Step>("target");
   const [targetNodeId, setTargetNodeId] = useState("");
   const [targetStorage, setTargetStorage] = useState("");
+  // Storages loaded from the source node. In a Proxmox cluster,
+  // storage config is shared via /etc/pve/storage.cfg, so
+  // source storages = target storages.
   const [storages, setStorages] = useState<StorageOption[]>([]);
-  const [sourceStorages, setSourceStorages] = useState<StorageOption[]>([]);
   const [loadingStorages, setLoadingStorages] = useState(false);
   const [storageError, setStorageError] = useState("");
-  const [useSourceAsFallback, setUseSourceAsFallback] = useState(false);
-  const [manualStorage, setManualStorage] = useState("");
   const [mode, setMode] = useState<MigrationMode>("snapshot");
   const [newVmid, setNewVmid] = useState<string>("");
   const [cleanupSource, setCleanupSource] = useState(true);
@@ -107,7 +106,6 @@ export function MigrateVmDialog({
 
   const vmTags = parseTags(vm.tags);
 
-  // Filter: only online PVE nodes, not the source
   const targetNodes = nodes.filter(
     (n) => n.id !== sourceNodeId && n.is_online && n.type === "pve"
   );
@@ -118,89 +116,50 @@ export function MigrateVmDialog({
       setTargetNodeId("");
       setTargetStorage("");
       setStorages([]);
-      setSourceStorages([]);
       setMode("snapshot");
       setNewVmid("");
       setError("");
       setStorageError("");
-      setUseSourceAsFallback(false);
-      setManualStorage("");
     }
   }, [open]);
 
-  // Load source storages to detect VM's current storage type
+  // Load storages from the source node when dialog opens.
+  // The source node's API connection is proven to work (we already loaded the VM from it).
   useEffect(() => {
     if (!open || !sourceNodeId) return;
+    setLoadingStorages(true);
+    setStorageError("");
     api
       .get(`/nodes/${sourceNodeId}/storage`)
       .then((res) => {
-        setSourceStorages(toArray<StorageOption>(res.data));
-      })
-      .catch(() => setSourceStorages([]));
-  }, [open, sourceNodeId]);
-
-  // Load storages when target node changes
-  useEffect(() => {
-    if (!targetNodeId) return;
-    setLoadingStorages(true);
-    setTargetStorage("");
-    setStorageError("");
-    setUseSourceAsFallback(false);
-    setManualStorage("");
-    api
-      .get(`/nodes/${targetNodeId}/storage`)
-      .then((res) => {
-        const all = toArray<StorageOption>(res.data);
-        setStorages(all);
-        setStorageError("");
+        setStorages(toArray<StorageOption>(res.data));
       })
       .catch((err) => {
-        const status = err?.response?.status;
-        const serverMsg =
-          err?.response?.data?.error || err?.response?.data?.message || "";
-        console.error(`[Migration] Storage fetch failed for node ${targetNodeId}:`, status, serverMsg, err?.response?.data);
-
-        // Fallback: use source node's storages (same names usually exist on target)
-        if (sourceStorages.length > 0) {
-          setStorages(sourceStorages);
-          setUseSourceAsFallback(true);
-          setStorageError("");
-          toast.info("Ziel-Storages nicht ladbar - verwende Source-Storages als Referenz");
-        } else {
-          setStorages([]);
-          setStorageError(
-            `Storage-Abfrage fehlgeschlagen (${status || "Netzwerk"}): ${serverMsg || "Unbekannter Fehler"}. Du kannst den Storage-Namen manuell eingeben.`
-          );
-          toast.error("Storages konnten nicht geladen werden");
-        }
+        const msg = err?.response?.data?.error || err?.message || "Unbekannt";
+        console.error("[Migration] Storage load failed:", msg);
+        setStorageError(`Storage-Abfrage fehlgeschlagen: ${msg}`);
+        setStorages([]);
       })
       .finally(() => setLoadingStorages(false));
-  }, [targetNodeId, sourceStorages]);
+  }, [open, sourceNodeId]);
 
   // Filter storages: only those that can hold VM images/rootdir
   const vmStorages = useMemo(() => {
     const contentNeeded = vm.type === "lxc" ? "rootdir" : "images";
-    return storages.filter(
+    const filtered = storages.filter(
       (s) => s.active && s.content.includes(contentNeeded)
     );
+    return filtered.length > 0 ? filtered : storages.filter((s) => s.active);
   }, [storages, vm.type]);
 
-  // Suggest best matching storage (same type as source, or shared)
+  // Suggest best matching storage
   const suggestedStorage = useMemo(() => {
     if (vmStorages.length === 0) return null;
-    // Prefer shared storage
     const shared = vmStorages.find((s) => s.shared && s.available > 0);
     if (shared) return shared.storage;
-    // Prefer same storage type as source storages
-    const sourceTypes = sourceStorages.map((s) => s.type);
-    const sameType = vmStorages.find(
-      (s) => sourceTypes.includes(s.type) && s.available > 0
-    );
-    if (sameType) return sameType.storage;
-    // Fallback: most available space
     const sorted = [...vmStorages].sort((a, b) => b.available - a.available);
     return sorted[0]?.storage || null;
-  }, [vmStorages, sourceStorages]);
+  }, [vmStorages]);
 
   // Auto-select suggested storage
   useEffect(() => {
@@ -210,9 +169,6 @@ export function MigrateVmDialog({
   }, [suggestedStorage, targetStorage]);
 
   const targetNode = nodes.find((n) => n.id === targetNodeId);
-  const targetStatus = targetNodeId ? nodeStatus[targetNodeId] : null;
-
-  // Check if target has enough space for VM
   const selectedStorage = vmStorages.find((s) => s.storage === targetStorage);
   const vmDiskSize = vm.disk_total || 0;
   const hasEnoughSpace =
@@ -383,21 +339,11 @@ export function MigrateVmDialog({
         {step === "storage" && (
           <div className="space-y-3">
             <Label>
-              Ziel-Storage auf {targetNode?.name}
+              Ziel-Storage
               <span className="ml-2 text-xs font-normal text-muted-foreground">
                 ({vm.type === "lxc" ? "rootdir" : "images"}-faehig)
               </span>
             </Label>
-
-            {useSourceAsFallback && (
-              <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 p-2.5">
-                <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
-                <p className="text-xs text-amber-700 dark:text-amber-400">
-                  Ziel-Node Storages nicht ladbar. Zeige Source-Node Storages als Referenz
-                  (Storage-Namen sind in Proxmox-Clustern meist identisch).
-                </p>
-              </div>
-            )}
 
             {loadingStorages ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -405,54 +351,14 @@ export function MigrateVmDialog({
                 Storages werden geladen...
               </div>
             ) : storageError ? (
-              <div className="space-y-3">
-                <div className="flex items-start gap-2 rounded-lg border border-destructive/50 bg-destructive/5 p-3">
-                  <AlertTriangle className="h-4 w-4 text-destructive mt-0.5 flex-shrink-0" />
-                  <p className="text-sm text-destructive">{storageError}</p>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="manual-storage" className="text-sm">Storage-Name manuell eingeben</Label>
-                  <Input
-                    id="manual-storage"
-                    placeholder="z.B. local-lvm, ceph-pool, nfs-share"
-                    value={manualStorage}
-                    onChange={(e) => {
-                      setManualStorage(e.target.value);
-                      setTargetStorage(e.target.value);
-                    }}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Gib den exakten Storage-Namen des Ziel-Nodes ein (z.B. &quot;local-lvm&quot;).
-                  </p>
-                </div>
+              <div className="flex items-start gap-2 rounded-lg border border-destructive/50 bg-destructive/5 p-3">
+                <AlertTriangle className="h-4 w-4 text-destructive mt-0.5 flex-shrink-0" />
+                <p className="text-sm text-destructive">{storageError}</p>
               </div>
             ) : vmStorages.length === 0 ? (
-              <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">
-                  Keine kompatiblen Storages auf diesem Node.
-                </p>
-                {storages.length > 0 && (
-                  <p className="text-xs text-amber-600">
-                    {storages.length} Storage(s) vorhanden, aber keiner
-                    unterstuetzt{" "}
-                    {vm.type === "lxc" ? "rootdir" : "images"}-Content.
-                    Verfuegbare Typen:{" "}
-                    {[...new Set(storages.map((s) => `${s.storage} (${s.content})`))].join(", ")}
-                  </p>
-                )}
-                <div className="space-y-2 pt-2">
-                  <Label htmlFor="manual-storage-2" className="text-sm">Storage-Name manuell eingeben</Label>
-                  <Input
-                    id="manual-storage-2"
-                    placeholder="z.B. local-lvm"
-                    value={manualStorage}
-                    onChange={(e) => {
-                      setManualStorage(e.target.value);
-                      setTargetStorage(e.target.value);
-                    }}
-                  />
-                </div>
-              </div>
+              <p className="text-sm text-muted-foreground">
+                Keine Storages gefunden.
+              </p>
             ) : (
               <div className="grid gap-2">
                 {vmStorages.map((s) => {
