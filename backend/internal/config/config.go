@@ -158,7 +158,7 @@ func Load() (*Config, error) {
 			Enabled: getEnv("BRIEFING_ENABLED", "true") == "true",
 		},
 		RateLimit: RateLimitConfig{
-			RequestsPerMinute: getEnvInt("RATE_LIMIT_RPM", 60),
+			RequestsPerMinute: getEnvInt("RATE_LIMIT_RPM", 300),
 			Enabled:           getEnv("RATE_LIMIT_ENABLED", "true") == "true",
 		},
 	}
