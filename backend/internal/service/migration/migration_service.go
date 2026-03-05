@@ -392,6 +392,23 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 		}
 	}
 
+	// 6. Check target dump directory free space (for temporary vzdump file during transfer)
+	s.broadcastLog(m.ID, "Prüfe freien Speicherplatz auf Target für Backup-Datei...")
+	tgtDfResult, err := tgtSSHClient.RunCommand(ctx, "df -B1 /var/lib/vz/dump/ 2>/dev/null | tail -1 | awk '{print $4}'")
+	if err == nil && tgtDfResult.ExitCode == 0 {
+		var tgtDumpFree int64
+		fmt.Sscanf(strings.TrimSpace(tgtDfResult.Stdout), "%d", &tgtDumpFree)
+		if tgtDumpFree > 0 && estimatedBackupSize > 0 && tgtDumpFree < estimatedBackupSize {
+			handleError("preflight", fmt.Errorf("nicht genügend Speicherplatz auf Target /var/lib/vz/dump/: benötigt ~%s, verfügbar %s",
+				formatBytesLog(estimatedBackupSize), formatBytesLog(tgtDumpFree)))
+			return
+		}
+		if tgtDumpFree > 0 {
+			s.broadcastLog(m.ID, fmt.Sprintf("✓ Target-Dump-Speicher: %s frei (benötigt ~%s)",
+				formatBytesLog(tgtDumpFree), formatBytesLog(estimatedBackupSize)))
+		}
+	}
+
 	s.broadcastLog(m.ID, "✓ Alle Pre-Flight-Checks bestanden!")
 	s.updatePhase(ctx, m, model.MigrationStatusPreparing, "Pre-Flight-Checks bestanden", 4)
 
@@ -497,20 +514,40 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 	// PHASE 3: TRANSFERRING (40-80%)
 	s.updatePhase(ctx, m, model.MigrationStatusTransferring, "Datei wird übertragen...", 41)
 
-	// Target path: /var/lib/vz/dump/<filename>
+	// Determine target dump path - find a directory with enough space
 	vzdumpFilename := vzdumpPath
 	if idx := strings.LastIndex(vzdumpPath, "/"); idx >= 0 {
 		vzdumpFilename = vzdumpPath[idx+1:]
 	}
-	targetVzdumpPath := "/var/lib/vz/dump/" + vzdumpFilename
-
-	// Ensure target directory exists
-	_, _ = tgtSSHClient.RunCommand(ctx, "mkdir -p /var/lib/vz/dump")
 
 	totalSize := int64(0)
 	if m.VzdumpFileSize != nil {
 		totalSize = *m.VzdumpFileSize
 	}
+
+	// Try to find the actual filesystem path for a vzdump-capable storage on target
+	targetDumpDir := "/var/lib/vz/dump" // default
+	tgtVzdumpStorage := s.findVzdumpStorage(ctx, tgtClient, tgtPVENode, tgtSSHClient, totalSize)
+	if tgtVzdumpStorage != "" && tgtVzdumpStorage != "local" {
+		// Resolve the actual path for this storage
+		pathResult, pathErr := tgtSSHClient.RunCommand(ctx, fmt.Sprintf("pvesm path %s:backup/test.vma 2>/dev/null | sed 's|/test.vma$||'", tgtVzdumpStorage))
+		if pathErr == nil && pathResult.ExitCode == 0 && strings.TrimSpace(pathResult.Stdout) != "" {
+			resolvedPath := strings.TrimSpace(pathResult.Stdout)
+			// Verify it exists and is writable
+			mkdirResult, _ := tgtSSHClient.RunCommand(ctx, fmt.Sprintf("mkdir -p %q && test -w %q && echo ok", resolvedPath, resolvedPath))
+			if mkdirResult != nil && strings.TrimSpace(mkdirResult.Stdout) == "ok" {
+				targetDumpDir = resolvedPath
+				s.broadcastLog(m.ID, fmt.Sprintf("Verwende Target-Dump-Verzeichnis: %s (Storage: %s)", targetDumpDir, tgtVzdumpStorage))
+			}
+		}
+	}
+	if targetDumpDir == "/var/lib/vz/dump" {
+		s.broadcastLog(m.ID, "Verwende Standard-Dump-Verzeichnis: /var/lib/vz/dump")
+	}
+	targetVzdumpPath := targetDumpDir + "/" + vzdumpFilename
+
+	// Ensure target directory exists
+	_, _ = tgtSSHClient.RunCommand(ctx, fmt.Sprintf("mkdir -p %q", targetDumpDir))
 
 	// Transfer via scp directly between nodes (bypasses Docker networking limitations)
 	tgtHost := targetNode.Hostname
@@ -666,7 +703,12 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 	}
 
 	// Convert filesystem path to Proxmox volume ID format.
-	restoreArchive := "local:backup/" + vzdumpFilename
+	// Use the storage where the dump was actually transferred to.
+	restoreStorageName := "local"
+	if tgtVzdumpStorage != "" {
+		restoreStorageName = tgtVzdumpStorage
+	}
+	restoreArchive := restoreStorageName + ":backup/" + vzdumpFilename
 	s.broadcastLog(m.ID, fmt.Sprintf("Starte Restore auf %s (VMID: %d, Storage: %s, Archive: %s)...",
 		targetNode.Name, restoreVMID, m.TargetStorage, restoreArchive))
 
