@@ -507,45 +507,82 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 	// Ensure target directory exists
 	_, _ = tgtSSHClient.RunCommand(ctx, "mkdir -p /var/lib/vz/dump")
 
-	// Create fresh SSH connections for the transfer (pooled connections may be stale/dropped)
-	s.broadcastLog(m.ID, "Erstelle dedizierte SSH-Verbindungen für Transfer...")
-	transferSrcClient, err := s.sshPool.NewDirect(srcSSHCfg)
-	if err != nil {
-		handleError("transferring", fmt.Errorf("SSH-Verbindung zu Source für Transfer: %w", err))
-		return
-	}
-	defer transferSrcClient.Close()
-	transferTgtClient, err := s.sshPool.NewDirect(tgtSSHCfg)
-	if err != nil {
-		handleError("transferring", fmt.Errorf("SSH-Verbindung zu Target für Transfer: %w", err))
-		return
-	}
-	defer transferTgtClient.Close()
-	s.broadcastLog(m.ID, "✓ Dedizierte Transfer-Verbindungen hergestellt")
-
 	totalSize := int64(0)
 	if m.VzdumpFileSize != nil {
 		totalSize = *m.VzdumpFileSize
 	}
 
+	// Transfer via scp directly between nodes (bypasses Docker networking limitations)
+	tgtHost := targetNode.Hostname
+	tgtPort := targetNode.SSHPort
+	if tgtPort == 0 {
+		tgtPort = 22
+	}
+	tgtUser := targetNode.SSHUser
+	if tgtUser == "" {
+		tgtUser = "root"
+	}
+
+	scpCmd := fmt.Sprintf("scp -o StrictHostKeyChecking=no -o ConnectTimeout=10 -P %d %q %s@%s:%q",
+		tgtPort, vzdumpPath, tgtUser, tgtHost, targetVzdumpPath)
+
 	s.broadcastLog(m.ID, fmt.Sprintf("Starte Transfer: %s → %s (%s)", sourceNode.Name, targetNode.Name, formatBytesLog(totalSize)))
+	s.broadcastLog(m.ID, "Transfer via scp direkt zwischen Nodes...")
+
+	// Start scp in background on source node
+	// We use nohup + background so we can poll progress from the target
+	bgScpCmd := fmt.Sprintf("nohup %s > /tmp/scp-mig-%s.log 2>&1 & echo $!", scpCmd, m.ID.String())
+	pidResult, err := srcSSHClient.RunCommand(ctx, bgScpCmd)
+	if err != nil {
+		handleError("transferring", fmt.Errorf("scp starten fehlgeschlagen: %w", err))
+		return
+	}
+	if pidResult.ExitCode != 0 {
+		handleError("transferring", fmt.Errorf("scp starten fehlgeschlagen (exit %d): %s", pidResult.ExitCode, pidResult.Stderr))
+		return
+	}
+	scpPID := strings.TrimSpace(pidResult.Stdout)
+	s.broadcastLog(m.ID, fmt.Sprintf("scp gestartet (PID: %s)", scpPID))
+
+	// Poll progress by checking file size on target
+	transferStart := time.Now()
 	lastLogTime := time.Now()
-	transferred, err := ssh.StreamCopyNodeToNode(ctx, transferSrcClient, transferTgtClient, vzdumpPath, targetVzdumpPath,
-		func(bytesSent int64) {
-			m.TransferBytesSent = bytesSent
+	pollTicker := time.NewTicker(3 * time.Second)
+	defer pollTicker.Stop()
+
+	transferDone := false
+	for !transferDone {
+		select {
+		case <-ctx.Done():
+			// Kill scp on cancel
+			_, _ = srcSSHClient.RunCommand(ctx, fmt.Sprintf("kill %s 2>/dev/null", scpPID))
+			_, _ = tgtSSHClient.RunCommand(ctx, fmt.Sprintf("rm -f %q", targetVzdumpPath))
+			handleError("transferring", ctx.Err())
+			return
+		case <-pollTicker.C:
+			// Check if scp is still running
+			checkResult, _ := srcSSHClient.RunCommand(ctx, fmt.Sprintf("kill -0 %s 2>/dev/null; echo $?", scpPID))
+			scpRunning := checkResult != nil && strings.TrimSpace(checkResult.Stdout) == "0"
+
+			// Get current file size on target
+			statResult, _ := tgtSSHClient.RunCommand(ctx, fmt.Sprintf("stat -c %%s %q 2>/dev/null", targetVzdumpPath))
+			var currentSize int64
+			if statResult != nil && statResult.ExitCode == 0 {
+				fmt.Sscanf(strings.TrimSpace(statResult.Stdout), "%d", &currentSize)
+			}
+
+			m.TransferBytesSent = currentSize
 			if totalSize > 0 {
-				transferProgress := int(float64(bytesSent) / float64(totalSize) * 39) // 40% range
+				transferProgress := int(float64(currentSize) / float64(totalSize) * 39)
 				m.Progress = 41 + transferProgress
 				if m.Progress > 79 {
 					m.Progress = 79
 				}
 			}
-			// Calculate speed
-			if m.StartedAt != nil {
-				elapsed := time.Since(*m.StartedAt).Seconds()
-				if elapsed > 0 {
-					m.TransferSpeedBps = int64(float64(bytesSent) / elapsed)
-				}
+
+			elapsed := time.Since(transferStart).Seconds()
+			if elapsed > 0 {
+				m.TransferSpeedBps = int64(float64(currentSize) / elapsed)
 			}
 			s.broadcastProgress(m, nil)
 
@@ -554,20 +591,42 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 				lastLogTime = time.Now()
 				pct := float64(0)
 				if totalSize > 0 {
-					pct = float64(bytesSent) / float64(totalSize) * 100
+					pct = float64(currentSize) / float64(totalSize) * 100
 				}
 				s.broadcastLog(m.ID, fmt.Sprintf("Transfer: %s / %s (%.1f%%) - %s/s",
-					formatBytesLog(bytesSent), formatBytesLog(totalSize), pct, formatBytesLog(m.TransferSpeedBps)))
+					formatBytesLog(currentSize), formatBytesLog(totalSize), pct, formatBytesLog(m.TransferSpeedBps)))
 			}
-		})
-	if err != nil {
-		// Cleanup partial file on target
-		_, _ = tgtSSHClient.RunCommand(ctx, fmt.Sprintf("rm -f %q", targetVzdumpPath))
-		handleError("transferring", fmt.Errorf("transfer fehlgeschlagen: %w", err))
-		return
+
+			if !scpRunning {
+				// scp finished - check if it was successful
+				logResult, _ := srcSSHClient.RunCommand(ctx, fmt.Sprintf("cat /tmp/scp-mig-%s.log 2>/dev/null", m.ID.String()))
+				// Cleanup log file
+				_, _ = srcSSHClient.RunCommand(ctx, fmt.Sprintf("rm -f /tmp/scp-mig-%s.log", m.ID.String()))
+
+				// Verify file size matches
+				finalStatResult, _ := tgtSSHClient.RunCommand(ctx, fmt.Sprintf("stat -c %%s %q 2>/dev/null", targetVzdumpPath))
+				var finalSize int64
+				if finalStatResult != nil && finalStatResult.ExitCode == 0 {
+					fmt.Sscanf(strings.TrimSpace(finalStatResult.Stdout), "%d", &finalSize)
+				}
+
+				if totalSize > 0 && finalSize < totalSize {
+					scpLog := ""
+					if logResult != nil {
+						scpLog = logResult.Stdout
+					}
+					_, _ = tgtSSHClient.RunCommand(ctx, fmt.Sprintf("rm -f %q", targetVzdumpPath))
+					handleError("transferring", fmt.Errorf("scp fehlgeschlagen (nur %s von %s übertragen). Log: %s",
+						formatBytesLog(finalSize), formatBytesLog(totalSize), scpLog))
+					return
+				}
+
+				m.TransferBytesSent = finalSize
+				transferDone = true
+			}
+		}
 	}
-	m.TransferBytesSent = transferred
-	s.broadcastLog(m.ID, fmt.Sprintf("✓ Transfer abgeschlossen: %s übertragen", formatBytesLog(transferred)))
+	s.broadcastLog(m.ID, fmt.Sprintf("✓ Transfer abgeschlossen: %s übertragen", formatBytesLog(m.TransferBytesSent)))
 	s.updatePhase(ctx, m, model.MigrationStatusTransferring, "Transfer abgeschlossen", 80)
 
 	// PHASE 4: RESTORING (80-95%)
