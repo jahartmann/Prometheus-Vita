@@ -1,6 +1,7 @@
 "use client";
 
 import { create } from "zustand";
+import { toast } from "sonner";
 import { migrationApi, toArray } from "@/lib/api";
 import type { VMMigration } from "@/types/api";
 
@@ -46,6 +47,7 @@ export const useMigrationStore = create<MigrationState>()((set, get) => ({
         isLoading: false,
       });
     } catch {
+      toast.error("Fehler beim Laden der Migrationen");
       set({ error: "Fehler beim Laden der Migrationen", isLoading: false });
     }
   },
@@ -63,18 +65,19 @@ export const useMigrationStore = create<MigrationState>()((set, get) => ({
         isLoading: false,
       });
     } catch {
+      toast.error("Fehler beim Laden der Migrationen");
       set({ error: "Fehler beim Laden der Migrationen", isLoading: false });
     }
   },
 
   startMigration: async (data) => {
     const res = await migrationApi.start(data);
-    const migration = res.data?.data || res.data;
     set((state) => ({
-      migrations: [migration, ...state.migrations],
-      activeMigrations: [migration, ...state.activeMigrations],
+      migrations: [res.data, ...state.migrations],
+      activeMigrations: [res.data, ...state.activeMigrations],
     }));
-    return migration;
+    toast.success("Migration gestartet");
+    return res.data;
   },
 
   cancelMigration: async (id: string) => {
@@ -85,6 +88,7 @@ export const useMigrationStore = create<MigrationState>()((set, get) => ({
       ),
       activeMigrations: state.activeMigrations.filter((m) => m.id !== id),
     }));
+    toast.success("Migration abgebrochen");
   },
 
   deleteMigration: async (id: string) => {
@@ -93,6 +97,7 @@ export const useMigrationStore = create<MigrationState>()((set, get) => ({
       migrations: state.migrations.filter((m) => m.id !== id),
       activeMigrations: state.activeMigrations.filter((m) => m.id !== id),
     }));
+    toast.success("Migration geloescht");
   },
 
   updateMigrationProgress: (migration: VMMigration) => {

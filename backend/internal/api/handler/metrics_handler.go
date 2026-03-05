@@ -43,6 +43,15 @@ func (h *MetricsHandler) GetMetricsHistory(c echo.Context) error {
 		until = parsed
 	}
 
+	// Validate time range
+	if !since.Before(until) {
+		return apiPkg.BadRequest(c, "'since' must be before 'until'")
+	}
+	maxRange := 90 * 24 * time.Hour
+	if until.Sub(since) > maxRange {
+		return apiPkg.BadRequest(c, "time range must not exceed 90 days")
+	}
+
 	records, err := h.monitorSvc.GetMetricsHistory(c.Request().Context(), id, since, until)
 	if err != nil {
 		return apiPkg.InternalError(c, "failed to get metrics history")
@@ -72,8 +81,10 @@ func (h *MetricsHandler) GetMetricsSummary(c echo.Context) error {
 		duration = 24 * time.Hour
 	case "7d":
 		duration = 7 * 24 * time.Hour
+	case "30d":
+		duration = 30 * 24 * time.Hour
 	default:
-		return apiPkg.BadRequest(c, "invalid period, must be one of: 1h, 6h, 24h, 7d")
+		return apiPkg.BadRequest(c, "invalid period, must be one of: 1h, 6h, 24h, 7d, 30d")
 	}
 
 	now := time.Now().UTC()

@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { toast } from "sonner";
 import type { Node, NodeStatus, VM } from "@/types/api";
 import api, { toArray } from "@/lib/api";
 import { useAuthStore } from "@/stores/auth-store";
@@ -37,6 +38,7 @@ export const useNodeStore = create<NodeState>()((set) => ({
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : "Nodes konnten nicht geladen werden";
+      toast.error(message);
       set({ error: message, isLoading: false });
     }
   },
@@ -57,6 +59,7 @@ export const useNodeStore = create<NodeState>()((set) => ({
           : status === 401
           ? "Authentifizierung fehlgeschlagen"
           : "Statusabfrage fehlgeschlagen";
+      toast.error(msg);
       set((state) => ({ nodeErrors: { ...state.nodeErrors, [nodeId]: msg } }));
     }
   },
@@ -77,6 +80,7 @@ export const useNodeStore = create<NodeState>()((set) => ({
           : status === 401
           ? "Authentifizierung fehlgeschlagen"
           : "VM-Abfrage fehlgeschlagen";
+      toast.error(msg);
       set((state) => ({
         nodeVMs: { ...state.nodeVMs, [nodeId]: [] },
         nodeErrors: { ...state.nodeErrors, [nodeId]: msg },

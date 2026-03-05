@@ -21,9 +21,15 @@ func handleNodeError(c echo.Context, err error, fallbackMsg string) error {
 		return apiPkg.NotFound(c, "node not found")
 	}
 	if errors.Is(err, nodeService.ErrNodeUnreachable) {
-		return apiPkg.ServiceUnavailable(c, "node is unreachable: "+err.Error())
+		nodeID := c.Param("id")
+		slog.Warn("node unreachable",
+			slog.String("path", c.Path()),
+			slog.String("node_id", nodeID),
+			slog.String("error_detail", err.Error()))
+		return apiPkg.ServiceUnavailable(c, err.Error())
 	}
-	return apiPkg.InternalError(c, fallbackMsg)
+	slog.Error("node handler error", slog.String("path", c.Path()), slog.Any("error", err))
+	return apiPkg.InternalError(c, fmt.Sprintf("%s: %v", fallbackMsg, err))
 }
 
 type NodeHandler struct {
@@ -155,7 +161,11 @@ func (h *NodeHandler) GetStorage(c echo.Context) error {
 
 	storage, err := h.service.GetStorage(c.Request().Context(), id)
 	if err != nil {
-		return handleNodeError(c, err, "failed to get storage")
+		// Include full error details for debugging connectivity issues
+		slog.Error("GetStorage failed",
+			slog.String("node_id", id.String()),
+			slog.Any("error", err))
+		return handleNodeError(c, err, fmt.Sprintf("failed to get storage: %v", err))
 	}
 
 	return apiPkg.Success(c, storage)
@@ -470,6 +480,16 @@ func (h *NodeHandler) SyncTags(c echo.Context) error {
 	}
 
 	return apiPkg.Success(c, map[string]int{"imported": count})
+}
+
+func (h *NodeHandler) DiagnoseConnectivity(c echo.Context) error {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return apiPkg.BadRequest(c, "invalid node id")
+	}
+
+	result := h.service.DiagnoseConnectivity(c.Request().Context(), id)
+	return apiPkg.Success(c, result)
 }
 
 func (h *NodeHandler) ListISOs(c echo.Context) error {

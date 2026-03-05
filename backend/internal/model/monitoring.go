@@ -21,16 +21,20 @@ type MetricsRecord struct {
 }
 
 type MetricsSummary struct {
-	NodeID     uuid.UUID `json:"node_id"`
-	Period     string    `json:"period"`
-	CPUAvg     float64   `json:"cpu_avg"`
-	CPUMax     float64   `json:"cpu_max"`
-	CPUMin     float64   `json:"cpu_min"`
-	CPUCurrent float64   `json:"cpu_current"`
-	MemAvg     float64   `json:"memory_avg_percent"`
-	MemMax     float64   `json:"memory_max_percent"`
-	DiskAvg    float64   `json:"disk_avg_percent"`
-	DiskMax    float64   `json:"disk_max_percent"`
+	NodeID      uuid.UUID `json:"node_id"`
+	Period      string    `json:"period"`
+	CPUAvg      float64   `json:"cpu_avg"`
+	CPUMax      float64   `json:"cpu_max"`
+	CPUMin      float64   `json:"cpu_min"`
+	CPUCurrent  float64   `json:"cpu_current"`
+	MemAvg      float64   `json:"memory_avg_percent"`
+	MemMax      float64   `json:"memory_max_percent"`
+	MemMin      float64   `json:"memory_min_percent"`
+	MemCurrent  float64   `json:"memory_current_percent"`
+	DiskAvg     float64   `json:"disk_avg_percent"`
+	DiskMax     float64   `json:"disk_max_percent"`
+	DiskMin     float64   `json:"disk_min_percent"`
+	DiskCurrent float64   `json:"disk_current_percent"`
 }
 
 type NetworkAlias struct {

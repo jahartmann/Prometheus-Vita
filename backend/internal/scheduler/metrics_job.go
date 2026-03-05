@@ -111,9 +111,9 @@ func (j *MetricsCollectionJob) Run(ctx context.Context) error {
 				MemTotal:   status.MemTotal,
 				DiskUsed:   status.DiskUsed,
 				DiskTotal:  status.DiskTotal,
-				NetIn:      0,
-				NetOut:     0,
-				LoadAvg:    []float64{},
+				NetIn:      status.NetIn,
+				NetOut:     status.NetOut,
+				LoadAvg:    status.LoadAvg,
 			}
 
 			if err := j.metricsRepo.Insert(ctx, record); err != nil {

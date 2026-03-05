@@ -33,7 +33,7 @@ export default function MonitoringPage() {
     : 0;
 
   const avgMemory = statuses.length > 0
-    ? statuses.reduce((sum, s) => sum + (s.memory_used / s.memory_total) * 100, 0) / statuses.length
+    ? statuses.reduce((sum, s) => sum + (s.memory_total > 0 ? (s.memory_used / s.memory_total) * 100 : 0), 0) / statuses.length
     : 0;
 
   return (
@@ -81,7 +81,7 @@ export default function MonitoringPage() {
             <Monitor className="h-8 w-8 text-orange-500" />
             <div>
               <p className="text-2xl font-bold">
-                {statuses.reduce((s, st) => s + st.vm_running, 0)} / {statuses.reduce((s, st) => s + st.vm_count, 0)}
+                {statuses.reduce((s, st) => s + (st.vm_running ?? 0), 0)} / {statuses.reduce((s, st) => s + (st.vm_count ?? 0), 0)}
               </p>
               <p className="text-sm text-muted-foreground">VMs aktiv</p>
             </div>
@@ -92,7 +92,7 @@ export default function MonitoringPage() {
             <Box className="h-8 w-8 text-teal-500" />
             <div>
               <p className="text-2xl font-bold">
-                {statuses.reduce((s, st) => s + st.ct_running, 0)} / {statuses.reduce((s, st) => s + st.ct_count, 0)}
+                {statuses.reduce((s, st) => s + (st.ct_running ?? 0), 0)} / {statuses.reduce((s, st) => s + (st.ct_count ?? 0), 0)}
               </p>
               <p className="text-sm text-muted-foreground">CTs aktiv</p>
             </div>
@@ -119,8 +119,8 @@ export default function MonitoringPage() {
           {nodes.map((node) => {
             const status = nodeStatus[node.id];
             const cpuPercent = status?.cpu_usage ?? 0;
-            const memPercent = status ? (status.memory_used / status.memory_total) * 100 : 0;
-            const diskPercent = status ? (status.disk_used / status.disk_total) * 100 : 0;
+            const memPercent = status && status.memory_total > 0 ? (status.memory_used / status.memory_total) * 100 : 0;
+            const diskPercent = status && status.disk_total > 0 ? (status.disk_used / status.disk_total) * 100 : 0;
 
             return (
               <Link key={node.id} href={`/nodes/${node.id}`}>
@@ -171,9 +171,20 @@ export default function MonitoringPage() {
                                 {formatBytes(status.swap_used)} / {formatBytes(status.swap_total)}
                               </span>
                             </div>
-                            <Progress value={(status.swap_used / status.swap_total) * 100} className="h-2" />
+                            <Progress value={status.swap_total > 0 ? (status.swap_used / status.swap_total) * 100 : 0} className="h-2" />
                           </div>
                         )}
+
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between text-sm">
+                            <span>Netzwerk</span>
+                            <span className="text-xs">
+                              <span className="text-green-600">In: {formatBytes(status.net_in ?? 0)}</span>
+                              {" / "}
+                              <span className="text-red-500">Out: {formatBytes(status.net_out ?? 0)}</span>
+                            </span>
+                          </div>
+                        </div>
 
                         <div className="space-y-1">
                           <div className="flex items-center justify-between text-sm">

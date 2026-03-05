@@ -49,6 +49,7 @@ import {
 import { MigrateVmDialog } from "@/components/migration/migrate-vm-dialog";
 import { SnapshotDialog } from "@/components/nodes/snapshot-dialog";
 import { VmConsole } from "@/components/nodes/vm-console";
+import { ErrorBoundary } from "@/components/error-boundary";
 import { useNodeStore } from "@/stores/node-store";
 import { vmApi, bulkVmApi, toArray } from "@/lib/api";
 import { toast } from "sonner";
@@ -355,6 +356,7 @@ export function VmList({ vms, nodeId, onRefresh }: VmListProps) {
                 <SortButton field="memory_used">RAM</SortButton>
               </TableHead>
               <TableHead>Disk</TableHead>
+              <TableHead>Net I/O</TableHead>
               <TableHead>Uptime</TableHead>
               <TableHead className="w-[50px]">Aktionen</TableHead>
             </TableRow>
@@ -386,6 +388,11 @@ export function VmList({ vms, nodeId, onRefresh }: VmListProps) {
                 </TableCell>
                 <TableCell>
                   {formatBytes(vm.disk_used)} / {formatBytes(vm.disk_total)}
+                </TableCell>
+                <TableCell className="text-xs">
+                  <span className="text-green-600">{formatBytes(vm.net_in ?? 0)}</span>
+                  {" / "}
+                  <span className="text-red-500">{formatBytes(vm.net_out ?? 0)}</span>
                 </TableCell>
                 <TableCell>
                   {vm.uptime > 0 ? formatUptime(vm.uptime) : "--"}
@@ -570,17 +577,19 @@ export function VmList({ vms, nodeId, onRefresh }: VmListProps) {
 
       {/* Console Dialog */}
       {consoleVm && currentNode && (
-        <VmConsole
-          open={!!consoleVm}
-          onOpenChange={(open) => !open && setConsoleVm(null)}
-          nodeId={nodeId}
-          vmid={consoleVm.vmid}
-          vmType={consoleVm.type}
-          vmName={consoleVm.name}
-          hostname={currentNode.hostname}
-          port={currentNode.port}
-          pveNode={nodeStatus[nodeId]?.node}
-        />
+        <ErrorBoundary>
+          <VmConsole
+            open={!!consoleVm}
+            onOpenChange={(open) => !open && setConsoleVm(null)}
+            nodeId={nodeId}
+            vmid={consoleVm.vmid}
+            vmType={consoleVm.type}
+            vmName={consoleVm.name}
+            hostname={currentNode.hostname}
+            port={currentNode.port}
+            pveNode={nodeStatus[nodeId]?.node}
+          />
+        </ErrorBoundary>
       )}
     </div>
   );

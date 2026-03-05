@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, AlertTriangle, Cpu, MemoryStick, HardDrive, Clock, Monitor, Disc } from "lucide-react";
+import { ArrowLeft, AlertTriangle, Cpu, MemoryStick, HardDrive, Clock, Monitor, Disc, Network } from "lucide-react";
 import {
   LineChart,
   Line,
@@ -22,6 +22,7 @@ import { useBackupStore } from "@/stores/backup-store";
 import { VmList } from "./vm-list";
 import { BackupList } from "@/components/backup/backup-list";
 import { MetricsCharts } from "@/components/monitoring/metrics-charts";
+import { ErrorBoundary } from "@/components/error-boundary";
 import { NetworkInterfaces } from "@/components/nodes/network-interfaces";
 import { StorageOverview } from "@/components/nodes/storage-overview";
 import { DiskList } from "@/components/nodes/disk-list";
@@ -91,6 +92,7 @@ export function NodeDetail({ node }: NodeDetailProps) {
   useEffect(() => {
     fetchBackups(node.id);
     fetchSchedules(node.id);
+    fetchNodeVMs(node.id);
 
     metricsApi
       .getHistory(node.id, new Date(Date.now() - 3600000).toISOString(), new Date().toISOString())
@@ -126,13 +128,13 @@ export function NodeDetail({ node }: NodeDetailProps) {
       .list()
       .then((res) => setAllNodes(toArray(res.data)))
       .catch(() => {});
-  }, [node.id, fetchBackups, fetchSchedules]);
+  }, [node.id, fetchBackups, fetchSchedules, fetchNodeVMs]);
 
   const cpuUsage = status?.cpu_usage ?? 0;
-  const memUsage = status && status.memory_total
+  const memUsage = status && status.memory_total > 0
     ? (status.memory_used / status.memory_total) * 100
     : 0;
-  const diskUsage = status && status.disk_total
+  const diskUsage = status && status.disk_total > 0
     ? (status.disk_used / status.disk_total) * 100
     : 0;
 
@@ -194,7 +196,7 @@ export function NodeDetail({ node }: NodeDetailProps) {
       )}
 
       {status && (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           <Card>
             <CardContent className="flex items-center gap-3 p-4">
               <Cpu className="h-5 w-5 text-primary" />
@@ -239,6 +241,20 @@ export function NodeDetail({ node }: NodeDetailProps) {
           </Card>
           <Card>
             <CardContent className="flex items-center gap-3 p-4">
+              <Network className="h-5 w-5 text-primary" />
+              <div>
+                <p className="text-xs text-muted-foreground">Netzwerk</p>
+                <p className="text-sm font-bold text-green-600">
+                  In: {formatBytes(status.net_in ?? 0)}
+                </p>
+                <p className="text-sm font-bold text-red-500">
+                  Out: {formatBytes(status.net_out ?? 0)}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="flex items-center gap-3 p-4">
               <Clock className="h-5 w-5 text-primary" />
               <div>
                 <p className="text-xs text-muted-foreground">Uptime</p>
@@ -257,10 +273,10 @@ export function NodeDetail({ node }: NodeDetailProps) {
               <div>
                 <p className="text-xs text-muted-foreground">VMs</p>
                 <p className="text-lg font-bold">
-                  {status.vm_running}/{status.vm_count}
+                  {status.vm_running ?? 0}/{status.vm_count ?? 0}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {status.ct_running}/{status.ct_count} CTs
+                  {status.ct_running ?? 0}/{status.ct_count ?? 0} CTs
                 </p>
               </div>
             </CardContent>
@@ -405,7 +421,9 @@ export function NodeDetail({ node }: NodeDetailProps) {
         </TabsContent>
 
         <TabsContent value="monitoring">
-          <MetricsCharts metrics={metricsHistory} />
+          <ErrorBoundary>
+            <MetricsCharts metrics={metricsHistory} />
+          </ErrorBoundary>
         </TabsContent>
 
         <TabsContent value="network">

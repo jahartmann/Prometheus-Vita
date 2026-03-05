@@ -271,8 +271,9 @@ func generateEd25519KeyPair() (publicKey, privateKey string, err error) {
 }
 
 // getClientAndNode retrieves the node from the DB, creates a Proxmox client,
-// and resolves the correct PVE node name. It wraps connection errors with
-// ErrNodeUnreachable so handlers can return 503 instead of 500.
+// and resolves the correct PVE node name. Uses cached pve_node from metadata
+// when available to avoid an extra API round-trip. Wraps connection errors
+// with ErrNodeUnreachable so handlers can return 503 instead of 500.
 func (s *Service) getClientAndNode(ctx context.Context, id uuid.UUID) (*model.Node, *proxmox.Client, string, error) {
 	node, err := s.nodeRepo.GetByID(ctx, id)
 	if err != nil {
@@ -284,6 +285,12 @@ func (s *Service) getClientAndNode(ctx context.Context, id uuid.UUID) (*model.No
 		return nil, nil, "", fmt.Errorf("%w: create proxmox client: %v", ErrNodeUnreachable, err)
 	}
 
+	// Fast path: use cached pve_node from metadata (skips GetNodes API call)
+	if cachedNode := getCachedPVENode(node); cachedNode != "" {
+		return node, client, cachedNode, nil
+	}
+
+	// Slow path: resolve via Proxmox API call
 	pveNodes, err := client.GetNodes(ctx)
 	if err != nil {
 		return nil, nil, "", fmt.Errorf("%w: %v", ErrNodeUnreachable, err)
@@ -294,7 +301,47 @@ func (s *Service) getClientAndNode(ctx context.Context, id uuid.UUID) (*model.No
 	}
 
 	pveNode := ResolvePVENode(node, pveNodes)
+
+	// Cache for future requests (fire-and-forget)
+	go s.cachePVENode(context.Background(), node, pveNode)
+
 	return node, client, pveNode, nil
+}
+
+// getCachedPVENode extracts pve_node from node metadata.
+func getCachedPVENode(node *model.Node) string {
+	if len(node.Metadata) == 0 {
+		return ""
+	}
+	var meta map[string]interface{}
+	if err := json.Unmarshal(node.Metadata, &meta); err != nil {
+		return ""
+	}
+	if pn, ok := meta["pve_node"].(string); ok && pn != "" {
+		return pn
+	}
+	return ""
+}
+
+// cachePVENode stores the resolved PVE node name in the node's metadata.
+func (s *Service) cachePVENode(ctx context.Context, node *model.Node, pveNode string) {
+	var meta map[string]interface{}
+	if len(node.Metadata) > 0 {
+		if err := json.Unmarshal(node.Metadata, &meta); err != nil {
+			meta = make(map[string]interface{})
+		}
+	} else {
+		meta = make(map[string]interface{})
+	}
+	meta["pve_node"] = pveNode
+	metaBytes, err := json.Marshal(meta)
+	if err != nil {
+		return
+	}
+	node.Metadata = metaBytes
+	if err := s.nodeRepo.Update(ctx, node); err != nil {
+		slog.Warn("failed to cache pve_node", slog.Any("error", err))
+	}
 }
 
 // ResolvePVENode determines which PVE cluster node corresponds to the registered node.
@@ -456,31 +503,229 @@ func (s *Service) GetStatus(ctx context.Context, id uuid.UUID) (*proxmox.NodeSta
 }
 
 func (s *Service) GetVMs(ctx context.Context, id uuid.UUID) ([]proxmox.VMInfo, error) {
-	_, client, pveNode, err := s.getClientAndNode(ctx, id)
+	node, client, pveNode, err := s.getClientAndNode(ctx, id)
+	if err == nil {
+		vms, vmErr := client.GetVMs(ctx, pveNode)
+		if vmErr == nil {
+			return vms, nil
+		}
+		slog.Warn("direct VM fetch failed",
+			slog.String("node", node.Name), slog.String("pve_node", pveNode), slog.Any("error", vmErr))
+
+		// Try re-resolving PVE node name
+		if vms, resolved := s.retryVMsWithResolvedName(ctx, node, client, pveNode); resolved {
+			return vms, nil
+		}
+	}
+
+	return s.getVMsViaCluster(ctx, id)
+}
+
+// retryVMsWithResolvedName re-resolves the PVE node name when VM fetch fails.
+func (s *Service) retryVMsWithResolvedName(ctx context.Context, node *model.Node, client *proxmox.Client, triedName string) ([]proxmox.VMInfo, bool) {
+	pveNodes, err := client.GetNodes(ctx)
+	if err != nil || len(pveNodes) == 0 {
+		return nil, false
+	}
+	for _, pn := range pveNodes {
+		if pn == triedName {
+			continue
+		}
+		vms, vmErr := client.GetVMs(ctx, pn)
+		if vmErr == nil {
+			slog.Info("resolved correct PVE node name for VMs",
+				slog.String("node", node.Name), slog.String("correct_pve_node", pn))
+			go s.cachePVENode(context.Background(), node, pn)
+			return vms, true
+		}
+	}
+	return nil, false
+}
+
+// getVMsViaCluster fetches VMs for a node through another reachable cluster node.
+func (s *Service) getVMsViaCluster(ctx context.Context, targetID uuid.UUID) ([]proxmox.VMInfo, error) {
+	targetNode, err := s.nodeRepo.GetByID(ctx, targetID)
 	if err != nil {
 		return nil, err
 	}
-
-	vms, err := client.GetVMs(ctx, pveNode)
-	if err != nil {
-		return nil, fmt.Errorf("%w: get VMs: %v", ErrNodeUnreachable, err)
+	targetPVENode := getCachedPVENode(targetNode)
+	if targetPVENode == "" {
+		targetPVENode = targetNode.Name
 	}
 
-	return vms, nil
+	allNodes, err := s.nodeRepo.List(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list nodes for fallback: %w", err)
+	}
+
+	var lastErr error
+	for _, n := range allNodes {
+		if n.ID == targetID || !n.IsOnline || n.Type != "pve" {
+			continue
+		}
+		client, clientErr := s.clientFactory.CreateClient(&n)
+		if clientErr != nil {
+			continue
+		}
+		vms, vmErr := client.GetVMs(ctx, targetPVENode)
+		if vmErr == nil {
+			slog.Info("fetched VMs via cluster fallback",
+				slog.String("target", targetNode.Name), slog.String("via", n.Name))
+			return vms, nil
+		}
+		lastErr = vmErr
+
+		// Try all PVE node names in case the target name is wrong
+		pveNodes, nodesErr := client.GetNodes(ctx)
+		if nodesErr != nil {
+			continue
+		}
+		for _, pn := range pveNodes {
+			if pn == targetPVENode {
+				continue
+			}
+			vms, retryErr := client.GetVMs(ctx, pn)
+			if retryErr == nil {
+				slog.Info("fetched VMs via cluster fallback with resolved name",
+					slog.String("target", targetNode.Name),
+					slog.String("via", n.Name),
+					slog.String("resolved_pve_node", pn))
+				go s.cachePVENode(context.Background(), targetNode, pn)
+				return vms, nil
+			}
+		}
+	}
+
+	detail := "no other online PVE nodes available for fallback"
+	if lastErr != nil {
+		detail = fmt.Sprintf("all fallback attempts failed, last error: %v", lastErr)
+	}
+	return nil, fmt.Errorf("%w: %s", ErrNodeUnreachable, detail)
 }
 
 func (s *Service) GetStorage(ctx context.Context, id uuid.UUID) ([]proxmox.StorageInfo, error) {
-	_, client, pveNode, err := s.getClientAndNode(ctx, id)
+	node, client, pveNode, err := s.getClientAndNode(ctx, id)
+	if err == nil {
+		storage, storErr := client.GetStorage(ctx, pveNode)
+		if storErr == nil {
+			return storage, nil
+		}
+		slog.Warn("direct storage fetch failed",
+			slog.String("node", node.Name), slog.String("pve_node", pveNode), slog.Any("error", storErr))
+
+		// The storage call failed but the client may be connected.
+		// The PVE node name might be wrong - try re-resolving it.
+		if storage, resolved := s.retryStorageWithResolvedName(ctx, node, client, pveNode); resolved {
+			return storage, nil
+		}
+	} else {
+		slog.Warn("cannot reach node for storage, trying cluster fallback",
+			slog.String("node_id", id.String()), slog.Any("error", err))
+	}
+
+	// Cluster fallback: query storage through any other reachable node
+	return s.getStorageViaCluster(ctx, id)
+}
+
+// retryStorageWithResolvedName re-resolves the PVE node name when the initial
+// storage call fails. This handles the common case where the cached pve_node
+// or the fallback name doesn't match the actual Proxmox node name.
+func (s *Service) retryStorageWithResolvedName(ctx context.Context, node *model.Node, client *proxmox.Client, triedName string) ([]proxmox.StorageInfo, bool) {
+	pveNodes, err := client.GetNodes(ctx)
+	if err != nil || len(pveNodes) == 0 {
+		return nil, false
+	}
+
+	slog.Info("re-resolving PVE node name for storage",
+		slog.String("node", node.Name),
+		slog.String("tried", triedName),
+		slog.Any("available_pve_nodes", pveNodes))
+
+	for _, pn := range pveNodes {
+		if pn == triedName {
+			continue
+		}
+		storage, storErr := client.GetStorage(ctx, pn)
+		if storErr == nil {
+			slog.Info("resolved correct PVE node name for storage",
+				slog.String("node", node.Name),
+				slog.String("correct_pve_node", pn))
+			go s.cachePVENode(context.Background(), node, pn)
+			return storage, true
+		}
+	}
+	return nil, false
+}
+
+// getStorageViaCluster tries to fetch storage info for a node by connecting
+// through another online node in the same Proxmox cluster.
+func (s *Service) getStorageViaCluster(ctx context.Context, targetID uuid.UUID) ([]proxmox.StorageInfo, error) {
+	targetNode, err := s.nodeRepo.GetByID(ctx, targetID)
 	if err != nil {
 		return nil, err
 	}
 
-	storage, err := client.GetStorage(ctx, pveNode)
-	if err != nil {
-		return nil, fmt.Errorf("%w: get storage: %v", ErrNodeUnreachable, err)
+	targetPVENode := getCachedPVENode(targetNode)
+	if targetPVENode == "" {
+		targetPVENode = targetNode.Name
 	}
 
-	return storage, nil
+	allNodes, err := s.nodeRepo.List(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list nodes for fallback: %w", err)
+	}
+
+	var lastErr error
+	for _, n := range allNodes {
+		if n.ID == targetID || !n.IsOnline || n.Type != "pve" {
+			continue
+		}
+
+		client, clientErr := s.clientFactory.CreateClient(&n)
+		if clientErr != nil {
+			slog.Debug("cluster fallback: skip node (client error)",
+				slog.String("node", n.Name), slog.Any("error", clientErr))
+			continue
+		}
+
+		// Try the expected target PVE node name first
+		storage, storErr := client.GetStorage(ctx, targetPVENode)
+		if storErr == nil {
+			slog.Info("fetched storage via cluster fallback",
+				slog.String("target", targetNode.Name), slog.String("via", n.Name))
+			if getCachedPVENode(targetNode) == "" {
+				go s.cachePVENode(context.Background(), targetNode, targetPVENode)
+			}
+			return storage, nil
+		}
+		lastErr = storErr
+
+		// The target PVE name might be wrong - enumerate cluster nodes and try each
+		pveNodes, nodesErr := client.GetNodes(ctx)
+		if nodesErr != nil {
+			continue
+		}
+		for _, pn := range pveNodes {
+			if pn == targetPVENode {
+				continue
+			}
+			storage, retryErr := client.GetStorage(ctx, pn)
+			if retryErr == nil {
+				slog.Info("fetched storage via cluster fallback with resolved name",
+					slog.String("target", targetNode.Name),
+					slog.String("via", n.Name),
+					slog.String("resolved_pve_node", pn))
+				go s.cachePVENode(context.Background(), targetNode, pn)
+				return storage, nil
+			}
+		}
+	}
+
+	detail := "no other online PVE nodes available for fallback"
+	if lastErr != nil {
+		detail = fmt.Sprintf("all fallback attempts failed, last error: %v", lastErr)
+	}
+	return nil, fmt.Errorf("%w: %s", ErrNodeUnreachable, detail)
 }
 
 func (s *Service) GetNetworkInterfaces(ctx context.Context, id uuid.UUID) ([]NetworkInterfaceWithAlias, error) {
@@ -785,6 +1030,68 @@ func (s *Service) SyncTagsFromProxmox(ctx context.Context, nodeID uuid.UUID) (in
 
 	slog.Info("tags synced from proxmox", slog.String("node_id", nodeID.String()), slog.Int("created", created))
 	return created, nil
+}
+
+// DiagnoseConnectivity performs detailed connectivity checks for a node and
+// returns diagnostic information useful for troubleshooting 503 errors.
+func (s *Service) DiagnoseConnectivity(ctx context.Context, id uuid.UUID) map[string]interface{} {
+	result := map[string]interface{}{
+		"node_id": id.String(),
+	}
+
+	node, err := s.nodeRepo.GetByID(ctx, id)
+	if err != nil {
+		result["error"] = fmt.Sprintf("node not found: %v", err)
+		return result
+	}
+	result["node_name"] = node.Name
+	result["hostname"] = node.Hostname
+	result["port"] = node.Port
+	result["is_online"] = node.IsOnline
+	result["cached_pve_node"] = getCachedPVENode(node)
+
+	client, err := s.clientFactory.CreateClient(node)
+	if err != nil {
+		result["client_error"] = fmt.Sprintf("failed to create client: %v", err)
+		return result
+	}
+	result["client_created"] = true
+
+	// Test basic connectivity
+	version, err := client.GetVersion(ctx)
+	if err != nil {
+		result["version_error"] = err.Error()
+		result["api_reachable"] = false
+		return result
+	}
+	result["api_reachable"] = true
+	result["pve_version"] = version.Version
+
+	// List PVE nodes
+	pveNodes, err := client.GetNodes(ctx)
+	if err != nil {
+		result["get_nodes_error"] = err.Error()
+		return result
+	}
+	result["pve_cluster_nodes"] = pveNodes
+
+	// Try storage for each PVE node
+	storageResults := make(map[string]interface{})
+	for _, pn := range pveNodes {
+		storage, storErr := client.GetStorage(ctx, pn)
+		if storErr != nil {
+			storageResults[pn] = map[string]interface{}{"error": storErr.Error()}
+		} else {
+			names := make([]string, len(storage))
+			for i, s := range storage {
+				names[i] = fmt.Sprintf("%s (%s, %s)", s.Storage, s.Type, s.Content)
+			}
+			storageResults[pn] = map[string]interface{}{"count": len(storage), "storages": names}
+		}
+	}
+	result["storage_by_pve_node"] = storageResults
+
+	return result
 }
 
 func (s *Service) buildSSHConfig(node *model.Node) (ssh.SSHConfig, error) {

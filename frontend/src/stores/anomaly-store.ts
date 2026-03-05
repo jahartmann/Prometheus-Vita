@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { toast } from "sonner";
 import type { AnomalyRecord } from "@/types/api";
 import { anomalyApi, toArray } from "@/lib/api";
 
@@ -25,6 +26,7 @@ export const useAnomalyStore = create<AnomalyState>()((set, get) => ({
       const data = await anomalyApi.listUnresolved();
       set({ anomalies: toArray<AnomalyRecord>(data), isLoading: false });
     } catch {
+      toast.error("Anomalien konnten nicht geladen werden");
       set({ error: "Anomalien konnten nicht geladen werden", isLoading: false });
     }
   },
@@ -35,6 +37,7 @@ export const useAnomalyStore = create<AnomalyState>()((set, get) => ({
       const data = await anomalyApi.listByNode(nodeId);
       set({ nodeAnomalies: toArray<AnomalyRecord>(data), isLoading: false });
     } catch {
+      toast.error("Node-Anomalien konnten nicht geladen werden");
       set({ error: "Node-Anomalien konnten nicht geladen werden", isLoading: false });
     }
   },
@@ -46,7 +49,9 @@ export const useAnomalyStore = create<AnomalyState>()((set, get) => ({
         anomalies: s.anomalies.filter((a) => a.id !== id),
         nodeAnomalies: s.nodeAnomalies.filter((a) => a.id !== id),
       }));
+      toast.success("Anomalie aufgeloest");
     } catch {
+      toast.error("Anomalie konnte nicht aufgeloest werden");
       set({ error: "Anomalie konnte nicht aufgeloest werden" });
     }
   },

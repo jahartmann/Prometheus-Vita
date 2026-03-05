@@ -7,6 +7,7 @@ import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNodeStore } from "@/stores/node-store";
 import { MetricsCharts } from "@/components/monitoring/metrics-charts";
+import { ErrorBoundary } from "@/components/error-boundary";
 import { MetricsSummaryCards } from "@/components/monitoring/metrics-summary";
 import { Skeleton } from "@/components/ui/skeleton";
 import { metricsApi, toArray } from "@/lib/api";
@@ -76,7 +77,9 @@ export default function NodeMonitoringPage() {
         </div>
       </div>
       {summary && <MetricsSummaryCards summary={summary} />}
-      <MetricsCharts metrics={metrics} />
+      <ErrorBoundary>
+        <MetricsCharts metrics={metrics} />
+      </ErrorBoundary>
     </div>
   );
 }

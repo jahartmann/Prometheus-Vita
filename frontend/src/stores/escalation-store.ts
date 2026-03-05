@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { toast } from "sonner";
 import type { EscalationPolicy, AlertIncident } from "@/types/api";
 import { escalationApi, toArray } from "@/lib/api";
 
@@ -26,6 +27,7 @@ export const useEscalationStore = create<EscalationState>()((set) => ({
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : "Eskalationsrichtlinien konnten nicht geladen werden";
+      toast.error(message);
       set({ error: message, isLoading: false });
     }
   },
@@ -38,6 +40,7 @@ export const useEscalationStore = create<EscalationState>()((set) => ({
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : "Vorfaelle konnten nicht geladen werden";
+      toast.error(message);
       set({ error: message, isLoading: false });
     }
   },

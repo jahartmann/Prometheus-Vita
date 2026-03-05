@@ -85,8 +85,10 @@ export interface NodeStatus {
   swap_used: number;
   disk_total: number;
   disk_used: number;
+  net_in: number;
+  net_out: number;
   uptime: number;
-  load_average: [number, number, number];
+  load_average: number[];
   kernel_version: string;
   pve_version: string;
   vm_count: number;
@@ -120,6 +122,10 @@ export interface VM {
   disk_total: number;
   disk_used: number;
   uptime: number;
+  net_in: number;
+  net_out: number;
+  disk_read: number;
+  disk_write: number;
   node_id: string;
   tags: string[];
 }
@@ -257,8 +263,12 @@ export interface MetricsSummary {
   cpu_current: number;
   memory_avg_percent: number;
   memory_max_percent: number;
+  memory_min_percent?: number;
+  memory_current_percent?: number;
   disk_avg_percent: number;
   disk_max_percent: number;
+  disk_min_percent?: number;
+  disk_current_percent?: number;
 }
 
 // Network types

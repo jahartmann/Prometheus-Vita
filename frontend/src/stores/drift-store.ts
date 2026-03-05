@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { toast } from "sonner";
 import type { DriftCheck } from "@/types/api";
 import { driftApi, toArray } from "@/lib/api";
 
@@ -24,6 +25,7 @@ export const useDriftStore = create<DriftState>()((set) => ({
       const resp = await driftApi.listAll();
       set({ checks: toArray<DriftCheck>(resp.data), isLoading: false });
     } catch {
+      toast.error("Drift-Checks konnten nicht geladen werden");
       set({ error: "Drift-Checks konnten nicht geladen werden", isLoading: false });
     }
   },
@@ -42,5 +44,6 @@ export const useDriftStore = create<DriftState>()((set) => ({
 
   triggerCheck: async (nodeId: string) => {
     await driftApi.triggerCheck(nodeId);
+    toast.success("Drift-Check gestartet");
   },
 }));

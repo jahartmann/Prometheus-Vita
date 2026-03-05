@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { toast } from "sonner";
 import type { ConfigBackup, BackupSchedule } from "@/types/api";
 import { backupApi, scheduleApi, toArray } from "@/lib/api";
 
@@ -25,6 +26,7 @@ export const useBackupStore = create<BackupState>()((set) => ({
       const response = await backupApi.listBackups(nodeId);
       set({ backups: toArray<ConfigBackup>(response.data), isLoading: false });
     } catch {
+      toast.error("Backups konnten nicht geladen werden");
       set({ error: "Backups konnten nicht geladen werden", isLoading: false });
     }
   },
@@ -37,8 +39,10 @@ export const useBackupStore = create<BackupState>()((set) => ({
       });
       const backup = response.data;
       set((state) => ({ backups: [backup, ...state.backups] }));
+      toast.success("Backup erfolgreich erstellt");
       return backup;
     } catch {
+      toast.error("Backup konnte nicht erstellt werden");
       set({ error: "Backup konnte nicht erstellt werden" });
       throw new Error("Backup konnte nicht erstellt werden");
     }
@@ -50,7 +54,9 @@ export const useBackupStore = create<BackupState>()((set) => ({
       set((state) => ({
         backups: state.backups.filter((b) => b.id !== backupId),
       }));
+      toast.success("Backup geloescht");
     } catch {
+      toast.error("Backup konnte nicht geloescht werden");
       set({ error: "Backup konnte nicht geloescht werden" });
       throw new Error("Backup konnte nicht geloescht werden");
     }
@@ -61,6 +67,7 @@ export const useBackupStore = create<BackupState>()((set) => ({
       const response = await scheduleApi.listSchedules(nodeId);
       set({ schedules: toArray<BackupSchedule>(response.data) });
     } catch {
+      toast.error("Zeitplaene konnten nicht geladen werden");
       set({ error: "Zeitplaene konnten nicht geladen werden" });
     }
   },

@@ -1,16 +1,18 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useNodeStore } from "@/stores/node-store";
 import { NodeCard } from "./node-card";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export function NodeGrid() {
   const { nodes, nodeStatus, isLoading, fetchNodeStatus } = useNodeStore();
+  const fetchedRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     nodes.forEach((node) => {
-      if (node.is_online) {
+      if (node.is_online && !fetchedRef.current.has(node.id)) {
+        fetchedRef.current.add(node.id);
         fetchNodeStatus(node.id);
       }
     });

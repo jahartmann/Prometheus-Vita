@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { toast } from "sonner";
 import type {
   ChatConversation,
   ChatMessage,
@@ -45,6 +46,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       const convs = await chatApi.listConversations();
       set({ conversations: toArray<ChatConversation>(convs), isLoading: false });
     } catch {
+      toast.error("Konversationen konnten nicht geladen werden");
       set({ error: "Konversationen konnten nicht geladen werden", isLoading: false });
     }
   },
@@ -62,6 +64,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
         isLoading: false,
       });
     } catch {
+      toast.error("Konversation konnte nicht geladen werden");
       set({ error: "Konversation konnte nicht geladen werden", isLoading: false });
     }
   },
@@ -70,8 +73,9 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     const { currentConversation } = get();
 
     // Optimistically add user message
+    const tempId = "temp-" + crypto.randomUUID();
     const tempUserMsg: ChatMessage = {
-      id: "temp-" + Date.now(),
+      id: tempId,
       conversation_id: currentConversation?.id || "",
       role: "user",
       content: message,
@@ -108,7 +112,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
           ...s.messages.filter((m) => m.id !== tempUserMsg.id),
           {
             ...tempUserMsg,
-            id: "user-" + Date.now(),
+            id: "user-" + crypto.randomUUID(),
             conversation_id: resp.conversation_id,
           },
           resp.message,
@@ -120,6 +124,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       // Refresh conversation list
       get().fetchConversations();
     } catch {
+      toast.error("Nachricht konnte nicht gesendet werden");
       set((s) => ({
         messages: s.messages.filter((m) => m.id !== tempUserMsg.id),
         error: "Nachricht konnte nicht gesendet werden",
@@ -148,6 +153,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
         conversations: s.conversations.filter((c) => c.id !== id),
       }));
     } catch {
+      toast.error("Konversation konnte nicht geloescht werden");
       set({ error: "Konversation konnte nicht geloescht werden" });
     }
   },

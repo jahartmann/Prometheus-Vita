@@ -1,6 +1,7 @@
 "use client";
 
 import { create } from "zustand";
+import { toast } from "sonner";
 import type { NodeProfile, DRReadinessScore, RecoveryRunbook, DRSimulationResult } from "@/types/api";
 import { drApi, toArray } from "@/lib/api";
 
@@ -36,7 +37,7 @@ export const useDRStore = create<DRState>()((set) => ({
     set({ isLoading: true, error: null });
     try {
       const response = await drApi.getProfile(nodeId);
-      set({ profile: response.data?.data || response.data, isLoading: false });
+      set({ profile: response.data, isLoading: false });
     } catch {
       set({ profile: null, error: null, isLoading: false });
     }
@@ -44,16 +45,16 @@ export const useDRStore = create<DRState>()((set) => ({
 
   collectProfile: async (nodeId: string) => {
     const response = await drApi.collectProfile(nodeId);
-    const profile = response.data?.data || response.data;
-    set({ profile });
-    return profile;
+    set({ profile: response.data });
+    toast.success("Profil erfolgreich erfasst");
+    return response.data;
   },
 
   fetchReadiness: async (nodeId: string) => {
     set({ isLoading: true, error: null });
     try {
       const response = await drApi.getReadiness(nodeId);
-      set({ currentScore: response.data?.data || response.data, isLoading: false });
+      set({ currentScore: response.data, isLoading: false });
     } catch {
       set({ currentScore: null, error: null, isLoading: false });
     }
@@ -61,9 +62,8 @@ export const useDRStore = create<DRState>()((set) => ({
 
   calculateReadiness: async (nodeId: string) => {
     const response = await drApi.calculateReadiness(nodeId);
-    const score = response.data?.data || response.data;
-    set({ currentScore: score });
-    return score;
+    set({ currentScore: response.data });
+    return response.data;
   },
 
   fetchAllScores: async () => {
@@ -72,6 +72,7 @@ export const useDRStore = create<DRState>()((set) => ({
       const response = await drApi.listAllScores();
       set({ scores: toArray<DRReadinessScore>(response.data), isLoading: false });
     } catch {
+      toast.error("DR Scores konnten nicht geladen werden");
       set({ error: "DR Scores konnten nicht geladen werden", isLoading: false });
     }
   },
@@ -82,15 +83,16 @@ export const useDRStore = create<DRState>()((set) => ({
       const response = await drApi.listRunbooks(nodeId);
       set({ runbooks: toArray<RecoveryRunbook>(response.data), isLoading: false });
     } catch {
+      toast.error("Runbooks konnten nicht geladen werden");
       set({ error: "Runbooks konnten nicht geladen werden", isLoading: false });
     }
   },
 
   generateRunbook: async (nodeId: string, scenario: string) => {
     const response = await drApi.generateRunbook(nodeId, scenario);
-    const runbook = response.data?.data || response.data;
-    set((state) => ({ runbooks: [runbook, ...state.runbooks] }));
-    return runbook;
+    set((state) => ({ runbooks: [response.data, ...state.runbooks] }));
+    toast.success("Runbook generiert");
+    return response.data;
   },
 
   deleteRunbook: async (runbookId: string) => {
@@ -98,12 +100,12 @@ export const useDRStore = create<DRState>()((set) => ({
     set((state) => ({
       runbooks: state.runbooks.filter((r) => r.id !== runbookId),
     }));
+    toast.success("Runbook geloescht");
   },
 
   simulate: async (nodeId: string, scenario: string) => {
     const response = await drApi.simulate(nodeId, scenario);
-    const result = response.data?.data || response.data;
-    set({ simulationResult: result });
-    return result;
+    set({ simulationResult: response.data });
+    return response.data;
   },
 }));

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -25,9 +26,12 @@ func NewClient(hostname string, port int, tokenID, tokenSecret string) *Client {
 		tokenID:    tokenID,
 		tokenSecret: tokenSecret,
 		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: 15 * time.Second,
 			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+				TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
+				DialContext:           (&net.Dialer{Timeout: 5 * time.Second}).DialContext,
+				TLSHandshakeTimeout:   5 * time.Second,
+				ResponseHeaderTimeout: 10 * time.Second,
 			},
 		},
 	}
@@ -45,7 +49,7 @@ func (c *Client) doRequest(ctx context.Context, method, path string) (json.RawMe
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("execute request: %w", err)
+		return nil, fmt.Errorf("execute request %s %s: %w", method, path, err)
 	}
 	defer resp.Body.Close()
 
@@ -54,8 +58,11 @@ func (c *Client) doRequest(ctx context.Context, method, path string) (json.RawMe
 		return nil, fmt.Errorf("read response: %w", err)
 	}
 
+	if resp.StatusCode == 401 || resp.StatusCode == 403 {
+		return nil, fmt.Errorf("authentication failed (HTTP %d) for %s: %s", resp.StatusCode, path, string(body))
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("API error %d: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("API error %d on %s: %s", resp.StatusCode, path, string(body))
 	}
 
 	var result struct {
@@ -108,6 +115,8 @@ func (c *Client) GetNodeStatus(ctx context.Context, node string) (*NodeStatus, e
 			CPUs  int    `json:"cpus"`
 			Model string `json:"model"`
 		} `json:"cpuinfo"`
+		NetIn      int64    `json:"netin"`
+		NetOut     int64    `json:"netout"`
 		LoadAvg    []string `json:"loadavg"`
 		Uptime     int64    `json:"uptime"`
 		KVersion   string   `json:"kversion"`
@@ -139,6 +148,8 @@ func (c *Client) GetNodeStatus(ctx context.Context, node string) (*NodeStatus, e
 		SwapUsed:   raw.Swap.Used,
 		DiskTotal:  raw.RootFS.Total,
 		DiskUsed:   raw.RootFS.Used,
+		NetIn:      raw.NetIn,
+		NetOut:     raw.NetOut,
 		LoadAvg:    loadAvg,
 		KVersion:   raw.KVersion,
 		PVEVersion: raw.PVEVersion,
@@ -167,33 +178,31 @@ func (c *Client) GetNodes(ctx context.Context) ([]string, error) {
 }
 
 func (c *Client) GetVMs(ctx context.Context, node string) ([]VMInfo, error) {
-	qemuData, err := c.doRequest(ctx, http.MethodGet, fmt.Sprintf("/nodes/%s/qemu", node))
-	if err != nil {
-		return nil, err
+	var allVMs []VMInfo
+
+	// Fetch QEMU VMs - continue even if this fails
+	if qemuData, err := c.doRequest(ctx, http.MethodGet, fmt.Sprintf("/nodes/%s/qemu", node)); err == nil {
+		var qemuVMs []VMInfo
+		if err := json.Unmarshal(qemuData, &qemuVMs); err == nil {
+			for i := range qemuVMs {
+				qemuVMs[i].Type = "qemu"
+			}
+			allVMs = append(allVMs, qemuVMs...)
+		}
 	}
 
-	var qemuVMs []VMInfo
-	if err := json.Unmarshal(qemuData, &qemuVMs); err != nil {
-		return nil, fmt.Errorf("unmarshal qemu vms: %w", err)
-	}
-	for i := range qemuVMs {
-		qemuVMs[i].Type = "qemu"
-	}
-
-	lxcData, err := c.doRequest(ctx, http.MethodGet, fmt.Sprintf("/nodes/%s/lxc", node))
-	if err != nil {
-		return nil, err
+	// Fetch LXC containers - continue even if this fails
+	if lxcData, err := c.doRequest(ctx, http.MethodGet, fmt.Sprintf("/nodes/%s/lxc", node)); err == nil {
+		var lxcCTs []VMInfo
+		if err := json.Unmarshal(lxcData, &lxcCTs); err == nil {
+			for i := range lxcCTs {
+				lxcCTs[i].Type = "lxc"
+			}
+			allVMs = append(allVMs, lxcCTs...)
+		}
 	}
 
-	var lxcCTs []VMInfo
-	if err := json.Unmarshal(lxcData, &lxcCTs); err != nil {
-		return nil, fmt.Errorf("unmarshal lxc cts: %w", err)
-	}
-	for i := range lxcCTs {
-		lxcCTs[i].Type = "lxc"
-	}
-
-	return append(qemuVMs, lxcCTs...), nil
+	return allVMs, nil
 }
 
 func (c *Client) GetStorage(ctx context.Context, node string) ([]StorageInfo, error) {
@@ -202,15 +211,40 @@ func (c *Client) GetStorage(ctx context.Context, node string) ([]StorageInfo, er
 		return nil, err
 	}
 
-	var storages []StorageInfo
-	if err := json.Unmarshal(data, &storages); err != nil {
+	var raw []struct {
+		Storage string `json:"storage"`
+		Type    string `json:"type"`
+		Content string `json:"content"`
+		Total   int64  `json:"total"`
+		Used    int64  `json:"used"`
+		Avail   int64  `json:"avail"`
+		Active  int    `json:"active"`
+		Enabled int    `json:"enabled"`
+		Shared  int    `json:"shared"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
 		return nil, fmt.Errorf("unmarshal storage: %w", err)
 	}
 
-	for i := range storages {
-		if storages[i].Total > 0 {
-			storages[i].UsagePercent = float64(storages[i].Used) / float64(storages[i].Total) * 100
+	storages := make([]StorageInfo, 0, len(raw))
+	for _, r := range raw {
+		if r.Enabled == 0 {
+			continue
 		}
+		s := StorageInfo{
+			Storage:   r.Storage,
+			Type:      r.Type,
+			Content:   r.Content,
+			Total:     r.Total,
+			Used:      r.Used,
+			Available: r.Avail,
+			Active:    r.Active == 1,
+			Shared:    r.Shared == 1,
+		}
+		if s.Total > 0 {
+			s.UsagePercent = float64(s.Used) / float64(s.Total) * 100
+		}
+		storages = append(storages, s)
 	}
 
 	return storages, nil

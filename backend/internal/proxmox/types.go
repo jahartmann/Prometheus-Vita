@@ -14,6 +14,8 @@ type NodeStatus struct {
 	SwapUsed    int64     `json:"swap_used"`
 	DiskTotal   int64     `json:"disk_total"`
 	DiskUsed    int64     `json:"disk_used"`
+	NetIn       int64     `json:"net_in"`
+	NetOut      int64     `json:"net_out"`
 	LoadAvg     []float64 `json:"load_average"`
 	KVersion    string    `json:"kernel_version"`
 	PVEVersion  string    `json:"pve_version"`
@@ -54,6 +56,10 @@ type VMResponse struct {
 	DiskTotal   int64   `json:"disk_total"`
 	DiskUsed    int64   `json:"disk_used"`
 	Uptime      int64   `json:"uptime"`
+	NetIn       int64   `json:"net_in"`
+	NetOut      int64   `json:"net_out"`
+	DiskRead    int64   `json:"disk_read"`
+	DiskWrite   int64   `json:"disk_write"`
 	Tags        string  `json:"tags"`
 }
 
@@ -70,19 +76,24 @@ func (v VMInfo) ToResponse() VMResponse {
 		DiskTotal:   v.MaxDisk,
 		DiskUsed:    v.Disk,
 		Uptime:      v.Uptime,
+		NetIn:       v.NetIn,
+		NetOut:      v.NetOut,
+		DiskRead:    v.DiskRead,
+		DiskWrite:   v.DiskWrite,
 		Tags:        v.Tags,
 	}
 }
 
 type StorageInfo struct {
-	Storage    string  `json:"storage"`
-	Type       string  `json:"type"`
-	Content    string  `json:"content"`
-	Total      int64   `json:"total"`
-	Used       int64   `json:"used"`
-	Available  int64   `json:"available"`
+	Storage      string  `json:"storage"`
+	Type         string  `json:"type"`
+	Content      string  `json:"content"`
+	Total        int64   `json:"total"`
+	Used         int64   `json:"used"`
+	Available    int64   `json:"available"`
 	UsagePercent float64 `json:"usage_percent"`
-	Active     bool    `json:"active"`
+	Active       bool    `json:"active"`
+	Shared       bool    `json:"shared"`
 }
 
 type VersionInfo struct {

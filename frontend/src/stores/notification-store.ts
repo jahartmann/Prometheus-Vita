@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { toast } from "sonner";
 import type {
   NotificationChannel,
   NotificationHistoryEntry,
@@ -32,7 +33,8 @@ export const useNotificationStore = create<NotificationState>()((set) => ({
       set({ channels: toArray<NotificationChannel>(response.data), isLoading: false });
     } catch (err: unknown) {
       const message =
-        err instanceof Error ? err.message : "Kanäle konnten nicht geladen werden";
+        err instanceof Error ? err.message : "Kanaele konnten nicht geladen werden";
+      toast.error(message);
       set({ error: message, isLoading: false });
     }
   },
@@ -45,6 +47,7 @@ export const useNotificationStore = create<NotificationState>()((set) => ({
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : "Verlauf konnte nicht geladen werden";
+      toast.error(message);
       set({ error: message, isLoading: false });
     }
   },
@@ -57,6 +60,7 @@ export const useNotificationStore = create<NotificationState>()((set) => ({
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : "Alert-Regeln konnten nicht geladen werden";
+      toast.error(message);
       set({ error: message, isLoading: false });
     }
   },

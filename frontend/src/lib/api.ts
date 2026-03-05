@@ -322,11 +322,11 @@ export const telegramApi = {
 // Chat API
 export const chatApi = {
   chat: (data: { conversation_id?: string; message: string; model?: string }) =>
-    api.post("/chat", data).then((r) => r.data?.data ?? r.data),
+    api.post("/chat", data).then((r) => r.data),
   listConversations: () =>
     api.get("/chat/conversations").then((r) => toArray(r.data)),
   getConversation: (id: string) =>
-    api.get(`/chat/conversations/${id}`).then((r) => r.data?.data ?? r.data),
+    api.get(`/chat/conversations/${id}`).then((r) => r.data),
   getMessages: (id: string) =>
     api.get(`/chat/conversations/${id}/messages`).then((r) => toArray(r.data)),
   deleteConversation: (id: string) =>
@@ -382,7 +382,7 @@ export const predictionApi = {
 
 // Briefing API
 export const briefingApi = {
-  getLatest: () => api.get("/briefings/latest").then((r) => r.data?.data ?? r.data),
+  getLatest: () => api.get("/briefings/latest").then((r) => r.data),
   list: (limit?: number) => {
     return api.get("/briefings", { params: limit !== undefined ? { limit } : undefined }).then((r) => toArray(r.data));
   },
@@ -500,6 +500,11 @@ export const reflexApi = {
   delete: (id: string) => api.delete(`/reflexes/${id}`),
 };
 
+
+// Topology API
+export const topologyApi = {
+  get: () => api.get("/topology"),
+};
 
 // Brain API
 export const brainApi = {

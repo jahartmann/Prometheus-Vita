@@ -28,7 +28,7 @@ export function MetricsCharts({ metrics }: MetricsChartsProps) {
           hour: "2-digit",
           minute: "2-digit",
         }),
-        cpu: m.cpu_usage * 100,
+        cpu: m.cpu_usage,
         memPercent:
           m.memory_total > 0 ? (m.memory_used / m.memory_total) * 100 : 0,
         diskPercent:

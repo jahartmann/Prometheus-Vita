@@ -39,10 +39,10 @@ export function NodeCard({ node, status }: NodeCardProps) {
   const { nodeErrors } = useNodeStore();
   const nodeError = nodeErrors[node.id];
   const cpuUsage = status?.cpu_usage ?? 0;
-  const memUsage = status && status.memory_total
+  const memUsage = status && status.memory_total > 0
     ? (status.memory_used / status.memory_total) * 100
     : 0;
-  const diskUsage = status && status.disk_total
+  const diskUsage = status && status.disk_total > 0
     ? (status.disk_used / status.disk_total) * 100
     : 0;
 

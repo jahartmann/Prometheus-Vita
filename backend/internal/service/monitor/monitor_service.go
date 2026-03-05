@@ -107,7 +107,9 @@ func (s *Service) GetMetricsSummary(ctx context.Context, nodeID uuid.UUID, since
 	var cpuSum, memPctSum, diskPctSum float64
 	cpuMin := math.MaxFloat64
 	cpuMax := -math.MaxFloat64
+	memPctMin := math.MaxFloat64
 	memPctMax := -math.MaxFloat64
+	diskPctMin := math.MaxFloat64
 	diskPctMax := -math.MaxFloat64
 
 	for _, r := range records {
@@ -127,6 +129,9 @@ func (s *Service) GetMetricsSummary(ctx context.Context, nodeID uuid.UUID, since
 		if memPct > memPctMax {
 			memPctMax = memPct
 		}
+		if memPct < memPctMin {
+			memPctMin = memPct
+		}
 
 		var diskPct float64
 		if r.DiskTotal > 0 {
@@ -136,6 +141,9 @@ func (s *Service) GetMetricsSummary(ctx context.Context, nodeID uuid.UUID, since
 		if diskPct > diskPctMax {
 			diskPctMax = diskPct
 		}
+		if diskPct < diskPctMin {
+			diskPctMin = diskPct
+		}
 	}
 
 	n := float64(len(records))
@@ -144,12 +152,20 @@ func (s *Service) GetMetricsSummary(ctx context.Context, nodeID uuid.UUID, since
 	summary.CPUMin = cpuMin
 	summary.MemAvg = memPctSum / n
 	summary.MemMax = memPctMax
+	summary.MemMin = memPctMin
 	summary.DiskAvg = diskPctSum / n
 	summary.DiskMax = diskPctMax
+	summary.DiskMin = diskPctMin
 
 	// Get current values from the latest record
 	latest := records[len(records)-1]
 	summary.CPUCurrent = latest.CPUUsage
+	if latest.MemTotal > 0 {
+		summary.MemCurrent = float64(latest.MemUsed) / float64(latest.MemTotal) * 100
+	}
+	if latest.DiskTotal > 0 {
+		summary.DiskCurrent = float64(latest.DiskUsed) / float64(latest.DiskTotal) * 100
+	}
 
 	return summary, nil
 }

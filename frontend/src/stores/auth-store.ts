@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { toast } from "sonner";
 import axios from "axios";
 import type { User, LoginRequest, LoginResponse } from "@/types/api";
 import api from "@/lib/api";
@@ -50,6 +51,7 @@ export const useAuthStore = create<AuthState>()(
           } else if (err instanceof Error) {
             message = err.message;
           }
+          toast.error(message);
           set({ error: message, isLoading: false });
           throw new Error(message);
         }

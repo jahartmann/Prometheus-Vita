@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Dialog,
   DialogContent,
@@ -18,7 +18,17 @@ import { useMigrationStore } from "@/stores/migration-store";
 import { formatBytes } from "@/lib/utils";
 import api, { toArray } from "@/lib/api";
 import type { VM, MigrationMode } from "@/types/api";
-import { ArrowRight, Loader2 } from "lucide-react";
+import {
+  ArrowRight,
+  Loader2,
+  HardDrive,
+  Cpu,
+  MemoryStick,
+  Tag,
+  CheckCircle2,
+  AlertTriangle,
+} from "lucide-react";
+import { toast } from "sonner";
 
 interface MigrateVmDialogProps {
   open: boolean;
@@ -31,9 +41,13 @@ interface MigrateVmDialogProps {
 interface StorageOption {
   storage: string;
   type: string;
+  content: string;
   total: number;
   used: number;
   available: number;
+  usage_percent: number;
+  active: boolean;
+  shared: boolean;
 }
 
 type Step = "target" | "storage" | "options" | "confirm";
@@ -56,6 +70,15 @@ const MODES: { value: MigrationMode; label: string; description: string }[] = [
   },
 ];
 
+function parseTags(tags: string | string[] | undefined): string[] {
+  if (!tags) return [];
+  if (Array.isArray(tags)) return tags;
+  return tags
+    .split(/[;,]/)
+    .map((t) => t.trim())
+    .filter(Boolean);
+}
+
 export function MigrateVmDialog({
   open,
   onOpenChange,
@@ -63,20 +86,24 @@ export function MigrateVmDialog({
   sourceNodeId,
   sourceNodeName,
 }: MigrateVmDialogProps) {
-  const { nodes } = useNodeStore();
+  const { nodes, nodeStatus } = useNodeStore();
   const { startMigration } = useMigrationStore();
 
   const [step, setStep] = useState<Step>("target");
   const [targetNodeId, setTargetNodeId] = useState("");
   const [targetStorage, setTargetStorage] = useState("");
   const [storages, setStorages] = useState<StorageOption[]>([]);
+  const [sourceStorages, setSourceStorages] = useState<StorageOption[]>([]);
   const [loadingStorages, setLoadingStorages] = useState(false);
+  const [storageError, setStorageError] = useState("");
   const [mode, setMode] = useState<MigrationMode>("snapshot");
   const [newVmid, setNewVmid] = useState<string>("");
   const [cleanupSource, setCleanupSource] = useState(true);
   const [cleanupTarget, setCleanupTarget] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+
+  const vmTags = parseTags(vm.tags);
 
   // Filter: only online PVE nodes, not the source
   const targetNodes = nodes.filter(
@@ -88,32 +115,124 @@ export function MigrateVmDialog({
       setStep("target");
       setTargetNodeId("");
       setTargetStorage("");
+      setStorages([]);
+      setSourceStorages([]);
       setMode("snapshot");
       setNewVmid("");
       setError("");
     }
   }, [open]);
 
+  // Load source storages to detect VM's current storage type
+  useEffect(() => {
+    if (!open || !sourceNodeId) return;
+    api
+      .get(`/nodes/${sourceNodeId}/storage`)
+      .then((res) => {
+        setSourceStorages(toArray<StorageOption>(res.data));
+      })
+      .catch(() => setSourceStorages([]));
+  }, [open, sourceNodeId]);
+
   // Load storages when target node changes
   useEffect(() => {
     if (!targetNodeId) return;
     setLoadingStorages(true);
+    setTargetStorage("");
+    setStorageError("");
     api
       .get(`/nodes/${targetNodeId}/storage`)
       .then((res) => {
-        const data = toArray<StorageOption>(res.data);
-        setStorages(
-          data.filter(
-            (s: StorageOption) =>
-              s.type !== "dir" || s.available > 0
-          )
-        );
+        const all = toArray<StorageOption>(res.data);
+        setStorages(all);
+        setStorageError("");
       })
-      .catch(() => setStorages([]))
+      .catch((err) => {
+        setStorages([]);
+        const status = err?.response?.status;
+        const serverMsg =
+          err?.response?.data?.error || err?.response?.data?.message || "";
+        if (status === 503) {
+          setStorageError(
+            `Node nicht erreichbar (503): ${serverMsg || "Proxmox-API antwortet nicht."}`
+          );
+          // Auto-fetch diagnostics for better error info
+          api
+            .get(`/nodes/${targetNodeId}/diagnose`)
+            .then((diagRes) => {
+              const diag = diagRes.data;
+              const reachable = diag?.api_reachable;
+              const pveNodes = diag?.pve_cluster_nodes;
+              const cached = diag?.cached_pve_node;
+              if (reachable === false) {
+                setStorageError(
+                  `Proxmox-API auf ${diag?.hostname}:${diag?.port} nicht erreichbar. Fehler: ${diag?.version_error || "unbekannt"}`
+                );
+              } else if (reachable && pveNodes) {
+                setStorageError(
+                  `Proxmox erreichbar (v${diag?.pve_version}), aber Storage-Abfrage fehlgeschlagen. ` +
+                    `Gecachter PVE-Name: "${cached || "keiner"}", Cluster-Nodes: [${pveNodes.join(", ")}]. ` +
+                    `Versuche Neustart oder pruefe Cluster-Konfiguration.`
+                );
+              }
+            })
+            .catch(() => {
+              // Diagnostics also failed - keep original error
+            });
+        } else if (status === 401 || status === 403) {
+          setStorageError(
+            `Keine Berechtigung (${status}): ${serverMsg || "API-Token hat moeglicherweise keinen Zugriff."}`
+          );
+        } else {
+          setStorageError(
+            `Fehler ${status || "unbekannt"}: ${serverMsg || "Storages konnten nicht geladen werden."}`
+          );
+        }
+        toast.error("Storages konnten nicht geladen werden");
+      })
       .finally(() => setLoadingStorages(false));
   }, [targetNodeId]);
 
+  // Filter storages: only those that can hold VM images/rootdir
+  const vmStorages = useMemo(() => {
+    const contentNeeded = vm.type === "lxc" ? "rootdir" : "images";
+    return storages.filter(
+      (s) => s.active && s.content.includes(contentNeeded)
+    );
+  }, [storages, vm.type]);
+
+  // Suggest best matching storage (same type as source, or shared)
+  const suggestedStorage = useMemo(() => {
+    if (vmStorages.length === 0) return null;
+    // Prefer shared storage
+    const shared = vmStorages.find((s) => s.shared && s.available > 0);
+    if (shared) return shared.storage;
+    // Prefer same storage type as source storages
+    const sourceTypes = sourceStorages.map((s) => s.type);
+    const sameType = vmStorages.find(
+      (s) => sourceTypes.includes(s.type) && s.available > 0
+    );
+    if (sameType) return sameType.storage;
+    // Fallback: most available space
+    const sorted = [...vmStorages].sort((a, b) => b.available - a.available);
+    return sorted[0]?.storage || null;
+  }, [vmStorages, sourceStorages]);
+
+  // Auto-select suggested storage
+  useEffect(() => {
+    if (suggestedStorage && !targetStorage) {
+      setTargetStorage(suggestedStorage);
+    }
+  }, [suggestedStorage, targetStorage]);
+
   const targetNode = nodes.find((n) => n.id === targetNodeId);
+  const targetStatus = targetNodeId ? nodeStatus[targetNodeId] : null;
+
+  // Check if target has enough space for VM
+  const selectedStorage = vmStorages.find((s) => s.storage === targetStorage);
+  const vmDiskSize = vm.disk_total || 0;
+  const hasEnoughSpace =
+    !selectedStorage || selectedStorage.available >= vmDiskSize;
 
   const handleSubmit = async () => {
     setSubmitting(true);
@@ -132,7 +251,9 @@ export function MigrateVmDialog({
       onOpenChange(false);
     } catch (err: unknown) {
       const msg =
-        err instanceof Error ? err.message : "Migration konnte nicht gestartet werden";
+        err instanceof Error
+          ? err.message
+          : "Migration konnte nicht gestartet werden";
       setError(msg);
     } finally {
       setSubmitting(false);
@@ -143,14 +264,54 @@ export function MigrateVmDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>VM migrieren</DialogTitle>
+          <DialogTitle>
+            {vm.type === "lxc" ? "Container" : "VM"} migrieren
+          </DialogTitle>
           <DialogDescription>
-            VM {vm.vmid} ({vm.name}) von {sourceNodeName} migrieren
+            {vm.type === "lxc" ? "CT" : "VM"} {vm.vmid} ({vm.name}) von{" "}
+            {sourceNodeName} migrieren
           </DialogDescription>
         </DialogHeader>
 
+        {/* VM Info Summary */}
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/30 p-3 text-sm">
+          <div className="flex items-center gap-1">
+            <Cpu className="h-3.5 w-3.5 text-blue-500" />
+            <span>{vm.cpu_cores} Cores</span>
+          </div>
+          <span className="text-muted-foreground">·</span>
+          <div className="flex items-center gap-1">
+            <MemoryStick className="h-3.5 w-3.5 text-purple-500" />
+            <span>{formatBytes(vm.memory_total)}</span>
+          </div>
+          <span className="text-muted-foreground">·</span>
+          <div className="flex items-center gap-1">
+            <HardDrive className="h-3.5 w-3.5 text-orange-500" />
+            <span>{formatBytes(vm.disk_total)}</span>
+          </div>
+          {vmTags.length > 0 && (
+            <>
+              <span className="text-muted-foreground">·</span>
+              <div className="flex items-center gap-1">
+                <Tag className="h-3.5 w-3.5 text-muted-foreground" />
+                {vmTags.map((tag) => (
+                  <Badge key={tag} variant="secondary" className="text-xs">
+                    {tag}
+                  </Badge>
+                ))}
+              </div>
+            </>
+          )}
+          <Badge
+            variant={vm.status === "running" ? "success" : "secondary"}
+            className="ml-auto"
+          >
+            {vm.status}
+          </Badge>
+        </div>
+
         {/* Step indicator */}
-        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
           {["Ziel-Node", "Storage", "Optionen", "Bestaetigung"].map(
             (label, i) => (
               <div key={label} className="flex items-center gap-1">
@@ -180,26 +341,41 @@ export function MigrateVmDialog({
               </p>
             ) : (
               <div className="grid gap-2">
-                {targetNodes.map((node) => (
-                  <button
-                    key={node.id}
-                    type="button"
-                    className={`flex items-center justify-between p-3 rounded-lg border text-left transition-colors ${
-                      targetNodeId === node.id
-                        ? "border-primary bg-primary/5"
-                        : "hover:bg-muted/50"
-                    }`}
-                    onClick={() => setTargetNodeId(node.id)}
-                  >
-                    <div>
-                      <p className="font-medium">{node.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {node.hostname}
-                      </p>
-                    </div>
-                    <Badge variant="success">online</Badge>
-                  </button>
-                ))}
+                {targetNodes.map((node) => {
+                  const st = nodeStatus[node.id];
+                  return (
+                    <button
+                      key={node.id}
+                      type="button"
+                      className={`flex items-center justify-between p-3 rounded-lg border text-left transition-colors ${
+                        targetNodeId === node.id
+                          ? "border-primary bg-primary/5"
+                          : "hover:bg-muted/50"
+                      }`}
+                      onClick={() => setTargetNodeId(node.id)}
+                    >
+                      <div>
+                        <p className="font-medium">{node.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {node.hostname}
+                        </p>
+                        {st && (
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            CPU: {st.cpu_usage.toFixed(1)}% · RAM:{" "}
+                            {st.memory_total > 0
+                              ? (
+                                  (st.memory_used / st.memory_total) *
+                                  100
+                                ).toFixed(1)
+                              : 0}
+                            % · VMs: {st.vm_running}/{st.vm_count}
+                          </p>
+                        )}
+                      </div>
+                      <Badge variant="success">online</Badge>
+                    </button>
+                  );
+                })}
               </div>
             )}
             <DialogFooter>
@@ -222,41 +398,124 @@ export function MigrateVmDialog({
         {/* STEP 2: Storage */}
         {step === "storage" && (
           <div className="space-y-3">
-            <Label>Ziel-Storage auf {targetNode?.name}</Label>
+            <Label>
+              Ziel-Storage auf {targetNode?.name}
+              <span className="ml-2 text-xs font-normal text-muted-foreground">
+                ({vm.type === "lxc" ? "rootdir" : "images"}-faehig)
+              </span>
+            </Label>
             {loadingStorages ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Storages werden geladen...
               </div>
-            ) : storages.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Keine Storages verfuegbar.
-              </p>
+            ) : storageError ? (
+              <div className="space-y-3">
+                <div className="flex items-start gap-2 rounded-lg border border-destructive/50 bg-destructive/5 p-3">
+                  <AlertTriangle className="h-4 w-4 text-destructive mt-0.5 flex-shrink-0" />
+                  <p className="text-sm text-destructive">{storageError}</p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setStorageError("");
+                    setLoadingStorages(true);
+                    api
+                      .get(`/nodes/${targetNodeId}/storage`)
+                      .then((res) => {
+                        setStorages(toArray<StorageOption>(res.data));
+                        setStorageError("");
+                      })
+                      .catch(() =>
+                        setStorageError(
+                          "Node weiterhin nicht erreichbar. Bitte pruefe die Proxmox-Verbindung."
+                        )
+                      )
+                      .finally(() => setLoadingStorages(false));
+                  }}
+                >
+                  Erneut versuchen
+                </Button>
+              </div>
+            ) : vmStorages.length === 0 ? (
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">
+                  Keine kompatiblen Storages auf diesem Node.
+                </p>
+                {storages.length > 0 && (
+                  <p className="text-xs text-amber-600">
+                    {storages.length} Storage(s) vorhanden, aber keiner
+                    unterstuetzt{" "}
+                    {vm.type === "lxc" ? "rootdir" : "images"}-Content.
+                    Verfuegbare Typen:{" "}
+                    {[...new Set(storages.map((s) => `${s.storage} (${s.content})`))].join(", ")}
+                  </p>
+                )}
+              </div>
             ) : (
               <div className="grid gap-2">
-                {storages.map((s) => (
-                  <button
-                    key={s.storage}
-                    type="button"
-                    className={`flex items-center justify-between p-3 rounded-lg border text-left transition-colors ${
-                      targetStorage === s.storage
-                        ? "border-primary bg-primary/5"
-                        : "hover:bg-muted/50"
-                    }`}
-                    onClick={() => setTargetStorage(s.storage)}
-                  >
-                    <div>
-                      <p className="font-medium">{s.storage}</p>
-                      <p className="text-xs text-muted-foreground">{s.type}</p>
-                    </div>
-                    <div className="text-right text-xs text-muted-foreground">
-                      <p>{formatBytes(s.available)} frei</p>
-                      <p>
-                        {formatBytes(s.used)} / {formatBytes(s.total)}
-                      </p>
-                    </div>
-                  </button>
-                ))}
+                {vmStorages.map((s) => {
+                  const isSuggested = s.storage === suggestedStorage;
+                  const tooSmall = vmDiskSize > 0 && s.available < vmDiskSize;
+                  return (
+                    <button
+                      key={s.storage}
+                      type="button"
+                      className={`flex items-center justify-between p-3 rounded-lg border text-left transition-colors ${
+                        targetStorage === s.storage
+                          ? "border-primary bg-primary/5"
+                          : "hover:bg-muted/50"
+                      }`}
+                      onClick={() => setTargetStorage(s.storage)}
+                    >
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium">{s.storage}</p>
+                          <Badge variant="outline" className="text-xs">
+                            {s.type}
+                          </Badge>
+                          {s.shared && (
+                            <Badge
+                              variant="secondary"
+                              className="text-xs"
+                            >
+                              shared
+                            </Badge>
+                          )}
+                          {isSuggested && (
+                            <Badge className="text-xs bg-green-100 text-green-700 border-green-300">
+                              empfohlen
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {s.content}
+                        </p>
+                      </div>
+                      <div className="text-right text-xs">
+                        <p
+                          className={
+                            tooSmall
+                              ? "text-destructive font-medium"
+                              : "text-muted-foreground"
+                          }
+                        >
+                          {formatBytes(s.available)} frei
+                        </p>
+                        <p className="text-muted-foreground">
+                          {formatBytes(s.used)} / {formatBytes(s.total)}
+                        </p>
+                        {tooSmall && (
+                          <p className="text-destructive text-xs mt-0.5 flex items-center gap-1">
+                            <AlertTriangle className="h-3 w-3" />
+                            Zu wenig Platz
+                          </p>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             )}
             <DialogFooter>
@@ -348,11 +607,33 @@ export function MigrateVmDialog({
           <div className="space-y-4">
             <div className="rounded-lg border p-4 space-y-2 text-sm">
               <div className="flex justify-between">
-                <span className="text-muted-foreground">VM</span>
+                <span className="text-muted-foreground">
+                  {vm.type === "lxc" ? "Container" : "VM"}
+                </span>
                 <span className="font-medium">
                   {vm.vmid} ({vm.name})
                 </span>
               </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Ressourcen</span>
+                <span>
+                  {vm.cpu_cores} CPU · {formatBytes(vm.memory_total)} RAM ·{" "}
+                  {formatBytes(vm.disk_total)} Disk
+                </span>
+              </div>
+              {vmTags.length > 0 && (
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">Tags</span>
+                  <div className="flex gap-1">
+                    {vmTags.map((tag) => (
+                      <Badge key={tag} variant="secondary" className="text-xs">
+                        {tag}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <hr className="my-1" />
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Von</span>
                 <span>{sourceNodeName}</span>
@@ -363,7 +644,14 @@ export function MigrateVmDialog({
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Storage</span>
-                <span>{targetStorage}</span>
+                <span>
+                  {targetStorage}
+                  {selectedStorage && (
+                    <span className="text-muted-foreground ml-1">
+                      ({selectedStorage.type}, {formatBytes(selectedStorage.available)} frei)
+                    </span>
+                  )}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Modus</span>
@@ -377,11 +665,31 @@ export function MigrateVmDialog({
               )}
             </div>
 
+            {!hasEnoughSpace && (
+              <div className="flex items-center gap-2 text-sm text-amber-600 bg-amber-50 dark:bg-amber-950/30 rounded-lg p-3">
+                <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+                <span>
+                  Der Ziel-Storage hat moeglicherweise nicht genug Platz (
+                  {formatBytes(selectedStorage?.available ?? 0)} frei,{" "}
+                  {formatBytes(vmDiskSize)} benoetigt).
+                </span>
+              </div>
+            )}
+
             {mode === "stop" && (
-              <p className="text-xs text-amber-600">
+              <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-50 dark:bg-amber-950/30 rounded-lg p-2">
+                <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
                 Die VM wird waehrend der Migration heruntergefahren und ist
                 nicht erreichbar.
-              </p>
+              </div>
+            )}
+
+            {hasEnoughSpace && (
+              <div className="flex items-center gap-2 text-xs text-green-600">
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                Alle Voraussetzungen erfuellt. Tags und Konfiguration werden
+                uebernommen.
+              </div>
             )}
 
             {error && (

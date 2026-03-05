@@ -22,6 +22,9 @@ import {
   Shield,
   Disc,
   ArrowRightLeft,
+  GitCompare,
+  Zap,
+  GitBranch,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -50,6 +53,9 @@ const featureNavItems: NavItem[] = [
   { label: "Backups", href: "/backups", icon: Archive, matchPrefix: "/backups" },
   { label: "Migration", href: "/migrations", icon: ArrowRightLeft, matchPrefix: "/migrations" },
   { label: "Disaster Recovery", href: "/disaster-recovery", icon: Shield, matchPrefix: "/disaster-recovery" },
+  { label: "Drift Detection", href: "/drift", icon: GitCompare, matchPrefix: "/drift" },
+  { label: "Reflex-Regeln", href: "/reflex", icon: Zap, matchPrefix: "/reflex" },
+  { label: "Topologie", href: "/topology", icon: GitBranch, matchPrefix: "/topology" },
 ];
 
 const bottomNavItems: NavItem[] = [

@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { toast } from "sonner";
 import type { UserResponse } from "@/types/api";
 import { userApi, toArray } from "@/lib/api";
 
@@ -22,6 +23,7 @@ export const useUserStore = create<UserState>()((set) => ({
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : "Benutzer konnten nicht geladen werden";
+      toast.error(message);
       set({ error: message, isLoading: false });
     }
   },
