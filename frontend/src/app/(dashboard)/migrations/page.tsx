@@ -5,7 +5,6 @@ import { useNodeStore } from "@/stores/node-store";
 import { useMigrationStore } from "@/stores/migration-store";
 import { useWebSocket } from "@/hooks/use-websocket";
 import { MigrationHistory } from "@/components/migration/migration-history";
-import { MigrationProgress } from "@/components/migration/migration-progress";
 import {
   Card,
   CardContent,
@@ -824,22 +823,6 @@ export default function MigrationsPage() {
           VMs zwischen Nodes migrieren und Fortschritt in Echtzeit verfolgen.
         </p>
       </div>
-
-      {activeMigrations.length > 0 && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Aktive Migrationen ({activeMigrations.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {activeMigrations.map((m) => (
-              <MigrationProgress key={m.id} migration={m} />
-            ))}
-          </CardContent>
-        </Card>
-      )}
 
       <Card>
         <CardHeader>
