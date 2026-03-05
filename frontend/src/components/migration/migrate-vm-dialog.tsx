@@ -96,6 +96,8 @@ export function MigrateVmDialog({
   const [sourceStorages, setSourceStorages] = useState<StorageOption[]>([]);
   const [loadingStorages, setLoadingStorages] = useState(false);
   const [storageError, setStorageError] = useState("");
+  const [useSourceAsFallback, setUseSourceAsFallback] = useState(false);
+  const [manualStorage, setManualStorage] = useState("");
   const [mode, setMode] = useState<MigrationMode>("snapshot");
   const [newVmid, setNewVmid] = useState<string>("");
   const [cleanupSource, setCleanupSource] = useState(true);
@@ -120,6 +122,9 @@ export function MigrateVmDialog({
       setMode("snapshot");
       setNewVmid("");
       setError("");
+      setStorageError("");
+      setUseSourceAsFallback(false);
+      setManualStorage("");
     }
   }, [open]);
 
@@ -140,6 +145,8 @@ export function MigrateVmDialog({
     setLoadingStorages(true);
     setTargetStorage("");
     setStorageError("");
+    setUseSourceAsFallback(false);
+    setManualStorage("");
     api
       .get(`/nodes/${targetNodeId}/storage`)
       .then((res) => {
@@ -148,50 +155,27 @@ export function MigrateVmDialog({
         setStorageError("");
       })
       .catch((err) => {
-        setStorages([]);
         const status = err?.response?.status;
         const serverMsg =
           err?.response?.data?.error || err?.response?.data?.message || "";
-        if (status === 503) {
-          setStorageError(
-            `Node nicht erreichbar (503): ${serverMsg || "Proxmox-API antwortet nicht."}`
-          );
-          // Auto-fetch diagnostics for better error info
-          api
-            .get(`/nodes/${targetNodeId}/diagnose`)
-            .then((diagRes) => {
-              const diag = diagRes.data;
-              const reachable = diag?.api_reachable;
-              const pveNodes = diag?.pve_cluster_nodes;
-              const cached = diag?.cached_pve_node;
-              if (reachable === false) {
-                setStorageError(
-                  `Proxmox-API auf ${diag?.hostname}:${diag?.port} nicht erreichbar. Fehler: ${diag?.version_error || "unbekannt"}`
-                );
-              } else if (reachable && pveNodes) {
-                setStorageError(
-                  `Proxmox erreichbar (v${diag?.pve_version}), aber Storage-Abfrage fehlgeschlagen. ` +
-                    `Gecachter PVE-Name: "${cached || "keiner"}", Cluster-Nodes: [${pveNodes.join(", ")}]. ` +
-                    `Versuche Neustart oder pruefe Cluster-Konfiguration.`
-                );
-              }
-            })
-            .catch(() => {
-              // Diagnostics also failed - keep original error
-            });
-        } else if (status === 401 || status === 403) {
-          setStorageError(
-            `Keine Berechtigung (${status}): ${serverMsg || "API-Token hat moeglicherweise keinen Zugriff."}`
-          );
+        console.error(`[Migration] Storage fetch failed for node ${targetNodeId}:`, status, serverMsg, err?.response?.data);
+
+        // Fallback: use source node's storages (same names usually exist on target)
+        if (sourceStorages.length > 0) {
+          setStorages(sourceStorages);
+          setUseSourceAsFallback(true);
+          setStorageError("");
+          toast.info("Ziel-Storages nicht ladbar - verwende Source-Storages als Referenz");
         } else {
+          setStorages([]);
           setStorageError(
-            `Fehler ${status || "unbekannt"}: ${serverMsg || "Storages konnten nicht geladen werden."}`
+            `Storage-Abfrage fehlgeschlagen (${status || "Netzwerk"}): ${serverMsg || "Unbekannter Fehler"}. Du kannst den Storage-Namen manuell eingeben.`
           );
+          toast.error("Storages konnten nicht geladen werden");
         }
-        toast.error("Storages konnten nicht geladen werden");
       })
       .finally(() => setLoadingStorages(false));
-  }, [targetNodeId]);
+  }, [targetNodeId, sourceStorages]);
 
   // Filter storages: only those that can hold VM images/rootdir
   const vmStorages = useMemo(() => {
@@ -404,6 +388,17 @@ export function MigrateVmDialog({
                 ({vm.type === "lxc" ? "rootdir" : "images"}-faehig)
               </span>
             </Label>
+
+            {useSourceAsFallback && (
+              <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 p-2.5">
+                <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                <p className="text-xs text-amber-700 dark:text-amber-400">
+                  Ziel-Node Storages nicht ladbar. Zeige Source-Node Storages als Referenz
+                  (Storage-Namen sind in Proxmox-Clustern meist identisch).
+                </p>
+              </div>
+            )}
+
             {loadingStorages ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -415,28 +410,21 @@ export function MigrateVmDialog({
                   <AlertTriangle className="h-4 w-4 text-destructive mt-0.5 flex-shrink-0" />
                   <p className="text-sm text-destructive">{storageError}</p>
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setStorageError("");
-                    setLoadingStorages(true);
-                    api
-                      .get(`/nodes/${targetNodeId}/storage`)
-                      .then((res) => {
-                        setStorages(toArray<StorageOption>(res.data));
-                        setStorageError("");
-                      })
-                      .catch(() =>
-                        setStorageError(
-                          "Node weiterhin nicht erreichbar. Bitte pruefe die Proxmox-Verbindung."
-                        )
-                      )
-                      .finally(() => setLoadingStorages(false));
-                  }}
-                >
-                  Erneut versuchen
-                </Button>
+                <div className="space-y-2">
+                  <Label htmlFor="manual-storage" className="text-sm">Storage-Name manuell eingeben</Label>
+                  <Input
+                    id="manual-storage"
+                    placeholder="z.B. local-lvm, ceph-pool, nfs-share"
+                    value={manualStorage}
+                    onChange={(e) => {
+                      setManualStorage(e.target.value);
+                      setTargetStorage(e.target.value);
+                    }}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Gib den exakten Storage-Namen des Ziel-Nodes ein (z.B. &quot;local-lvm&quot;).
+                  </p>
+                </div>
               </div>
             ) : vmStorages.length === 0 ? (
               <div className="space-y-2">
@@ -452,6 +440,18 @@ export function MigrateVmDialog({
                     {[...new Set(storages.map((s) => `${s.storage} (${s.content})`))].join(", ")}
                   </p>
                 )}
+                <div className="space-y-2 pt-2">
+                  <Label htmlFor="manual-storage-2" className="text-sm">Storage-Name manuell eingeben</Label>
+                  <Input
+                    id="manual-storage-2"
+                    placeholder="z.B. local-lvm"
+                    value={manualStorage}
+                    onChange={(e) => {
+                      setManualStorage(e.target.value);
+                      setTargetStorage(e.target.value);
+                    }}
+                  />
+                </div>
               </div>
             ) : (
               <div className="grid gap-2">
