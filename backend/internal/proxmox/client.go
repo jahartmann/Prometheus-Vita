@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -211,6 +212,8 @@ func (c *Client) GetStorage(ctx context.Context, node string) ([]StorageInfo, er
 		return nil, err
 	}
 
+	slog.Debug("proxmox storage raw response", slog.String("node", node), slog.Int("bytes", len(data)))
+
 	var raw []struct {
 		Storage string `json:"storage"`
 		Type    string `json:"type"`
@@ -218,9 +221,9 @@ func (c *Client) GetStorage(ctx context.Context, node string) ([]StorageInfo, er
 		Total   int64  `json:"total"`
 		Used    int64  `json:"used"`
 		Avail   int64  `json:"avail"`
-		Active  int    `json:"active"`
-		Enabled int    `json:"enabled"`
-		Shared  int    `json:"shared"`
+		Active  *int   `json:"active"`
+		Enabled *int   `json:"enabled"`
+		Shared  *int   `json:"shared"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return nil, fmt.Errorf("unmarshal storage: %w", err)
@@ -228,9 +231,12 @@ func (c *Client) GetStorage(ctx context.Context, node string) ([]StorageInfo, er
 
 	storages := make([]StorageInfo, 0, len(raw))
 	for _, r := range raw {
-		if r.Enabled == 0 {
+		// Only skip if explicitly disabled (enabled == 0). If field is missing/null, include it.
+		if r.Enabled != nil && *r.Enabled == 0 {
 			continue
 		}
+		isActive := r.Active == nil || *r.Active == 1
+		isShared := r.Shared != nil && *r.Shared == 1
 		s := StorageInfo{
 			Storage:   r.Storage,
 			Type:      r.Type,
@@ -238,8 +244,8 @@ func (c *Client) GetStorage(ctx context.Context, node string) ([]StorageInfo, er
 			Total:     r.Total,
 			Used:      r.Used,
 			Available: r.Avail,
-			Active:    r.Active == 1,
-			Shared:    r.Shared == 1,
+			Active:    isActive,
+			Shared:    isShared,
 		}
 		if s.Total > 0 {
 			s.UsagePercent = float64(s.Used) / float64(s.Total) * 100
@@ -592,7 +598,8 @@ func (c *Client) GetClusterStorages(ctx context.Context) ([]StorageInfo, error) 
 	seen := make(map[string]bool)
 	storages := make([]StorageInfo, 0, len(raw))
 	for _, r := range raw {
-		if r.Status != "available" {
+		// Only skip if explicitly marked as not available (some PVE versions use different status values)
+		if r.Status == "unknown" {
 			continue
 		}
 		key := r.Storage
