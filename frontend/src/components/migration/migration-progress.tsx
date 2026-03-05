@@ -1,13 +1,21 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useWebSocket } from "@/hooks/use-websocket";
 import { useMigrationStore } from "@/stores/migration-store";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatBytes } from "@/lib/utils";
-import { X, Loader2 } from "lucide-react";
+import {
+  X,
+  Loader2,
+  ChevronDown,
+  ChevronUp,
+  Terminal,
+  CheckCircle2,
+  XCircle,
+} from "lucide-react";
 import type { VMMigration, MigrationStatus } from "@/types/api";
 
 const STATUS_LABELS: Record<MigrationStatus, string> = {
@@ -59,7 +67,9 @@ export function MigrationProgress({
   migration,
   totalSize,
 }: MigrationProgressProps) {
-  const { cancelMigration } = useMigrationStore();
+  const { cancelMigration, migrationLogs } = useMigrationStore();
+  const [showLogs, setShowLogs] = useState(true);
+  const logRef = useRef<HTMLDivElement>(null);
 
   const isActive = ![
     "completed",
@@ -71,10 +81,26 @@ export function MigrationProgress({
     ? totalSize - migration.transfer_bytes_sent
     : 0;
 
+  const logs = migrationLogs[migration.id] || [];
+
+  // Auto-scroll log to bottom
+  useEffect(() => {
+    if (logRef.current && showLogs) {
+      logRef.current.scrollTop = logRef.current.scrollHeight;
+    }
+  }, [logs.length, showLogs]);
+
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       <div className="flex items-center justify-between text-sm">
         <div className="flex items-center gap-2">
+          {migration.status === "completed" ? (
+            <CheckCircle2 className="h-4 w-4 text-green-500" />
+          ) : migration.status === "failed" ? (
+            <XCircle className="h-4 w-4 text-destructive" />
+          ) : isActive ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : null}
           <span className="font-medium">
             VM {migration.vmid}
             {migration.vm_name && ` (${migration.vm_name})`}
@@ -83,11 +109,11 @@ export function MigrationProgress({
             {STATUS_LABELS[migration.status]}
           </Badge>
         </div>
-        <span className="text-muted-foreground">{migration.progress}%</span>
+        <span className="text-muted-foreground font-mono">{migration.progress}%</span>
       </div>
 
       {/* Progress bar */}
-      <div className="h-2 rounded-full bg-muted overflow-hidden">
+      <div className="h-2.5 rounded-full bg-muted overflow-hidden">
         <div
           className={`h-full rounded-full transition-all duration-500 ${
             migration.status === "failed"
@@ -115,37 +141,98 @@ export function MigrationProgress({
         )}
       </div>
 
-      {isActive && (
-        <div className="flex justify-end">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => cancelMigration(migration.id)}
+      {/* Live Log Output */}
+      {logs.length > 0 && (
+        <div className="space-y-1">
+          <button
+            onClick={() => setShowLogs(!showLogs)}
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
-            <X className="mr-1 h-3 w-3" />
-            Abbrechen
-          </Button>
+            <Terminal className="h-3 w-3" />
+            <span>Log ({logs.length} Einträge)</span>
+            {showLogs ? (
+              <ChevronUp className="h-3 w-3" />
+            ) : (
+              <ChevronDown className="h-3 w-3" />
+            )}
+          </button>
+
+          {showLogs && (
+            <div
+              ref={logRef}
+              className="max-h-48 overflow-y-auto rounded-md border bg-black/90 p-3 font-mono text-xs leading-relaxed"
+            >
+              {logs.map((log, i) => (
+                <div key={i} className="flex gap-2">
+                  <span className="text-muted-foreground shrink-0 select-none">
+                    {log.timestamp}
+                  </span>
+                  <span
+                    className={
+                      log.line.startsWith("✓")
+                        ? "text-green-400"
+                        : log.line.startsWith("[PVE]")
+                        ? "text-blue-400"
+                        : log.line.includes("fehlgeschlagen") || log.line.includes("ERROR")
+                        ? "text-red-400"
+                        : "text-gray-300"
+                    }
+                  >
+                    {log.line}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
-      {migration.error_message && (
-        <p className="text-xs text-destructive">{migration.error_message}</p>
-      )}
+      <div className="flex items-center justify-between">
+        {migration.error_message && (
+          <p className="text-xs text-destructive max-w-[80%] whitespace-pre-wrap">
+            {migration.error_message}
+          </p>
+        )}
+
+        {isActive && (
+          <div className="flex justify-end ml-auto">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => cancelMigration(migration.id)}
+            >
+              <X className="mr-1 h-3 w-3" />
+              Abbrechen
+            </Button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
 export function ActiveMigrations() {
-  const { activeMigrations, updateMigrationProgress } = useMigrationStore();
+  const { activeMigrations, updateMigrationProgress, addMigrationLog } =
+    useMigrationStore();
 
   const handleMessage = useCallback(
     (data: unknown) => {
-      const msg = data as { type?: string; data?: VMMigration };
-      if (msg?.type === "migration_progress" && msg.data) {
-        updateMigrationProgress(msg.data);
+      const msg = data as {
+        type?: string;
+        data?: VMMigration & { migration_id?: string; line?: string; timestamp?: string };
+      };
+      if (!msg?.type || !msg.data) return;
+
+      if (msg.type === "migration_progress") {
+        updateMigrationProgress(msg.data as VMMigration);
+      } else if (msg.type === "migration_log") {
+        const logData = msg.data as { migration_id: string; line: string; timestamp: string };
+        if (logData.migration_id && logData.line) {
+          addMigrationLog(logData.migration_id, logData.line, logData.timestamp || "");
+        }
       }
     },
-    [updateMigrationProgress]
+    [updateMigrationProgress, addMigrationLog]
   );
 
   useWebSocket({
@@ -164,7 +251,7 @@ export function ActiveMigrations() {
           Aktive Migrationen ({activeMigrations.length})
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-6">
         {activeMigrations.map((m) => (
           <MigrationProgress key={m.id} migration={m} />
         ))}

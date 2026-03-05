@@ -219,7 +219,7 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 		completedAt := time.Now()
 		m.CompletedAt = &completedAt
 		_ = s.migrationRepo.Update(ctx, m)
-		s.broadcastProgress(m)
+		s.broadcastProgress(m, nil)
 
 		// If we stopped the VM and migration failed, restart it
 		if vmWasStopped && m.Mode == model.MigrationModeStop {
@@ -269,35 +269,130 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 		slog.String("source_db_name", sourceNode.Name), slog.String("source_pve", srcPVENode),
 		slog.String("target_db_name", targetNode.Name), slog.String("target_pve", tgtPVENode))
 
-	// Verify target storage exists - use cluster endpoint first, fall back to node endpoint
-	storages, err := tgtClient.GetClusterStorages(ctx)
+	// ── PRE-FLIGHT CHECKS ──
+	s.updatePhase(ctx, m, model.MigrationStatusPreparing, "Pre-Flight-Checks...", 2)
+	s.broadcastLog(m.ID, "Pre-Flight-Checks starten...")
+
+	// 1. Check SSH connectivity
+	s.broadcastLog(m.ID, "Prüfe SSH-Verbindung zu Source...")
+	srcSSHCfg, err := s.getSSHConfig(sourceNode)
 	if err != nil {
-		// Fallback to node-specific endpoint
-		storages, err = tgtClient.GetStorage(ctx, tgtPVENode)
-		if err != nil {
-			handleError("preparing", fmt.Errorf("get target storage: %w", err))
-			return
-		}
+		handleError("preflight", fmt.Errorf("source SSH config: %w", err))
+		return
 	}
-	storageFound := false
-	for _, st := range storages {
-		if st.Storage == m.TargetStorage {
-			storageFound = true
+	srcSSHClient, err := s.sshPool.Get(sourceNode.ID.String(), srcSSHCfg)
+	if err != nil {
+		handleError("preflight", fmt.Errorf("SSH-Verbindung zu Source %s fehlgeschlagen: %w", sourceNode.Name, err))
+		return
+	}
+	s.broadcastLog(m.ID, "✓ SSH zu Source verbunden")
+
+	s.broadcastLog(m.ID, "Prüfe SSH-Verbindung zu Target...")
+	tgtSSHCfg, err := s.getSSHConfig(targetNode)
+	if err != nil {
+		handleError("preflight", fmt.Errorf("target SSH config: %w", err))
+		return
+	}
+	tgtSSHClient, err := s.sshPool.Get(targetNode.ID.String(), tgtSSHCfg)
+	if err != nil {
+		handleError("preflight", fmt.Errorf("SSH-Verbindung zu Target %s fehlgeschlagen: %w", targetNode.Name, err))
+		return
+	}
+	s.broadcastLog(m.ID, "✓ SSH zu Target verbunden")
+
+	// 2. Get VM info to check disk size
+	s.broadcastLog(m.ID, fmt.Sprintf("Prüfe VM %d...", m.VMID))
+	vms, err := srcClient.GetVMs(ctx, srcPVENode)
+	if err != nil {
+		handleError("preflight", fmt.Errorf("get VMs: %w", err))
+		return
+	}
+	var vmInfo *proxmox.VMInfo
+	for _, v := range vms {
+		if v.VMID == m.VMID {
+			vm := v
+			vmInfo = &vm
 			break
 		}
 	}
-	if !storageFound {
-		handleError("preparing", fmt.Errorf("storage %q not found on target node", m.TargetStorage))
+	if vmInfo == nil {
+		handleError("preflight", fmt.Errorf("VM %d nicht auf Source-Node gefunden", m.VMID))
 		return
 	}
+	vmDiskSize := vmInfo.MaxDisk
+	s.broadcastLog(m.ID, fmt.Sprintf("✓ VM %d (%s) gefunden - Disk: %s, Status: %s",
+		vmInfo.VMID, vmInfo.Name, formatBytesLog(vmDiskSize), vmInfo.Status))
+
+	// 3. Check target storage exists and has enough space
+	s.broadcastLog(m.ID, fmt.Sprintf("Prüfe Zielspeicher '%s'...", m.TargetStorage))
+	storages, err := tgtClient.GetClusterStorages(ctx)
+	if err != nil {
+		storages, err = tgtClient.GetStorage(ctx, tgtPVENode)
+		if err != nil {
+			handleError("preflight", fmt.Errorf("Zielspeicher konnte nicht abgefragt werden: %w", err))
+			return
+		}
+	}
+	var targetStorageInfo *proxmox.StorageInfo
+	for _, st := range storages {
+		if st.Storage == m.TargetStorage {
+			stCopy := st
+			targetStorageInfo = &stCopy
+			break
+		}
+	}
+	if targetStorageInfo == nil {
+		handleError("preflight", fmt.Errorf("Speicher '%s' nicht auf Ziel-Node gefunden. Verfügbar: %s",
+			m.TargetStorage, listStorageNames(storages)))
+		return
+	}
+	s.broadcastLog(m.ID, fmt.Sprintf("✓ Zielspeicher '%s' gefunden - Frei: %s / Gesamt: %s (%.1f%% belegt)",
+		targetStorageInfo.Storage, formatBytesLog(targetStorageInfo.Available),
+		formatBytesLog(targetStorageInfo.Total), targetStorageInfo.UsagePercent))
+
+	// Check if target storage has enough space (need at least VM disk size)
+	if targetStorageInfo.Total > 0 && vmDiskSize > 0 {
+		if targetStorageInfo.Available < vmDiskSize {
+			handleError("preflight", fmt.Errorf("nicht genügend Speicherplatz auf '%s': benötigt %s, verfügbar %s",
+				m.TargetStorage, formatBytesLog(vmDiskSize), formatBytesLog(targetStorageInfo.Available)))
+			return
+		}
+		s.broadcastLog(m.ID, fmt.Sprintf("✓ Genügend Speicherplatz: benötigt %s, verfügbar %s",
+			formatBytesLog(vmDiskSize), formatBytesLog(targetStorageInfo.Available)))
+	}
+
+	// 4. Find a vzdump-capable storage on source for backup
+	vzdumpStorage := s.findVzdumpStorage(ctx, srcClient, srcPVENode, srcSSHClient)
+	s.broadcastLog(m.ID, fmt.Sprintf("✓ Vzdump-Storage: %s", vzdumpStorage))
+
+	// 5. Check source node disk space for vzdump file
+	if vzdumpStorage == "local" || vzdumpStorage == "" {
+		s.broadcastLog(m.ID, "Prüfe freien Speicherplatz auf Source für Backup...")
+		result, err := srcSSHClient.RunCommand(ctx, "df -B1 /var/lib/vz/dump/ | tail -1 | awk '{print $4}'")
+		if err == nil && result.ExitCode == 0 {
+			var freeSpace int64
+			fmt.Sscanf(strings.TrimSpace(result.Stdout), "%d", &freeSpace)
+			if freeSpace > 0 && vmDiskSize > 0 && freeSpace < vmDiskSize {
+				handleError("preflight", fmt.Errorf("nicht genügend Speicherplatz auf Source für vzdump: benötigt ca. %s, verfügbar %s auf /var/lib/vz/dump/",
+					formatBytesLog(vmDiskSize), formatBytesLog(freeSpace)))
+				return
+			}
+			s.broadcastLog(m.ID, fmt.Sprintf("✓ Source-Speicher für Backup: %s frei", formatBytesLog(freeSpace)))
+		}
+	}
+
+	s.broadcastLog(m.ID, "✓ Alle Pre-Flight-Checks bestanden!")
+	s.updatePhase(ctx, m, model.MigrationStatusPreparing, "Pre-Flight-Checks bestanden", 4)
 
 	// Handle VM state based on mode
 	switch m.Mode {
 	case model.MigrationModeStop:
-		s.updatePhase(ctx, m, model.MigrationStatusPreparing, "VM wird heruntergefahren...", 3)
+		s.updatePhase(ctx, m, model.MigrationStatusPreparing, "VM wird heruntergefahren...", 4)
+		s.broadcastLog(m.ID, fmt.Sprintf("Fahre VM %d herunter (Mode: stop)...", m.VMID))
 		upid, err := srcClient.ShutdownVM(ctx, srcPVENode, m.VMID, m.VMType)
 		if err != nil {
 			// Fallback to stop
+			s.broadcastLog(m.ID, "Graceful Shutdown fehlgeschlagen, erzwinge Stop...")
 			upid, err = srcClient.StopVM(ctx, srcPVENode, m.VMID, m.VMType)
 			if err != nil {
 				handleError("preparing", fmt.Errorf("stop vm: %w", err))
@@ -309,8 +404,10 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 			return
 		}
 		vmWasStopped = true
+		s.broadcastLog(m.ID, "✓ VM heruntergefahren")
 	case model.MigrationModeSuspend:
-		s.updatePhase(ctx, m, model.MigrationStatusPreparing, "VM wird pausiert...", 3)
+		s.updatePhase(ctx, m, model.MigrationStatusPreparing, "VM wird pausiert...", 4)
+		s.broadcastLog(m.ID, fmt.Sprintf("Pausiere VM %d (Mode: suspend)...", m.VMID))
 		upid, err := srcClient.SuspendVM(ctx, srcPVENode, m.VMID)
 		if err != nil {
 			handleError("preparing", fmt.Errorf("suspend vm: %w", err))
@@ -321,73 +418,63 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 			return
 		}
 		vmWasStopped = true
+		s.broadcastLog(m.ID, "✓ VM pausiert")
+	case model.MigrationModeSnapshot:
+		s.broadcastLog(m.ID, "Snapshot-Modus: VM läuft weiter während Backup")
 	}
 
 	s.updatePhase(ctx, m, model.MigrationStatusPreparing, "Vorbereitung abgeschlossen", 5)
 
 	// PHASE 2: BACKING UP (5-40%)
 	s.updatePhase(ctx, m, model.MigrationStatusBackingUp, "Vzdump-Backup wird erstellt...", 6)
+	s.broadcastLog(m.ID, fmt.Sprintf("Starte vzdump Backup (Mode: %s, Compress: zstd, Storage: %s)...", m.Mode, vzdumpStorage))
 
 	vzdumpOpts := proxmox.VzdumpOptions{
 		Mode:     string(m.Mode),
 		Compress: "zstd",
+		Storage:  vzdumpStorage,
 	}
 	vzdumpUPID, err := srcClient.CreateVzdump(ctx, srcPVENode, m.VMID, vzdumpOpts)
 	if err != nil {
-		handleError("backing_up", fmt.Errorf("create vzdump: %w", err))
+		handleError("backing_up", fmt.Errorf("vzdump konnte nicht gestartet werden: %w", err))
 		return
 	}
 	m.VzdumpTaskUPID = &vzdumpUPID
 	_ = s.migrationRepo.Update(ctx, m)
+	s.broadcastLog(m.ID, fmt.Sprintf("Vzdump Task gestartet: %s", vzdumpUPID))
 
-	// Poll vzdump task
+	// Poll vzdump task with live log streaming
 	if err := s.pollTaskWithProgress(ctx, srcClient, srcPVENode, vzdumpUPID, m, 6, 38); err != nil {
-		handleError("backing_up", fmt.Errorf("vzdump task: %w", err))
+		// Fetch task log for detailed error
+		taskLog := s.getTaskLogForError(ctx, srcClient, srcPVENode, vzdumpUPID)
+		handleError("backing_up", fmt.Errorf("vzdump fehlgeschlagen: %w\n\nTask-Log:\n%s", err, taskLog))
 		return
 	}
+	s.broadcastLog(m.ID, "✓ Vzdump Backup abgeschlossen")
 
 	// Find the vzdump file path from task log
 	vzdumpPath, err := s.findVzdumpPath(ctx, srcClient, srcPVENode, vzdumpUPID)
 	if err != nil {
-		handleError("backing_up", fmt.Errorf("find vzdump path: %w", err))
+		handleError("backing_up", fmt.Errorf("vzdump-Pfad nicht gefunden: %w", err))
 		return
 	}
 	m.VzdumpFilePath = &vzdumpPath
+	s.broadcastLog(m.ID, fmt.Sprintf("Backup-Datei: %s", vzdumpPath))
 
 	// Get file size
-	srcSSHCfg, err := s.getSSHConfig(sourceNode)
-	if err != nil {
-		handleError("backing_up", fmt.Errorf("source ssh config: %w", err))
-		return
-	}
-	srcSSHClient, err := s.sshPool.Get(sourceNode.ID.String(), srcSSHCfg)
-	if err != nil {
-		handleError("backing_up", fmt.Errorf("source ssh connect: %w", err))
-		return
-	}
-
 	sizeResult, err := srcSSHClient.RunCommand(ctx, fmt.Sprintf("stat -c %%s %q", vzdumpPath))
 	if err == nil && sizeResult.ExitCode == 0 {
 		var fileSize int64
 		fmt.Sscanf(strings.TrimSpace(sizeResult.Stdout), "%d", &fileSize)
 		m.VzdumpFileSize = &fileSize
+		s.broadcastLog(m.ID, fmt.Sprintf("Backup-Größe: %s", formatBytesLog(fileSize)))
 	}
 
 	s.updatePhase(ctx, m, model.MigrationStatusBackingUp, "Backup abgeschlossen", 40)
 
 	// PHASE 3: TRANSFERRING (40-80%)
-	s.updatePhase(ctx, m, model.MigrationStatusTransferring, "Datei wird uebertragen...", 41)
-
-	tgtSSHCfg, err := s.getSSHConfig(targetNode)
-	if err != nil {
-		handleError("transferring", fmt.Errorf("target ssh config: %w", err))
-		return
-	}
-	tgtSSHClient, err := s.sshPool.Get(targetNode.ID.String(), tgtSSHCfg)
-	if err != nil {
-		handleError("transferring", fmt.Errorf("target ssh connect: %w", err))
-		return
-	}
+	s.updatePhase(ctx, m, model.MigrationStatusTransferring, "Datei wird übertragen...", 41)
+	s.broadcastLog(m.ID, "Starte Transfer von Source zu Target...")
 
 	// Target path: /var/lib/vz/dump/<filename>
 	vzdumpFilename := vzdumpPath
@@ -404,6 +491,7 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 		totalSize = *m.VzdumpFileSize
 	}
 
+	lastLogTime := time.Now()
 	transferred, err := ssh.StreamCopyNodeToNode(ctx, srcSSHClient, tgtSSHClient, vzdumpPath, targetVzdumpPath,
 		func(bytesSent int64) {
 			m.TransferBytesSent = bytesSent
@@ -421,15 +509,27 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 					m.TransferSpeedBps = int64(float64(bytesSent) / elapsed)
 				}
 			}
-			s.broadcastProgress(m)
+			s.broadcastProgress(m, nil)
+
+			// Log progress every 10 seconds
+			if time.Since(lastLogTime) > 10*time.Second {
+				lastLogTime = time.Now()
+				pct := float64(0)
+				if totalSize > 0 {
+					pct = float64(bytesSent) / float64(totalSize) * 100
+				}
+				s.broadcastLog(m.ID, fmt.Sprintf("Transfer: %s / %s (%.1f%%) - %s/s",
+					formatBytesLog(bytesSent), formatBytesLog(totalSize), pct, formatBytesLog(m.TransferSpeedBps)))
+			}
 		})
 	if err != nil {
 		// Cleanup partial file on target
 		_, _ = tgtSSHClient.RunCommand(ctx, fmt.Sprintf("rm -f %q", targetVzdumpPath))
-		handleError("transferring", fmt.Errorf("stream copy: %w", err))
+		handleError("transferring", fmt.Errorf("transfer fehlgeschlagen: %w", err))
 		return
 	}
 	m.TransferBytesSent = transferred
+	s.broadcastLog(m.ID, fmt.Sprintf("✓ Transfer abgeschlossen: %s übertragen", formatBytesLog(transferred)))
 	s.updatePhase(ctx, m, model.MigrationStatusTransferring, "Transfer abgeschlossen", 80)
 
 	// PHASE 4: RESTORING (80-95%)
@@ -439,39 +539,46 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 	if m.NewVMID != nil {
 		restoreVMID = *m.NewVMID
 	}
+	s.broadcastLog(m.ID, fmt.Sprintf("Starte Restore auf %s (VMID: %d, Storage: %s)...", targetNode.Name, restoreVMID, m.TargetStorage))
 
 	restoreUPID, err := tgtClient.RestoreVM(ctx, tgtPVENode, targetVzdumpPath, m.TargetStorage, restoreVMID)
 	if err != nil {
 		// Cleanup vzdump on target
 		_, _ = tgtSSHClient.RunCommand(ctx, fmt.Sprintf("rm -f %q", targetVzdumpPath))
-		handleError("restoring", fmt.Errorf("restore vm: %w", err))
+		handleError("restoring", fmt.Errorf("restore konnte nicht gestartet werden: %w", err))
 		return
 	}
 	m.RestoreTaskUPID = &restoreUPID
 	_ = s.migrationRepo.Update(ctx, m)
+	s.broadcastLog(m.ID, fmt.Sprintf("Restore Task gestartet: %s", restoreUPID))
 
 	if err := s.pollTaskWithProgress(ctx, tgtClient, tgtPVENode, restoreUPID, m, 81, 94); err != nil {
+		taskLog := s.getTaskLogForError(ctx, tgtClient, tgtPVENode, restoreUPID)
 		_, _ = tgtSSHClient.RunCommand(ctx, fmt.Sprintf("rm -f %q", targetVzdumpPath))
-		handleError("restoring", fmt.Errorf("restore task: %w", err))
+		handleError("restoring", fmt.Errorf("restore fehlgeschlagen: %w\n\nTask-Log:\n%s", err, taskLog))
 		return
 	}
+	s.broadcastLog(m.ID, "✓ VM erfolgreich wiederhergestellt")
 	s.updatePhase(ctx, m, model.MigrationStatusRestoring, "Wiederherstellung abgeschlossen", 95)
 
 	// PHASE 5: CLEANING UP (95-100%)
-	s.updatePhase(ctx, m, model.MigrationStatusCleaningUp, "Aufraeum-Arbeiten...", 96)
+	s.updatePhase(ctx, m, model.MigrationStatusCleaningUp, "Aufräum-Arbeiten...", 96)
 
 	// Delete vzdump on target
 	if m.CleanupTarget {
+		s.broadcastLog(m.ID, "Lösche Backup-Datei auf Target...")
 		_, _ = tgtSSHClient.RunCommand(ctx, fmt.Sprintf("rm -f %q", targetVzdumpPath))
 	}
 
 	// Delete vzdump on source
 	if m.CleanupSource {
+		s.broadcastLog(m.ID, "Lösche Backup-Datei auf Source...")
 		_, _ = srcSSHClient.RunCommand(ctx, fmt.Sprintf("rm -f %q", vzdumpPath))
 	}
 
 	// Resume source VM if suspended
 	if m.Mode == model.MigrationModeSuspend {
+		s.broadcastLog(m.ID, "Setze Source-VM fort...")
 		_, _ = srcClient.ResumeVM(ctx, srcPVENode, m.VMID)
 	}
 
@@ -482,12 +589,17 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 	completedAt := time.Now()
 	m.CompletedAt = &completedAt
 	_ = s.migrationRepo.Update(ctx, m)
-	s.broadcastProgress(m)
+
+	duration := completedAt.Sub(*m.StartedAt)
+	s.broadcastLog(m.ID, fmt.Sprintf("✓ Migration abgeschlossen! Dauer: %s, Übertragen: %s",
+		duration.Round(time.Second), formatBytesLog(m.TransferBytesSent)))
+	s.broadcastProgress(m, nil)
 
 	slog.Info("migration completed",
 		slog.String("id", m.ID.String()),
 		slog.Int("vmid", m.VMID),
 		slog.Int64("bytes_transferred", m.TransferBytesSent),
+		slog.String("duration", duration.String()),
 	)
 }
 
@@ -496,13 +608,28 @@ func (s *Service) updatePhase(ctx context.Context, m *model.VMMigration, status 
 	m.CurrentStep = step
 	m.Progress = progress
 	_ = s.migrationRepo.Update(ctx, m)
-	s.broadcastProgress(m)
+	s.broadcastProgress(m, nil)
 }
 
-func (s *Service) broadcastProgress(m *model.VMMigration) {
+func (s *Service) broadcastProgress(m *model.VMMigration, logEntries []string) {
+	resp := m.ToResponse()
+	resp.LogEntries = logEntries
 	s.wsHub.BroadcastMessage(monitor.WSMessage{
 		Type: "migration_progress",
-		Data: m.ToResponse(),
+		Data: resp,
+	})
+}
+
+// broadcastLog sends a single log line via WebSocket.
+func (s *Service) broadcastLog(migrationID uuid.UUID, line string) {
+	slog.Info("migration log", slog.String("migration_id", migrationID.String()), slog.String("line", line))
+	s.wsHub.BroadcastMessage(monitor.WSMessage{
+		Type: "migration_log",
+		Data: map[string]interface{}{
+			"migration_id": migrationID.String(),
+			"line":         line,
+			"timestamp":    time.Now().Format("15:04:05"),
+		},
 	})
 }
 
@@ -533,22 +660,46 @@ func (s *Service) waitForTask(ctx context.Context, client *proxmox.Client, node 
 }
 
 func (s *Service) pollTaskWithProgress(ctx context.Context, client *proxmox.Client, node string, upid string, m *model.VMMigration, startProgress, endProgress int) error {
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(3 * time.Second)
 	defer ticker.Stop()
 
 	progressRange := endProgress - startProgress
 	pollCount := 0
+	lastLogLine := 0 // Track which log lines we've already sent
 
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
+			// Stream task log lines
+			entries, err := client.GetTaskLog(ctx, node, upid, lastLogLine)
+			if err == nil && len(entries) > 0 {
+				for _, e := range entries {
+					if e.LineNum >= lastLogLine && e.Text != "" {
+						s.broadcastLog(m.ID, fmt.Sprintf("[PVE] %s", e.Text))
+						if e.LineNum >= lastLogLine {
+							lastLogLine = e.LineNum + 1
+						}
+					}
+				}
+			}
+
 			status, err := client.GetTaskStatus(ctx, node, upid)
 			if err != nil {
 				continue
 			}
 			if !status.IsRunning() {
+				// Fetch remaining log lines
+				finalEntries, err := client.GetTaskLog(ctx, node, upid, lastLogLine)
+				if err == nil {
+					for _, e := range finalEntries {
+						if e.Text != "" {
+							s.broadcastLog(m.ID, fmt.Sprintf("[PVE] %s", e.Text))
+						}
+					}
+				}
+
 				if status.IsSuccess() {
 					return nil
 				}
@@ -561,9 +712,57 @@ func (s *Service) pollTaskWithProgress(ctx context.Context, client *proxmox.Clie
 				fakeProgress = endProgress - 1
 			}
 			m.Progress = fakeProgress
-			s.broadcastProgress(m)
+			s.broadcastProgress(m, nil)
 		}
 	}
+}
+
+// getTaskLogForError fetches the task log and returns the last N lines for error context.
+func (s *Service) getTaskLogForError(ctx context.Context, client *proxmox.Client, node string, upid string) string {
+	entries, err := client.GetTaskLog(ctx, node, upid, 0)
+	if err != nil {
+		return fmt.Sprintf("(Task-Log nicht verfügbar: %v)", err)
+	}
+	if len(entries) == 0 {
+		return "(Keine Log-Einträge)"
+	}
+
+	var lines []string
+	// Get last 20 lines max
+	start := 0
+	if len(entries) > 20 {
+		start = len(entries) - 20
+	}
+	for _, e := range entries[start:] {
+		if e.Text != "" {
+			lines = append(lines, e.Text)
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+// findVzdumpStorage finds a storage capable of holding vzdump backups on the source node.
+func (s *Service) findVzdumpStorage(ctx context.Context, client *proxmox.Client, pveNode string, sshClient *ssh.Client) string {
+	storages, err := client.GetStorage(ctx, pveNode)
+	if err != nil {
+		return "local" // fallback
+	}
+
+	// Look for a storage with "backup" or "dump" content type
+	for _, st := range storages {
+		if strings.Contains(st.Content, "backup") || strings.Contains(st.Content, "vzdump") {
+			slog.Info("migration: found vzdump storage", slog.String("storage", st.Storage), slog.String("content", st.Content))
+			return st.Storage
+		}
+	}
+
+	// Check if /var/lib/vz/dump exists (local storage default dump path)
+	result, err := sshClient.RunCommand(ctx, "test -d /var/lib/vz/dump && echo ok")
+	if err == nil && result.ExitCode == 0 && strings.Contains(result.Stdout, "ok") {
+		return "local"
+	}
+
+	return "local"
 }
 
 func (s *Service) findVzdumpPath(ctx context.Context, client *proxmox.Client, node string, upid string) (string, error) {
@@ -692,5 +891,34 @@ func (s *Service) tryRestartSourceVM(ctx context.Context, m *model.VMMigration) 
 		slog.Error("migration: failed to restart source VM", slog.Int("vmid", m.VMID), slog.Any("error", err))
 	} else {
 		slog.Info("migration: restarted source VM after failure", slog.Int("vmid", m.VMID))
+	}
+}
+
+func listStorageNames(storages []proxmox.StorageInfo) string {
+	names := make([]string, 0, len(storages))
+	for _, s := range storages {
+		names = append(names, s.Storage)
+	}
+	return strings.Join(names, ", ")
+}
+
+func formatBytesLog(bytes int64) string {
+	const (
+		KB = 1024
+		MB = KB * 1024
+		GB = MB * 1024
+		TB = GB * 1024
+	)
+	switch {
+	case bytes >= TB:
+		return fmt.Sprintf("%.2f TB", float64(bytes)/float64(TB))
+	case bytes >= GB:
+		return fmt.Sprintf("%.2f GB", float64(bytes)/float64(GB))
+	case bytes >= MB:
+		return fmt.Sprintf("%.1f MB", float64(bytes)/float64(MB))
+	case bytes >= KB:
+		return fmt.Sprintf("%.1f KB", float64(bytes)/float64(KB))
+	default:
+		return fmt.Sprintf("%d B", bytes)
 	}
 }

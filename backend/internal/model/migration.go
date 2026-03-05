@@ -95,6 +95,7 @@ type MigrationResponse struct {
 	TransferBytesSent int64          `json:"transfer_bytes_sent"`
 	TransferSpeedBps  int64          `json:"transfer_speed_bps"`
 	ErrorMessage     string          `json:"error_message,omitempty"`
+	LogEntries       []string        `json:"log_entries,omitempty"`
 	StartedAt        *time.Time      `json:"started_at,omitempty"`
 	CompletedAt      *time.Time      `json:"completed_at,omitempty"`
 	CreatedAt        time.Time       `json:"created_at"`

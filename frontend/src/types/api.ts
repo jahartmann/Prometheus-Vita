@@ -641,6 +641,7 @@ export interface VMMigration {
   transfer_bytes_sent: number;
   transfer_speed_bps: number;
   error_message?: string;
+  log_entries?: string[];
   started_at?: string;
   completed_at?: string;
   created_at: string;

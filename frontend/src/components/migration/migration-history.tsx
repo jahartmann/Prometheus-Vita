@@ -67,6 +67,7 @@ export function MigrationHistory({ nodeId }: MigrationHistoryProps) {
     fetchByNode,
     deleteMigration,
     updateMigrationProgress,
+    addMigrationLog,
     isLoading,
   } = useMigrationStore();
   const { nodes } = useNodeStore();
@@ -81,12 +82,19 @@ export function MigrationHistory({ nodeId }: MigrationHistoryProps) {
 
   const handleMessage = useCallback(
     (data: unknown) => {
-      const msg = data as { type?: string; data?: VMMigration };
-      if (msg?.type === "migration_progress" && msg.data) {
-        updateMigrationProgress(msg.data);
+      const msg = data as { type?: string; data?: Record<string, unknown> };
+      if (!msg?.type || !msg.data) return;
+
+      if (msg.type === "migration_progress") {
+        updateMigrationProgress(msg.data as unknown as VMMigration);
+      } else if (msg.type === "migration_log") {
+        const logData = msg.data as { migration_id: string; line: string; timestamp: string };
+        if (logData.migration_id && logData.line) {
+          addMigrationLog(logData.migration_id, logData.line, logData.timestamp || "");
+        }
       }
     },
-    [updateMigrationProgress]
+    [updateMigrationProgress, addMigrationLog]
   );
 
   useWebSocket({

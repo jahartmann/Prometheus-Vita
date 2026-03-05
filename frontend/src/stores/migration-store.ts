@@ -5,9 +5,15 @@ import { toast } from "sonner";
 import { migrationApi, toArray } from "@/lib/api";
 import type { VMMigration } from "@/types/api";
 
+interface MigrationLogEntry {
+  line: string;
+  timestamp: string;
+}
+
 interface MigrationState {
   migrations: VMMigration[];
   activeMigrations: VMMigration[];
+  migrationLogs: Record<string, MigrationLogEntry[]>;
   isLoading: boolean;
   error: string | null;
 
@@ -26,11 +32,13 @@ interface MigrationState {
   cancelMigration: (id: string) => Promise<void>;
   deleteMigration: (id: string) => Promise<void>;
   updateMigrationProgress: (migration: VMMigration) => void;
+  addMigrationLog: (migrationId: string, line: string, timestamp: string) => void;
 }
 
 export const useMigrationStore = create<MigrationState>()((set, get) => ({
   migrations: [],
   activeMigrations: [],
+  migrationLogs: {},
   isLoading: false,
   error: null,
 
@@ -75,6 +83,7 @@ export const useMigrationStore = create<MigrationState>()((set, get) => ({
     set((state) => ({
       migrations: [res.data, ...state.migrations],
       activeMigrations: [res.data, ...state.activeMigrations],
+      migrationLogs: { ...state.migrationLogs, [res.data.id]: [] },
     }));
     toast.success("Migration gestartet");
     return res.data;
@@ -93,10 +102,15 @@ export const useMigrationStore = create<MigrationState>()((set, get) => ({
 
   deleteMigration: async (id: string) => {
     await migrationApi.delete(id);
-    set((state) => ({
-      migrations: state.migrations.filter((m) => m.id !== id),
-      activeMigrations: state.activeMigrations.filter((m) => m.id !== id),
-    }));
+    set((state) => {
+      const newLogs = { ...state.migrationLogs };
+      delete newLogs[id];
+      return {
+        migrations: state.migrations.filter((m) => m.id !== id),
+        activeMigrations: state.activeMigrations.filter((m) => m.id !== id),
+        migrationLogs: newLogs,
+      };
+    });
     toast.success("Migration geloescht");
   },
 
@@ -116,6 +130,20 @@ export const useMigrationStore = create<MigrationState>()((set, get) => ({
         activeMigrations: updated.filter(
           (m) => !["completed", "failed", "cancelled"].includes(m.status)
         ),
+      };
+    });
+  },
+
+  addMigrationLog: (migrationId: string, line: string, timestamp: string) => {
+    set((state) => {
+      const existing = state.migrationLogs[migrationId] || [];
+      // Keep last 200 log entries to prevent memory issues
+      const updated = [...existing, { line, timestamp }];
+      if (updated.length > 200) {
+        updated.splice(0, updated.length - 200);
+      }
+      return {
+        migrationLogs: { ...state.migrationLogs, [migrationId]: updated },
       };
     });
   },
