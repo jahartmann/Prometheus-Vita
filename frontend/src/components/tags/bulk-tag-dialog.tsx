@@ -406,9 +406,7 @@ export function BulkTagDialog({
                     <div key={nodeId}>
                       <label className="flex items-center gap-2 px-1 py-1 text-sm font-medium cursor-pointer hover:bg-accent/50 rounded">
                         <Checkbox
-                          checked={allNodeSelected}
-                          // @ts-expect-error indeterminate is valid for some checkbox implementations
-                          data-indeterminate={someNodeSelected}
+                          checked={allNodeSelected || (someNodeSelected ? "indeterminate" : false)}
                           onCheckedChange={() => toggleNodeAll(nodeId)}
                         />
                         <Server className="h-3.5 w-3.5 text-muted-foreground" />
