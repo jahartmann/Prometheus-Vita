@@ -121,6 +121,8 @@ func SetupRouter(e *echo.Echo, cfg *config.Config, jwtSvc *auth.JWTService, h Ha
 	nodes.GET("/:id/network-summary", h.Metrics.GetNodeNetworkSummary)
 	nodes.GET("/:id/vms/:vmid/metrics", h.Metrics.GetVMMetricsHistory)
 	nodes.GET("/:id/vms/:vmid/network-summary", h.Metrics.GetVMNetworkSummary)
+	nodes.GET("/:id/rrd", h.Metrics.GetNodeRRDData)
+	nodes.GET("/:id/vms/:vmid/rrd", h.Metrics.GetVMRRDData)
 
 	// Cluster-wide network summary
 	protected.GET("/network-summary", h.Metrics.GetClusterNetworkSummary)

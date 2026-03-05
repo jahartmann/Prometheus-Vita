@@ -466,9 +466,69 @@ func (c *Client) CreateVzdump(ctx context.Context, node string, vmid int, opts V
 	return upid, nil
 }
 
+// GetNodeRRDData returns RRD performance data for a node.
+func (c *Client) GetNodeRRDData(ctx context.Context, node string, timeframe string) ([]RRDDataPoint, error) {
+	data, err := c.doRequest(ctx, http.MethodGet, fmt.Sprintf("/nodes/%s/rrddata?timeframe=%s", node, timeframe))
+	if err != nil {
+		return nil, err
+	}
+
+	var raw []struct {
+		Time      float64  `json:"time"`
+		CPU       *float64 `json:"cpu"`
+		NetIn     *float64 `json:"netin"`
+		NetOut    *float64 `json:"netout"`
+		MemUsed   *float64 `json:"memused"`
+		MemTotal  *float64 `json:"memtotal"`
+		RootUsed  *float64 `json:"rootused"`
+		RootTotal *float64 `json:"roottotal"`
+		LoadAvg   *float64 `json:"loadavg"`
+		IOWait    *float64 `json:"iowait"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, fmt.Errorf("unmarshal rrd data: %w", err)
+	}
+
+	var points []RRDDataPoint
+	for _, r := range raw {
+		p := RRDDataPoint{
+			Time: int64(r.Time),
+		}
+		if r.CPU != nil {
+			p.CPU = *r.CPU
+		}
+		if r.NetIn != nil {
+			p.NetIn = *r.NetIn
+		}
+		if r.NetOut != nil {
+			p.NetOut = *r.NetOut
+		}
+		if r.MemUsed != nil {
+			p.MemUsed = int64(*r.MemUsed)
+		}
+		if r.MemTotal != nil {
+			p.MemTotal = int64(*r.MemTotal)
+		}
+		if r.RootUsed != nil {
+			p.RootUsed = int64(*r.RootUsed)
+		}
+		if r.RootTotal != nil {
+			p.RootTotal = int64(*r.RootTotal)
+		}
+		if r.LoadAvg != nil {
+			p.LoadAvg = *r.LoadAvg
+		}
+		if r.IOWait != nil {
+			p.IOWait = *r.IOWait
+		}
+		points = append(points, p)
+	}
+	return points, nil
+}
+
 // GetVMRRDData returns RRD performance data for a VM/CT.
-func (c *Client) GetVMRRDData(ctx context.Context, node string, vmid int, vmType string) ([]VMRRDDataPoint, error) {
-	path := fmt.Sprintf("/nodes/%s/%s/%d/rrddata?timeframe=day", node, vmType, vmid)
+func (c *Client) GetVMRRDData(ctx context.Context, node string, vmid int, vmType string, timeframe string) ([]VMRRDDataPoint, error) {
+	path := fmt.Sprintf("/nodes/%s/%s/%d/rrddata?timeframe=%s", node, vmType, vmid, timeframe)
 	data, err := c.doRequest(ctx, http.MethodGet, path)
 	if err != nil {
 		return nil, fmt.Errorf("get vm rrd data: %w", err)

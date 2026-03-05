@@ -188,6 +188,15 @@ func (j *MetricsCollectionJob) Run(ctx context.Context) error {
 				netOutRate = 0
 			}
 
+			slog.Debug("metrics: node delta calculated",
+				slog.String("node", node.Name),
+				slog.Int64("raw_netin", status.NetIn),
+				slog.Int64("raw_netout", status.NetOut),
+				slog.Int64("rate_in", netInRate),
+				slog.Int64("rate_out", netOutRate),
+				slog.Bool("valid", valid),
+			)
+
 			record := &model.MetricsRecord{
 				NodeID:     node.ID,
 				RecordedAt: now,
@@ -278,6 +287,18 @@ func (j *MetricsCollectionJob) collectVMMetrics(ctx context.Context, client *pro
 			diskReadRate = 0
 			diskWriteRate = 0
 		}
+
+		slog.Debug("metrics: vm delta calculated",
+			slog.Int("vmid", vm.VMID),
+			slog.String("node_id", nodeID.String()),
+			slog.Int64("raw_netin", int64(vm.NetIn)),
+			slog.Int64("raw_netout", int64(vm.NetOut)),
+			slog.Int64("rate_in", netInRate),
+			slog.Int64("rate_out", netOutRate),
+			slog.Int64("disk_read_rate", diskReadRate),
+			slog.Int64("disk_write_rate", diskWriteRate),
+			slog.Bool("valid", valid),
+		)
 
 		vmRecord := &model.VMMetricsRecord{
 			NodeID:     nodeID,

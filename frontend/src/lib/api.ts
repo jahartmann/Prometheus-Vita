@@ -180,6 +180,10 @@ export const metricsApi = {
     api.get(`/nodes/${nodeId}/network-summary`, { params: { period } }),
   getClusterNetworkSummary: (period: string) =>
     api.get(`/network-summary`, { params: { period } }),
+  getNodeRRD: (nodeId: string, timeframe?: string) =>
+    api.get(`/nodes/${nodeId}/rrd`, { params: { timeframe: timeframe || "hour" } }),
+  getVMRRD: (nodeId: string, vmid: number, timeframe?: string) =>
+    api.get(`/nodes/${nodeId}/vms/${vmid}/rrd`, { params: { timeframe: timeframe || "hour" } }),
 };
 
 // Network API

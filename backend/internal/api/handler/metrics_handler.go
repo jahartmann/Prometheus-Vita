@@ -6,16 +6,18 @@ import (
 
 	apiPkg "github.com/antigravity/prometheus/internal/api/response"
 	"github.com/antigravity/prometheus/internal/service/monitor"
+	nodeService "github.com/antigravity/prometheus/internal/service/node"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 )
 
 type MetricsHandler struct {
 	monitorSvc *monitor.Service
+	nodeSvc    *nodeService.Service
 }
 
-func NewMetricsHandler(monitorSvc *monitor.Service) *MetricsHandler {
-	return &MetricsHandler{monitorSvc: monitorSvc}
+func NewMetricsHandler(monitorSvc *monitor.Service, nodeSvc *nodeService.Service) *MetricsHandler {
+	return &MetricsHandler{monitorSvc: monitorSvc, nodeSvc: nodeSvc}
 }
 
 func (h *MetricsHandler) GetMetricsHistory(c echo.Context) error {
@@ -234,4 +236,71 @@ func (h *MetricsHandler) GetClusterNetworkSummary(c echo.Context) error {
 	}
 
 	return apiPkg.Success(c, summary)
+}
+
+// GetNodeRRDData returns Proxmox RRD performance data for a node.
+func (h *MetricsHandler) GetNodeRRDData(c echo.Context) error {
+	nodeID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return apiPkg.BadRequest(c, "invalid node id")
+	}
+
+	timeframe := c.QueryParam("timeframe")
+	if timeframe == "" {
+		timeframe = "hour"
+	}
+
+	switch timeframe {
+	case "hour", "day", "week", "month", "year":
+		// valid
+	default:
+		return apiPkg.BadRequest(c, "invalid timeframe, must be one of: hour, day, week, month, year")
+	}
+
+	points, err := h.nodeSvc.GetNodeRRDData(c.Request().Context(), nodeID, timeframe)
+	if err != nil {
+		return handleNodeError(c, err, "failed to get node rrd data")
+	}
+
+	return apiPkg.Success(c, points)
+}
+
+// GetVMRRDData returns Proxmox RRD performance data for a VM/CT.
+func (h *MetricsHandler) GetVMRRDData(c echo.Context) error {
+	nodeID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return apiPkg.BadRequest(c, "invalid node id")
+	}
+
+	vmid, err := strconv.Atoi(c.Param("vmid"))
+	if err != nil {
+		return apiPkg.BadRequest(c, "invalid vmid")
+	}
+
+	vmType := c.QueryParam("type")
+	if vmType == "" {
+		vmType = "qemu"
+	}
+	if vmType != "qemu" && vmType != "lxc" {
+		return apiPkg.BadRequest(c, "invalid type, must be 'qemu' or 'lxc'")
+	}
+
+	timeframe := c.QueryParam("timeframe")
+	if timeframe == "" {
+		timeframe = "hour"
+	}
+
+	switch timeframe {
+	case "hour", "day", "week", "month", "year":
+		// valid
+	default:
+		return apiPkg.BadRequest(c, "invalid timeframe, must be one of: hour, day, week, month, year")
+	}
+
+	points, err := h.nodeSvc.GetVMRRDData(c.Request().Context(), nodeID, vmid, vmType, timeframe)
+	if err != nil {
+		return handleNodeError(c, err, "failed to get vm rrd data")
+	}
+
+	return apiPkg.Success(c, points)
 }

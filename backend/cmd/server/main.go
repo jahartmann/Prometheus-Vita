@@ -330,7 +330,7 @@ func main() {
 		WS:           handler.NewWSHandler(wsHub, jwtSvc, cfg.CORS.AllowOrigins),
 		Backup:       handler.NewBackupHandler(backupSvc, restoreSvc, nodeSvc),
 		Schedule:     handler.NewScheduleHandler(scheduleRepo),
-		Metrics:      handler.NewMetricsHandler(monitorSvc),
+		Metrics:      handler.NewMetricsHandler(monitorSvc, nodeSvc),
 		Tag:          handler.NewTagHandler(tagRepo),
 		PBS:          handler.NewPBSHandler(nodeRepo, encryptor),
 		User:         handler.NewUserHandler(userSvc),

@@ -150,7 +150,7 @@ func (r *pgMetricsRepository) GetVMMetricsHistory(ctx context.Context, nodeID uu
 func (r *pgMetricsRepository) GetVMNetworkSummary(ctx context.Context, nodeID uuid.UUID, vmid int, start, end time.Time) (*model.NetworkSummary, error) {
 	var s model.NetworkSummary
 	err := r.db.QueryRow(ctx,
-		`SELECT COALESCE(SUM(net_in), 0), COALESCE(SUM(net_out), 0),
+		`SELECT COALESCE(SUM(net_in * 60), 0), COALESCE(SUM(net_out * 60), 0),
 		        COALESCE(AVG(net_in), 0)::bigint, COALESCE(AVG(net_out), 0)::bigint,
 		        COALESCE(MAX(net_in), 0), COALESCE(MAX(net_out), 0)
 		 FROM vm_metrics_history
@@ -166,7 +166,7 @@ func (r *pgMetricsRepository) GetVMNetworkSummary(ctx context.Context, nodeID uu
 func (r *pgMetricsRepository) GetNodeNetworkSummary(ctx context.Context, nodeID uuid.UUID, start, end time.Time) (*model.NetworkSummary, error) {
 	var s model.NetworkSummary
 	err := r.db.QueryRow(ctx,
-		`SELECT COALESCE(SUM(net_in), 0), COALESCE(SUM(net_out), 0),
+		`SELECT COALESCE(SUM(net_in * 60), 0), COALESCE(SUM(net_out * 60), 0),
 		        COALESCE(AVG(net_in), 0)::bigint, COALESCE(AVG(net_out), 0)::bigint,
 		        COALESCE(MAX(net_in), 0), COALESCE(MAX(net_out), 0)
 		 FROM metrics_records
@@ -182,7 +182,7 @@ func (r *pgMetricsRepository) GetNodeNetworkSummary(ctx context.Context, nodeID 
 func (r *pgMetricsRepository) GetClusterNetworkSummary(ctx context.Context, start, end time.Time) (*model.NetworkSummary, error) {
 	var s model.NetworkSummary
 	err := r.db.QueryRow(ctx,
-		`SELECT COALESCE(SUM(net_in), 0), COALESCE(SUM(net_out), 0),
+		`SELECT COALESCE(SUM(net_in * 60), 0), COALESCE(SUM(net_out * 60), 0),
 		        COALESCE(AVG(net_in), 0)::bigint, COALESCE(AVG(net_out), 0)::bigint,
 		        COALESCE(MAX(net_in), 0), COALESCE(MAX(net_out), 0)
 		 FROM metrics_records

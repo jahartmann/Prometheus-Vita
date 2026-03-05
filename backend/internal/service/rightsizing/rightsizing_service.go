@@ -67,7 +67,7 @@ func (s *Service) AnalyzeNode(ctx context.Context, nodeID uuid.UUID) ([]model.Re
 			continue
 		}
 
-		rrdData, err := client.GetVMRRDData(ctx, pveNodes[0], vm.VMID, vm.Type)
+		rrdData, err := client.GetVMRRDData(ctx, pveNodes[0], vm.VMID, vm.Type, "day")
 		if err != nil {
 			slog.Warn("failed to get RRD data for VM",
 				slog.Int("vmid", vm.VMID),

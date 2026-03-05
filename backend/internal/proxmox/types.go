@@ -171,6 +171,19 @@ type VMRRDDataPoint struct {
 	NetOut float64 `json:"netout"`
 }
 
+type RRDDataPoint struct {
+	Time      int64   `json:"time"`
+	CPU       float64 `json:"cpu"`
+	NetIn     float64 `json:"net_in"`
+	NetOut    float64 `json:"net_out"`
+	MemUsed   int64   `json:"mem_used"`
+	MemTotal  int64   `json:"mem_total"`
+	RootUsed  int64   `json:"root_used"`
+	RootTotal int64   `json:"root_total"`
+	LoadAvg   float64 `json:"load_avg"`
+	IOWait    float64 `json:"io_wait"`
+}
+
 type SnapshotInfo struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`

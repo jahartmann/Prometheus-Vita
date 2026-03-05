@@ -1288,6 +1288,24 @@ func (s *Service) DebugStorage(ctx context.Context, id uuid.UUID) (map[string]in
 	return result, nil
 }
 
+func (s *Service) GetNodeRRDData(ctx context.Context, id uuid.UUID, timeframe string) ([]proxmox.RRDDataPoint, error) {
+	_, client, pveNode, err := s.getClientAndNode(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	return client.GetNodeRRDData(ctx, pveNode, timeframe)
+}
+
+func (s *Service) GetVMRRDData(ctx context.Context, nodeID uuid.UUID, vmid int, vmType string, timeframe string) ([]proxmox.VMRRDDataPoint, error) {
+	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
+	if err != nil {
+		return nil, err
+	}
+
+	return client.GetVMRRDData(ctx, pveNode, vmid, vmType, timeframe)
+}
+
 func (s *Service) buildSSHConfig(node *model.Node) (ssh.SSHConfig, error) {
 	cfg := ssh.SSHConfig{
 		Host: node.Hostname,

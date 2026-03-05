@@ -968,6 +968,20 @@ export interface VNCProxyTicket {
 }
 
 
+// RRD data types
+export interface RRDDataPoint {
+  time: number;
+  cpu: number;
+  net_in: number;
+  net_out: number;
+  mem_used: number;
+  mem_total: number;
+  root_used: number;
+  root_total: number;
+  load_avg: number;
+  io_wait: number;
+}
+
 // VM Metrics types
 export interface VMMetricsRecord {
   id: string;
