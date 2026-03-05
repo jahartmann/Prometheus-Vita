@@ -388,6 +388,27 @@ func (c *Client) ResumeVM(ctx context.Context, node string, vmid int) (string, e
 	return upid, nil
 }
 
+// GetVMConfig returns the raw VM configuration as key-value pairs.
+func (c *Client) GetVMConfig(ctx context.Context, node string, vmid int, vmType string) (map[string]interface{}, error) {
+	path := fmt.Sprintf("/nodes/%s/%s/%d/config", node, vmType, vmid)
+	data, err := c.doRequest(ctx, http.MethodGet, path)
+	if err != nil {
+		return nil, fmt.Errorf("get vm config: %w", err)
+	}
+	var config map[string]interface{}
+	if err := json.Unmarshal(data, &config); err != nil {
+		return nil, fmt.Errorf("unmarshal vm config: %w", err)
+	}
+	return config, nil
+}
+
+// SetVMConfig updates VM configuration parameters.
+func (c *Client) SetVMConfig(ctx context.Context, node string, vmid int, vmType string, params url.Values) error {
+	path := fmt.Sprintf("/nodes/%s/%s/%d/config", node, vmType, vmid)
+	_, err := c.doRequestWithBody(ctx, http.MethodPut, path, params)
+	return err
+}
+
 // GetTaskStatus returns the status of a Proxmox task by UPID.
 func (c *Client) GetTaskStatus(ctx context.Context, node string, upid string) (*TaskStatus, error) {
 	encodedUPID := url.PathEscape(upid)

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -437,6 +438,13 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 
 	// PHASE 2: BACKING UP (5-40%)
 	s.updatePhase(ctx, m, model.MigrationStatusBackingUp, "Vzdump-Backup wird erstellt...", 6)
+
+	// Detach ISO/CD-ROM drives that may reference non-existing volumes (causes vzdump to fail)
+	detachedMedia := s.detachMissingMedia(ctx, srcClient, srcPVENode, m.VMID, m.VMType, m.ID)
+	if len(detachedMedia) > 0 {
+		s.broadcastLog(m.ID, fmt.Sprintf("✓ %d CD/ISO-Laufwerk(e) temporär entfernt (werden nach Backup wiederhergestellt)", len(detachedMedia)))
+	}
+
 	s.broadcastLog(m.ID, fmt.Sprintf("Starte vzdump Backup (Mode: %s, Compress: zstd, Storage: %s)...", m.Mode, vzdumpStorage))
 
 	vzdumpOpts := proxmox.VzdumpOptions{
@@ -455,11 +463,15 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 
 	// Poll vzdump task with live log streaming
 	if err := s.pollTaskWithProgress(ctx, srcClient, srcPVENode, vzdumpUPID, m, 6, 38); err != nil {
+		// Restore detached media before reporting error
+		s.restoreMedia(ctx, srcClient, srcPVENode, m.VMID, m.VMType, detachedMedia)
 		// Fetch task log for detailed error
 		taskLog := s.getTaskLogForError(ctx, srcClient, srcPVENode, vzdumpUPID)
 		handleError("backing_up", fmt.Errorf("vzdump fehlgeschlagen: %w\n\nTask-Log:\n%s", err, taskLog))
 		return
 	}
+	// Restore detached media on source VM
+	s.restoreMedia(ctx, srcClient, srcPVENode, m.VMID, m.VMType, detachedMedia)
 	s.broadcastLog(m.ID, "✓ Vzdump Backup abgeschlossen")
 
 	// Find the vzdump file path from task log
@@ -788,6 +800,54 @@ func (s *Service) findVzdumpStorage(ctx context.Context, client *proxmox.Client,
 	}
 
 	return "local"
+}
+
+// detachMissingMedia checks VM config for CD/ISO drives and temporarily removes them
+// to prevent vzdump from failing due to missing ISO files.
+// Returns a map of drive -> original value for restoration.
+func (s *Service) detachMissingMedia(ctx context.Context, client *proxmox.Client, node string, vmid int, vmType string, migrationID uuid.UUID) map[string]string {
+	config, err := client.GetVMConfig(ctx, node, vmid, vmType)
+	if err != nil {
+		slog.Warn("migration: could not read VM config for media check", slog.Any("error", err))
+		return nil
+	}
+
+	detached := make(map[string]string)
+	// Check common CD/ISO drive keys: ide0-3, scsi*, sata*
+	driveKeys := []string{"ide0", "ide1", "ide2", "ide3", "sata0", "sata1", "sata2", "sata3"}
+	for _, key := range driveKeys {
+		val, ok := config[key].(string)
+		if !ok || val == "" {
+			continue
+		}
+		// Check if it references an ISO file
+		if strings.Contains(val, ",media=cdrom") || strings.Contains(val, ".iso") {
+			s.broadcastLog(migrationID, fmt.Sprintf("  Entferne CD/ISO: %s = %s", key, val))
+			// Set to none,media=cdrom
+			params := url.Values{}
+			params.Set(key, "none,media=cdrom")
+			if err := client.SetVMConfig(ctx, node, vmid, vmType, params); err != nil {
+				slog.Warn("migration: could not detach media",
+					slog.String("drive", key), slog.Any("error", err))
+				continue
+			}
+			detached[key] = val
+		}
+	}
+
+	return detached
+}
+
+// restoreMedia re-attaches previously detached CD/ISO drives.
+func (s *Service) restoreMedia(ctx context.Context, client *proxmox.Client, node string, vmid int, vmType string, detached map[string]string) {
+	for key, val := range detached {
+		params := url.Values{}
+		params.Set(key, val)
+		if err := client.SetVMConfig(ctx, node, vmid, vmType, params); err != nil {
+			slog.Warn("migration: could not restore media",
+				slog.String("drive", key), slog.String("value", val), slog.Any("error", err))
+		}
+	}
 }
 
 func (s *Service) findVzdumpPath(ctx context.Context, client *proxmox.Client, node string, upid string) (string, error) {
