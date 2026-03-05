@@ -31,6 +31,7 @@ interface MigrationState {
   }) => Promise<VMMigration>;
   cancelMigration: (id: string) => Promise<void>;
   deleteMigration: (id: string) => Promise<void>;
+  retryMigration: (migration: VMMigration) => Promise<VMMigration>;
   updateMigrationProgress: (migration: VMMigration) => void;
   addMigrationLog: (migrationId: string, line: string, timestamp: string) => void;
 }
@@ -112,6 +113,33 @@ export const useMigrationStore = create<MigrationState>()((set, get) => ({
       };
     });
     toast.success("Migration geloescht");
+  },
+
+  retryMigration: async (migration: VMMigration) => {
+    // Delete old failed migration, then start a new one with same parameters
+    try {
+      await migrationApi.delete(migration.id);
+    } catch {
+      // ignore if delete fails
+    }
+    const res = await migrationApi.start({
+      source_node_id: migration.source_node_id,
+      target_node_id: migration.target_node_id,
+      vmid: migration.vmid,
+      target_storage: migration.target_storage,
+      mode: migration.mode,
+    });
+    set((state) => {
+      const newLogs = { ...state.migrationLogs };
+      delete newLogs[migration.id];
+      return {
+        migrations: [res.data, ...state.migrations.filter((m) => m.id !== migration.id)],
+        activeMigrations: [res.data, ...state.activeMigrations],
+        migrationLogs: { ...newLogs, [res.data.id]: [] },
+      };
+    });
+    toast.success("Migration wird wiederholt");
+    return res.data;
   },
 
   updateMigrationProgress: (migration: VMMigration) => {

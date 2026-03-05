@@ -15,6 +15,7 @@ import {
   Terminal,
   CheckCircle2,
   XCircle,
+  RotateCw,
 } from "lucide-react";
 import type { VMMigration, MigrationStatus } from "@/types/api";
 
@@ -67,7 +68,7 @@ export function MigrationProgress({
   migration,
   totalSize,
 }: MigrationProgressProps) {
-  const { cancelMigration, migrationLogs } = useMigrationStore();
+  const { cancelMigration, retryMigration, migrationLogs } = useMigrationStore();
   const [showLogs, setShowLogs] = useState(true);
   const logRef = useRef<HTMLDivElement>(null);
 
@@ -189,13 +190,23 @@ export function MigrationProgress({
 
       <div className="flex items-center justify-between">
         {migration.error_message && (
-          <p className="text-xs text-destructive max-w-[80%] whitespace-pre-wrap">
+          <p className="text-xs text-destructive max-w-[70%] whitespace-pre-wrap">
             {migration.error_message}
           </p>
         )}
 
-        {isActive && (
-          <div className="flex justify-end ml-auto">
+        <div className="flex gap-2 ml-auto">
+          {migration.status === "failed" && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => retryMigration(migration)}
+            >
+              <RotateCw className="mr-1 h-3 w-3" />
+              Wiederholen
+            </Button>
+          )}
+          {isActive && (
             <Button
               variant="outline"
               size="sm"
@@ -204,8 +215,8 @@ export function MigrationProgress({
               <X className="mr-1 h-3 w-3" />
               Abbrechen
             </Button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );

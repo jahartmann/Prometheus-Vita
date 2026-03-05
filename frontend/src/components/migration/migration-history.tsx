@@ -15,7 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { MigrationProgress } from "./migration-progress";
-import { Trash2 } from "lucide-react";
+import { Trash2, RotateCw } from "lucide-react";
 import type { VMMigration, MigrationStatus } from "@/types/api";
 
 const STATUS_LABELS: Record<MigrationStatus, string> = {
@@ -66,6 +66,7 @@ export function MigrationHistory({ nodeId }: MigrationHistoryProps) {
     fetchMigrations,
     fetchByNode,
     deleteMigration,
+    retryMigration,
     updateMigrationProgress,
     addMigrationLog,
     isLoading,
@@ -200,15 +201,28 @@ export function MigrationHistory({ nodeId }: MigrationHistoryProps) {
                   {new Date(m.created_at).toLocaleDateString("de-DE")}
                 </TableCell>
                 <TableCell>
-                  {!isActive(m.status) && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => deleteMigration(m.id)}
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
-                  )}
+                  <div className="flex gap-1">
+                    {m.status === "failed" && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => retryMigration(m)}
+                        title="Wiederholen"
+                      >
+                        <RotateCw className="h-3 w-3" />
+                      </Button>
+                    )}
+                    {!isActive(m.status) && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => deleteMigration(m.id)}
+                        title="Löschen"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    )}
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
