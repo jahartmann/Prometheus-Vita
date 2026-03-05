@@ -2,6 +2,7 @@ package migration
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -87,7 +88,12 @@ func (s *Service) StartMigration(ctx context.Context, req model.StartMigrationRe
 		return nil, fmt.Errorf("create source client: %w", err)
 	}
 
-	vms, err := srcClient.GetVMs(ctx, sourceNode.Name)
+	srcPVENode, err := s.resolvePVENodeName(ctx, srcClient, sourceNode)
+	if err != nil {
+		return nil, fmt.Errorf("resolve source PVE node: %w", err)
+	}
+
+	vms, err := srcClient.GetVMs(ctx, srcPVENode)
 	if err != nil {
 		return nil, fmt.Errorf("get vms: %w", err)
 	}
@@ -247,11 +253,31 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 		return
 	}
 
-	// Verify target storage exists
-	storages, err := tgtClient.GetStorage(ctx, targetNode.Name)
+	// Resolve actual PVE cluster node names (critical: DB name != PVE name)
+	srcPVENode, err := s.resolvePVENodeName(ctx, srcClient, sourceNode)
 	if err != nil {
-		handleError("preparing", fmt.Errorf("get target storage: %w", err))
+		handleError("preparing", fmt.Errorf("resolve source PVE node: %w", err))
 		return
+	}
+	tgtPVENode, err := s.resolvePVENodeName(ctx, tgtClient, targetNode)
+	if err != nil {
+		handleError("preparing", fmt.Errorf("resolve target PVE node: %w", err))
+		return
+	}
+
+	slog.Info("migration: resolved PVE node names",
+		slog.String("source_db_name", sourceNode.Name), slog.String("source_pve", srcPVENode),
+		slog.String("target_db_name", targetNode.Name), slog.String("target_pve", tgtPVENode))
+
+	// Verify target storage exists - use cluster endpoint first, fall back to node endpoint
+	storages, err := tgtClient.GetClusterStorages(ctx)
+	if err != nil {
+		// Fallback to node-specific endpoint
+		storages, err = tgtClient.GetStorage(ctx, tgtPVENode)
+		if err != nil {
+			handleError("preparing", fmt.Errorf("get target storage: %w", err))
+			return
+		}
 	}
 	storageFound := false
 	for _, st := range storages {
@@ -269,28 +295,28 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 	switch m.Mode {
 	case model.MigrationModeStop:
 		s.updatePhase(ctx, m, model.MigrationStatusPreparing, "VM wird heruntergefahren...", 3)
-		upid, err := srcClient.ShutdownVM(ctx, sourceNode.Name, m.VMID, m.VMType)
+		upid, err := srcClient.ShutdownVM(ctx, srcPVENode, m.VMID, m.VMType)
 		if err != nil {
 			// Fallback to stop
-			upid, err = srcClient.StopVM(ctx, sourceNode.Name, m.VMID, m.VMType)
+			upid, err = srcClient.StopVM(ctx, srcPVENode, m.VMID, m.VMType)
 			if err != nil {
 				handleError("preparing", fmt.Errorf("stop vm: %w", err))
 				return
 			}
 		}
-		if err := s.waitForTask(ctx, srcClient, sourceNode.Name, upid, 120*time.Second); err != nil {
+		if err := s.waitForTask(ctx, srcClient, srcPVENode, upid, 120*time.Second); err != nil {
 			handleError("preparing", fmt.Errorf("wait for vm stop: %w", err))
 			return
 		}
 		vmWasStopped = true
 	case model.MigrationModeSuspend:
 		s.updatePhase(ctx, m, model.MigrationStatusPreparing, "VM wird pausiert...", 3)
-		upid, err := srcClient.SuspendVM(ctx, sourceNode.Name, m.VMID)
+		upid, err := srcClient.SuspendVM(ctx, srcPVENode, m.VMID)
 		if err != nil {
 			handleError("preparing", fmt.Errorf("suspend vm: %w", err))
 			return
 		}
-		if err := s.waitForTask(ctx, srcClient, sourceNode.Name, upid, 60*time.Second); err != nil {
+		if err := s.waitForTask(ctx, srcClient, srcPVENode, upid, 60*time.Second); err != nil {
 			handleError("preparing", fmt.Errorf("wait for vm suspend: %w", err))
 			return
 		}
@@ -306,7 +332,7 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 		Mode:     string(m.Mode),
 		Compress: "zstd",
 	}
-	vzdumpUPID, err := srcClient.CreateVzdump(ctx, sourceNode.Name, m.VMID, vzdumpOpts)
+	vzdumpUPID, err := srcClient.CreateVzdump(ctx, srcPVENode, m.VMID, vzdumpOpts)
 	if err != nil {
 		handleError("backing_up", fmt.Errorf("create vzdump: %w", err))
 		return
@@ -315,13 +341,13 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 	_ = s.migrationRepo.Update(ctx, m)
 
 	// Poll vzdump task
-	if err := s.pollTaskWithProgress(ctx, srcClient, sourceNode.Name, vzdumpUPID, m, 6, 38); err != nil {
+	if err := s.pollTaskWithProgress(ctx, srcClient, srcPVENode, vzdumpUPID, m, 6, 38); err != nil {
 		handleError("backing_up", fmt.Errorf("vzdump task: %w", err))
 		return
 	}
 
 	// Find the vzdump file path from task log
-	vzdumpPath, err := s.findVzdumpPath(ctx, srcClient, sourceNode.Name, vzdumpUPID)
+	vzdumpPath, err := s.findVzdumpPath(ctx, srcClient, srcPVENode, vzdumpUPID)
 	if err != nil {
 		handleError("backing_up", fmt.Errorf("find vzdump path: %w", err))
 		return
@@ -414,7 +440,7 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 		restoreVMID = *m.NewVMID
 	}
 
-	restoreUPID, err := tgtClient.RestoreVM(ctx, targetNode.Name, targetVzdumpPath, m.TargetStorage, restoreVMID)
+	restoreUPID, err := tgtClient.RestoreVM(ctx, tgtPVENode, targetVzdumpPath, m.TargetStorage, restoreVMID)
 	if err != nil {
 		// Cleanup vzdump on target
 		_, _ = tgtSSHClient.RunCommand(ctx, fmt.Sprintf("rm -f %q", targetVzdumpPath))
@@ -424,7 +450,7 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 	m.RestoreTaskUPID = &restoreUPID
 	_ = s.migrationRepo.Update(ctx, m)
 
-	if err := s.pollTaskWithProgress(ctx, tgtClient, targetNode.Name, restoreUPID, m, 81, 94); err != nil {
+	if err := s.pollTaskWithProgress(ctx, tgtClient, tgtPVENode, restoreUPID, m, 81, 94); err != nil {
 		_, _ = tgtSSHClient.RunCommand(ctx, fmt.Sprintf("rm -f %q", targetVzdumpPath))
 		handleError("restoring", fmt.Errorf("restore task: %w", err))
 		return
@@ -446,7 +472,7 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 
 	// Resume source VM if suspended
 	if m.Mode == model.MigrationModeSuspend {
-		_, _ = srcClient.ResumeVM(ctx, sourceNode.Name, m.VMID)
+		_, _ = srcClient.ResumeVM(ctx, srcPVENode, m.VMID)
 	}
 
 	// Mark completed
@@ -586,6 +612,65 @@ func (s *Service) getSSHConfig(node *model.Node) (ssh.SSHConfig, error) {
 	}, nil
 }
 
+// resolvePVENodeName determines the correct Proxmox cluster node name for a
+// given database node. It first checks the metadata cache, then falls back to
+// querying the Proxmox API. This is critical because Proxmox API endpoints
+// require the exact cluster node name (e.g. "pve1"), not our user-defined name.
+func (s *Service) resolvePVENodeName(ctx context.Context, client *proxmox.Client, node *model.Node) (string, error) {
+	// Fast path: use cached pve_node from metadata
+	if len(node.Metadata) > 0 {
+		var meta map[string]interface{}
+		if err := json.Unmarshal(node.Metadata, &meta); err == nil {
+			if pn, ok := meta["pve_node"].(string); ok && pn != "" {
+				return pn, nil
+			}
+		}
+	}
+
+	// Slow path: resolve via Proxmox API
+	pveNodes, err := client.GetNodes(ctx)
+	if err != nil {
+		return "", fmt.Errorf("get cluster nodes: %w", err)
+	}
+	if len(pveNodes) == 0 {
+		return "", fmt.Errorf("no nodes found in cluster")
+	}
+
+	// Try to match node.Name against PVE node names
+	for _, pn := range pveNodes {
+		if strings.EqualFold(pn, node.Name) {
+			s.cachePVENodeName(ctx, node, pn)
+			return pn, nil
+		}
+	}
+
+	// Fallback to first node
+	pveNode := pveNodes[0]
+	s.cachePVENodeName(ctx, node, pveNode)
+	return pveNode, nil
+}
+
+// cachePVENodeName stores the resolved PVE node name in the node's metadata.
+func (s *Service) cachePVENodeName(ctx context.Context, node *model.Node, pveNode string) {
+	var meta map[string]interface{}
+	if len(node.Metadata) > 0 {
+		if err := json.Unmarshal(node.Metadata, &meta); err != nil {
+			meta = make(map[string]interface{})
+		}
+	} else {
+		meta = make(map[string]interface{})
+	}
+	meta["pve_node"] = pveNode
+	metaBytes, err := json.Marshal(meta)
+	if err != nil {
+		return
+	}
+	node.Metadata = metaBytes
+	if err := s.nodeRepo.Update(ctx, node); err != nil {
+		slog.Warn("migration: failed to cache pve_node", slog.Any("error", err))
+	}
+}
+
 func (s *Service) tryRestartSourceVM(ctx context.Context, m *model.VMMigration) {
 	sourceNode, err := s.nodeRepo.GetByID(ctx, m.SourceNodeID)
 	if err != nil {
@@ -597,7 +682,12 @@ func (s *Service) tryRestartSourceVM(ctx context.Context, m *model.VMMigration) 
 		slog.Error("migration: failed to create client for restart", slog.Any("error", err))
 		return
 	}
-	_, err = srcClient.StartVM(ctx, sourceNode.Name, m.VMID, m.VMType)
+	pveNode, err := s.resolvePVENodeName(ctx, srcClient, sourceNode)
+	if err != nil {
+		slog.Error("migration: failed to resolve PVE node for restart", slog.Any("error", err))
+		return
+	}
+	_, err = srcClient.StartVM(ctx, pveNode, m.VMID, m.VMType)
 	if err != nil {
 		slog.Error("migration: failed to restart source VM", slog.Int("vmid", m.VMID), slog.Any("error", err))
 	} else {

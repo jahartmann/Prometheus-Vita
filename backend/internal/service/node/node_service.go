@@ -606,6 +606,7 @@ func (s *Service) getVMsViaCluster(ctx context.Context, targetID uuid.UUID) ([]p
 func (s *Service) GetStorage(ctx context.Context, id uuid.UUID) ([]proxmox.StorageInfo, error) {
 	node, client, pveNode, err := s.getClientAndNode(ctx, id)
 	if err == nil {
+		// Try node-specific endpoint first
 		storage, storErr := client.GetStorage(ctx, pveNode)
 		if storErr == nil {
 			return storage, nil
@@ -613,8 +614,13 @@ func (s *Service) GetStorage(ctx context.Context, id uuid.UUID) ([]proxmox.Stora
 		slog.Warn("direct storage fetch failed",
 			slog.String("node", node.Name), slog.String("pve_node", pveNode), slog.Any("error", storErr))
 
-		// The storage call failed but the client may be connected.
-		// The PVE node name might be wrong - try re-resolving it.
+		// Try cluster-level endpoint (doesn't need correct node name)
+		clusterStorage, clusterErr := client.GetClusterStorages(ctx)
+		if clusterErr == nil {
+			return clusterStorage, nil
+		}
+
+		// The PVE node name might be wrong - try re-resolving it
 		if storage, resolved := s.retryStorageWithResolvedName(ctx, node, client, pveNode); resolved {
 			return storage, nil
 		}

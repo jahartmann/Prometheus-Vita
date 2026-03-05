@@ -565,6 +565,61 @@ func CreateAPITokenWithTicket(ctx context.Context, hostname string, port int, us
 	return result.Data.FullTokenID, result.Data.Value, nil
 }
 
+// GetClusterStorages fetches storage info across all cluster nodes via
+// /cluster/resources?type=storage. This avoids needing a specific PVE node name.
+func (c *Client) GetClusterStorages(ctx context.Context) ([]StorageInfo, error) {
+	data, err := c.doRequest(ctx, http.MethodGet, "/cluster/resources?type=storage")
+	if err != nil {
+		return nil, err
+	}
+
+	var raw []struct {
+		Storage    string  `json:"storage"`
+		Node       string  `json:"node"`
+		Type       string  `json:"type"`
+		Content    string  `json:"content"`
+		MaxDisk    int64   `json:"maxdisk"`
+		Disk       int64   `json:"disk"`
+		Status     string  `json:"status"`
+		Shared     int     `json:"shared"`
+		PluginType string  `json:"plugintype"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, fmt.Errorf("unmarshal cluster storages: %w", err)
+	}
+
+	// Deduplicate shared storages (appear once per node)
+	seen := make(map[string]bool)
+	storages := make([]StorageInfo, 0, len(raw))
+	for _, r := range raw {
+		if r.Status != "available" {
+			continue
+		}
+		key := r.Storage
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+
+		s := StorageInfo{
+			Storage:   r.Storage,
+			Type:      r.Type,
+			Content:   r.Content,
+			Total:     r.MaxDisk,
+			Used:      r.Disk,
+			Available: r.MaxDisk - r.Disk,
+			Active:    true,
+			Shared:    r.Shared == 1,
+		}
+		if s.Total > 0 {
+			s.UsagePercent = float64(s.Used) / float64(s.Total) * 100
+		}
+		storages = append(storages, s)
+	}
+
+	return storages, nil
+}
+
 // GetStorageContent returns content of a specific type from a storage on a node.
 func (c *Client) GetStorageContent(ctx context.Context, node, storage, contentType string) ([]StorageContent, error) {
 	path := fmt.Sprintf("/nodes/%s/storage/%s/content?content=%s", node, url.QueryEscape(storage), url.QueryEscape(contentType))
