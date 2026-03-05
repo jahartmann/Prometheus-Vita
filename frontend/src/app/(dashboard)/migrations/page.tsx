@@ -40,18 +40,21 @@ import {
   Search,
   AlertTriangle,
   ChevronRight,
+  Info,
 } from "lucide-react";
-import api from "@/lib/api";
+import api, { toArray } from "@/lib/api";
 import type { VM, VMMigration, MigrationMode } from "@/types/api";
 import { formatBytes, cn } from "@/lib/utils";
+import { toast } from "sonner";
 
-interface StorageOption {
+interface StorageInfo {
   storage: string;
   type: string;
   content: string;
   total: number;
   used: number;
   available: number;
+  usage_percent: number;
   active: boolean;
   shared: boolean;
 }
@@ -111,10 +114,7 @@ export default function MigrationsPage() {
     updateMigrationProgress,
   } = useMigrationStore();
 
-  // Wizard step
   const [step, setStep] = useState(1);
-
-  // Form state
   const [sourceNodeId, setSourceNodeId] = useState("");
   const [targetNodeId, setTargetNodeId] = useState("");
   const [selectedVmid, setSelectedVmid] = useState("");
@@ -125,13 +125,12 @@ export default function MigrationsPage() {
   const [cleanupTarget, setCleanupTarget] = useState(true);
   const [vmSearch, setVmSearch] = useState("");
 
-  // UI state
-  const [storages, setStorages] = useState<StorageOption[]>([]);
-  const [sourceStorages, setSourceStorages] = useState<StorageOption[]>([]);
+  const [targetStorages, setTargetStorages] = useState<StorageInfo[]>([]);
+  const [sourceStorages, setSourceStorages] = useState<StorageInfo[]>([]);
   const [loadingStorages, setLoadingStorages] = useState(false);
-  const [storageError, setStorageError] = useState("");
-  const [useSourceFallback, setUseSourceFallback] = useState(false);
-  const [manualStorage, setManualStorage] = useState("");
+  const [storageLoadError, setStorageLoadError] = useState("");
+  const [usingFallback, setUsingFallback] = useState(false);
+  const [manualStorageName, setManualStorageName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
 
@@ -140,53 +139,52 @@ export default function MigrationsPage() {
     fetchMigrations();
   }, [nodes.length, fetchNodes, fetchMigrations]);
 
-  // Load VMs and source storages when source node changes
+  // Load VMs + source storages when source node changes
   useEffect(() => {
-    if (sourceNodeId) {
-      fetchNodeVMs(sourceNodeId);
-      setSelectedVmid("");
-      api
-        .get(`/nodes/${sourceNodeId}/storage`)
-        .then((res) => {
-          const data = Array.isArray(res.data) ? res.data : res.data?.data || [];
-          setSourceStorages(data);
-        })
-        .catch(() => setSourceStorages([]));
-    }
+    if (!sourceNodeId) return;
+    fetchNodeVMs(sourceNodeId);
+    setSelectedVmid("");
+    api
+      .get(`/nodes/${sourceNodeId}/storage`)
+      .then((res) => setSourceStorages(toArray<StorageInfo>(res.data)))
+      .catch(() => setSourceStorages([]));
   }, [sourceNodeId, fetchNodeVMs]);
 
-  // Load storages when target node changes
+  // Load target storages when target node changes
   useEffect(() => {
     if (!targetNodeId) {
-      setStorages([]);
+      setTargetStorages([]);
+      setStorageLoadError("");
       return;
     }
     setTargetStorage("");
-    setStorageError("");
-    setUseSourceFallback(false);
-    setManualStorage("");
+    setStorageLoadError("");
+    setUsingFallback(false);
+    setManualStorageName("");
     setLoadingStorages(true);
+
     api
       .get(`/nodes/${targetNodeId}/storage`)
       .then((res) => {
-        const data = Array.isArray(res.data) ? res.data : res.data?.data || [];
-        setStorages(data);
-        setStorageError("");
+        const data = toArray<StorageInfo>(res.data);
+        setTargetStorages(data);
+        setStorageLoadError("");
+        setUsingFallback(false);
       })
       .catch((err) => {
         const status = err?.response?.status;
-        const serverMsg = err?.response?.data?.error || err?.response?.data?.message || "";
-        console.error(`[Migration] Storage fetch failed for node ${targetNodeId}:`, status, serverMsg);
+        const msg = err?.response?.data?.error || err?.message || "";
+        console.error("[Migration] Target storage failed:", status, msg);
 
-        // Fallback: use source node storages as reference
+        // Fallback: use source storages as reference
         if (sourceStorages.length > 0) {
-          setStorages(sourceStorages);
-          setUseSourceFallback(true);
-          setStorageError("");
+          setTargetStorages(sourceStorages);
+          setUsingFallback(true);
+          setStorageLoadError("");
         } else {
-          setStorages([]);
-          setStorageError(
-            `Storage-Abfrage fehlgeschlagen (${status || "Netzwerk"}): ${serverMsg || "Unbekannter Fehler"}`
+          setTargetStorages([]);
+          setStorageLoadError(
+            `Storage-Abfrage fehlgeschlagen (${status || "Netzwerk"}): ${msg || "Unbekannter Fehler"}`
           );
         }
       })
@@ -219,24 +217,27 @@ export default function MigrationsPage() {
     const q = vmSearch.toLowerCase();
     return sourceVMs.filter(
       (vm) =>
-        vm.name?.toLowerCase().includes(q) ||
-        String(vm.vmid).includes(q)
+        vm.name?.toLowerCase().includes(q) || String(vm.vmid).includes(q)
     );
   }, [sourceVMs, vmSearch]);
 
   const selectedVM = sourceVMs.find((vm) => String(vm.vmid) === selectedVmid);
   const sourceNode = nodes.find((n) => n.id === sourceNodeId);
   const targetNode = nodes.find((n) => n.id === targetNodeId);
-  const selectedStorage = storages.find((s) => s.storage === targetStorage);
+  const selectedStorageInfo = targetStorages.find(
+    (s) => s.storage === targetStorage
+  );
   const selectedMode = MODE_CONFIG.find((m) => m.value === mode);
 
-  // Step validation
+  // Effective storage name (from selection or manual input)
+  const effectiveStorage = targetStorage || manualStorageName;
+
   const canProceed = (s: number) => {
     switch (s) {
       case 1:
         return !!sourceNodeId && !!selectedVmid;
       case 2:
-        return !!targetNodeId && !!targetStorage;
+        return !!targetNodeId && !!effectiveStorage;
       case 3:
         return !!mode;
       default:
@@ -252,13 +253,12 @@ export default function MigrationsPage() {
         source_node_id: sourceNodeId,
         target_node_id: targetNodeId,
         vmid: parseInt(selectedVmid),
-        target_storage: targetStorage,
+        target_storage: effectiveStorage,
         mode,
         new_vmid: newVmid ? parseInt(newVmid) : undefined,
         cleanup_source: cleanupSource,
         cleanup_target: cleanupTarget,
       });
-      // Reset wizard
       setStep(1);
       setSourceNodeId("");
       setTargetNodeId("");
@@ -290,7 +290,7 @@ export default function MigrationsPage() {
     }
   };
 
-  // --- Render steps ---
+  // --- Render ---
 
   const renderStepIndicator = () => (
     <div className="flex items-center justify-between mb-8">
@@ -298,12 +298,13 @@ export default function MigrationsPage() {
         const isActive = step === s.number;
         const isCompleted = step > s.number;
         return (
-          <div key={s.number} className="flex items-center flex-1 last:flex-initial">
+          <div
+            key={s.number}
+            className="flex items-center flex-1 last:flex-initial"
+          >
             <button
               type="button"
-              onClick={() => {
-                if (isCompleted) setStep(s.number);
-              }}
+              onClick={() => isCompleted && setStep(s.number)}
               disabled={!isCompleted}
               className={cn(
                 "flex items-center gap-3 group",
@@ -322,19 +323,13 @@ export default function MigrationsPage() {
                     "border-muted-foreground/30 text-muted-foreground"
                 )}
               >
-                {isCompleted ? (
-                  <Check className="h-4 w-4" />
-                ) : (
-                  s.number
-                )}
+                {isCompleted ? <Check className="h-4 w-4" /> : s.number}
               </div>
               <div className="hidden sm:block text-left">
                 <p
                   className={cn(
                     "text-sm font-medium leading-none",
-                    isActive
-                      ? "text-foreground"
-                      : "text-muted-foreground"
+                    isActive ? "text-foreground" : "text-muted-foreground"
                   )}
                 >
                   {s.label}
@@ -348,9 +343,7 @@ export default function MigrationsPage() {
               <div
                 className={cn(
                   "flex-1 h-px mx-4",
-                  step > s.number
-                    ? "bg-primary"
-                    : "bg-muted-foreground/20"
+                  step > s.number ? "bg-primary" : "bg-muted-foreground/20"
                 )}
               />
             )}
@@ -363,7 +356,6 @@ export default function MigrationsPage() {
   const renderStep1 = () => (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <div className="lg:col-span-2 space-y-4">
-        {/* Source node selection */}
         <div className="space-y-2">
           <Label className="text-sm font-medium">Quell-Node</Label>
           <Select value={sourceNodeId} onValueChange={setSourceNodeId}>
@@ -383,7 +375,6 @@ export default function MigrationsPage() {
           </Select>
         </div>
 
-        {/* VM list */}
         {sourceNodeId && (
           <div className="space-y-3">
             <div className="flex items-center justify-between">
@@ -411,9 +402,7 @@ export default function MigrationsPage() {
                     <button
                       key={vm.vmid}
                       type="button"
-                      onClick={() =>
-                        setSelectedVmid(String(vm.vmid))
-                      }
+                      onClick={() => setSelectedVmid(String(vm.vmid))}
                       className={cn(
                         "flex items-start gap-3 rounded-lg border p-3 text-left transition-all hover:bg-accent/50",
                         isSelected
@@ -463,7 +452,6 @@ export default function MigrationsPage() {
         )}
       </div>
 
-      {/* Selected VM detail panel */}
       <div>
         {selectedVM ? (
           <Card>
@@ -489,9 +477,7 @@ export default function MigrationsPage() {
                 <span className="text-muted-foreground">Status</span>
                 <Badge
                   variant={
-                    selectedVM.status === "running"
-                      ? "default"
-                      : "secondary"
+                    selectedVM.status === "running" ? "default" : "secondary"
                   }
                 >
                   {selectedVM.status}
@@ -524,9 +510,133 @@ export default function MigrationsPage() {
     </div>
   );
 
+  const renderStorageList = () => {
+    if (loadingStorages) {
+      return (
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          <span className="ml-2 text-sm text-muted-foreground">
+            Storages werden geladen...
+          </span>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-3">
+        {/* Fallback-Hinweis */}
+        {usingFallback && (
+          <div className="flex items-start gap-2 rounded-lg border border-amber-400/50 bg-amber-50 dark:bg-amber-950/30 p-3">
+            <Info className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+            <p className="text-xs text-amber-700 dark:text-amber-400">
+              Ziel-Node Storages konnten nicht direkt geladen werden. Es werden
+              die Storages des Quell-Nodes als Referenz angezeigt (in
+              Proxmox-Clustern sind diese meist identisch).
+            </p>
+          </div>
+        )}
+
+        {/* Fehler mit manueller Eingabe */}
+        {storageLoadError && (
+          <div className="space-y-4">
+            <div className="flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-4">
+              <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+              <p className="text-sm text-destructive">{storageLoadError}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Storage-Karten */}
+        {targetStorages.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {targetStorages.map((s) => {
+              const isSelected = s.storage === targetStorage;
+              const usedPercent =
+                s.total > 0 ? Math.round((s.used / s.total) * 100) : 0;
+              return (
+                <button
+                  key={s.storage}
+                  type="button"
+                  onClick={() => {
+                    setTargetStorage(s.storage);
+                    setManualStorageName("");
+                  }}
+                  className={cn(
+                    "flex flex-col gap-2 rounded-lg border p-4 text-left transition-all hover:bg-accent/50",
+                    isSelected
+                      ? "border-primary ring-2 ring-primary/20 bg-primary/5"
+                      : "border-border"
+                  )}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <HardDrive className="h-4 w-4 text-muted-foreground" />
+                      <span className="font-medium text-sm">{s.storage}</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {s.shared && (
+                        <Badge variant="secondary" className="text-[10px]">
+                          shared
+                        </Badge>
+                      )}
+                      <Badge variant="outline" className="text-[10px]">
+                        {s.type}
+                      </Badge>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>Belegt: {usedPercent}%</span>
+                      <span>Frei: {formatBytes(s.available)}</span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                      <div
+                        className={cn(
+                          "h-full rounded-full transition-all",
+                          usedPercent > 90
+                            ? "bg-red-500"
+                            : usedPercent > 70
+                            ? "bg-amber-500"
+                            : "bg-green-500"
+                        )}
+                        style={{ width: `${usedPercent}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {formatBytes(s.used)} / {formatBytes(s.total)}
+                    </p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        ) : !storageLoadError ? (
+          <div className="text-center py-6 text-muted-foreground text-sm">
+            Keine Storages gefunden.
+          </div>
+        ) : null}
+
+        {/* Manuelle Eingabe - immer sichtbar als Alternative */}
+        <div className="border-t pt-3 mt-3">
+          <Label className="text-xs text-muted-foreground">
+            Oder Storage-Name manuell eingeben:
+          </Label>
+          <Input
+            className="mt-1 max-w-md"
+            placeholder="z.B. local-lvm, ceph-pool, nfs-share"
+            value={manualStorageName}
+            onChange={(e) => {
+              setManualStorageName(e.target.value);
+              if (e.target.value) setTargetStorage("");
+            }}
+          />
+        </div>
+      </div>
+    );
+  };
+
   const renderStep2 = () => (
     <div className="space-y-6">
-      {/* Target node selection */}
       <div className="space-y-2">
         <Label className="text-sm font-medium">Ziel-Node</Label>
         <Select value={targetNodeId} onValueChange={setTargetNodeId}>
@@ -546,129 +656,10 @@ export default function MigrationsPage() {
         </Select>
       </div>
 
-      {/* Storage list */}
       {targetNodeId && (
         <div className="space-y-3">
           <Label className="text-sm font-medium">Ziel-Storage</Label>
-
-          {useSourceFallback && (
-            <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 p-3">
-              <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
-              <p className="text-xs text-amber-700 dark:text-amber-400">
-                Ziel-Node Storages nicht ladbar. Zeige Source-Node Storages als Referenz
-                (Storage-Namen sind in Proxmox-Clustern meist identisch).
-              </p>
-            </div>
-          )}
-
-          {loadingStorages ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-              <span className="ml-2 text-sm text-muted-foreground">
-                Storages werden geladen...
-              </span>
-            </div>
-          ) : storageError ? (
-            <div className="space-y-4">
-              <div className="flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-4">
-                <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
-                <p className="text-sm text-destructive">{storageError}</p>
-              </div>
-              <div className="space-y-2 max-w-md">
-                <Label className="text-sm">Storage-Name manuell eingeben</Label>
-                <Input
-                  placeholder="z.B. local-lvm, ceph-pool, nfs-share"
-                  value={manualStorage}
-                  onChange={(e) => {
-                    setManualStorage(e.target.value);
-                    setTargetStorage(e.target.value);
-                  }}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Gib den exakten Storage-Namen des Ziel-Nodes ein.
-                </p>
-              </div>
-            </div>
-          ) : storages.length === 0 ? (
-            <div className="space-y-4">
-              <div className="text-center py-8 text-muted-foreground text-sm">
-                Keine Storages auf diesem Node gefunden.
-              </div>
-              <div className="space-y-2 max-w-md">
-                <Label className="text-sm">Storage-Name manuell eingeben</Label>
-                <Input
-                  placeholder="z.B. local-lvm"
-                  value={manualStorage}
-                  onChange={(e) => {
-                    setManualStorage(e.target.value);
-                    setTargetStorage(e.target.value);
-                  }}
-                />
-              </div>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {storages.map((s) => {
-                const isSelected = s.storage === targetStorage;
-                const usedPercent =
-                  s.total > 0
-                    ? Math.round((s.used / s.total) * 100)
-                    : 0;
-                return (
-                  <button
-                    key={s.storage}
-                    type="button"
-                    onClick={() => setTargetStorage(s.storage)}
-                    className={cn(
-                      "flex flex-col gap-2 rounded-lg border p-4 text-left transition-all hover:bg-accent/50",
-                      isSelected
-                        ? "border-primary ring-2 ring-primary/20 bg-primary/5"
-                        : "border-border"
-                    )}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <HardDrive className="h-4 w-4 text-muted-foreground" />
-                        <span className="font-medium text-sm">
-                          {s.storage}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        {s.shared && (
-                          <Badge variant="secondary" className="text-[10px]">shared</Badge>
-                        )}
-                        <Badge variant="outline" className="text-[10px]">
-                          {s.type}
-                        </Badge>
-                      </div>
-                    </div>
-                    <div className="space-y-1">
-                      <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>Belegt: {usedPercent}%</span>
-                        <span>Frei: {formatBytes(s.available)}</span>
-                      </div>
-                      <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                        <div
-                          className={cn(
-                            "h-full rounded-full transition-all",
-                            usedPercent > 90
-                              ? "bg-red-500"
-                              : usedPercent > 70
-                              ? "bg-amber-500"
-                              : "bg-green-500"
-                          )}
-                          style={{ width: `${usedPercent}%` }}
-                        />
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        {formatBytes(s.used)} / {formatBytes(s.total)}
-                      </p>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          )}
+          {renderStorageList()}
         </div>
       )}
     </div>
@@ -676,7 +667,6 @@ export default function MigrationsPage() {
 
   const renderStep3 = () => (
     <div className="space-y-6">
-      {/* Mode selection */}
       <div className="space-y-3">
         <Label className="text-sm font-medium">Migrations-Modus</Label>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -724,29 +714,21 @@ export default function MigrationsPage() {
             </p>
             <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
               Die VM ist waehrend der gesamten Migration nicht erreichbar.
-              Dies liefert jedoch das konsistenteste Backup.
             </p>
           </div>
         </div>
       )}
 
-      {/* Optional new VMID */}
       <div className="space-y-2 max-w-xs">
-        <Label className="text-sm font-medium">
-          Neue VMID (optional)
-        </Label>
+        <Label className="text-sm font-medium">Neue VMID (optional)</Label>
         <Input
           type="number"
           placeholder="Gleiche VMID beibehalten"
           value={newVmid}
           onChange={(e) => setNewVmid(e.target.value)}
         />
-        <p className="text-xs text-muted-foreground">
-          Leer lassen, um die bestehende VMID zu verwenden.
-        </p>
       </div>
 
-      {/* Cleanup toggles */}
       <div className="space-y-3">
         <Label className="text-sm font-medium">Bereinigung</Label>
         <div className="space-y-2">
@@ -757,9 +739,7 @@ export default function MigrationsPage() {
               onChange={(e) => setCleanupSource(e.target.checked)}
               className="h-4 w-4 rounded border-border"
             />
-            <span className="text-sm">
-              Vzdump auf Source loeschen
-            </span>
+            <span className="text-sm">Vzdump auf Source loeschen</span>
           </label>
           <label className="flex items-center gap-3 cursor-pointer">
             <input
@@ -768,9 +748,7 @@ export default function MigrationsPage() {
               onChange={(e) => setCleanupTarget(e.target.checked)}
               className="h-4 w-4 rounded border-border"
             />
-            <span className="text-sm">
-              Vzdump auf Target loeschen
-            </span>
+            <span className="text-sm">Vzdump auf Target loeschen</span>
           </label>
         </div>
       </div>
@@ -779,22 +757,20 @@ export default function MigrationsPage() {
 
   const renderStep4 = () => (
     <div className="space-y-6">
-      {/* Migration summary */}
       <div className="grid grid-cols-1 md:grid-cols-[1fr,auto,1fr] gap-4 items-center">
-        {/* Source */}
         <Card>
           <CardHeader className="pb-2">
             <CardDescription>Quelle</CardDescription>
             <CardTitle className="text-base flex items-center gap-2">
               <Server className="h-4 w-4" />
-              {sourceNode?.name || "–"}
+              {sourceNode?.name || "-"}
             </CardTitle>
           </CardHeader>
           <CardContent className="text-sm space-y-1">
             <div className="flex justify-between">
               <span className="text-muted-foreground">VM</span>
               <span className="font-medium">
-                {selectedVM?.name || "–"} ({selectedVmid})
+                {selectedVM?.name || "-"} ({selectedVmid})
               </span>
             </div>
             <div className="flex justify-between">
@@ -805,9 +781,7 @@ export default function MigrationsPage() {
               <span className="text-muted-foreground">Status</span>
               <Badge
                 variant={
-                  selectedVM?.status === "running"
-                    ? "default"
-                    : "secondary"
+                  selectedVM?.status === "running" ? "default" : "secondary"
                 }
               >
                 {selectedVM?.status}
@@ -816,7 +790,6 @@ export default function MigrationsPage() {
           </CardContent>
         </Card>
 
-        {/* Arrow */}
         <div className="flex flex-col items-center gap-1">
           <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
             <ChevronRight className="h-5 w-5 text-primary" />
@@ -824,41 +797,40 @@ export default function MigrationsPage() {
           <span className="text-xs text-muted-foreground">Migration</span>
         </div>
 
-        {/* Target */}
         <Card>
           <CardHeader className="pb-2">
             <CardDescription>Ziel</CardDescription>
             <CardTitle className="text-base flex items-center gap-2">
               <Server className="h-4 w-4" />
-              {targetNode?.name || "–"}
+              {targetNode?.name || "-"}
             </CardTitle>
           </CardHeader>
           <CardContent className="text-sm space-y-1">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Storage</span>
-              <span className="font-medium">
-                {selectedStorage?.storage || "–"}
-              </span>
+              <span className="font-medium">{effectiveStorage || "-"}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Typ</span>
-              <Badge variant="outline">
-                {selectedStorage?.type}
-              </Badge>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Frei</span>
-              <span>
-                {selectedStorage
-                  ? formatBytes(selectedStorage.available)
-                  : "–"}
-              </span>
-            </div>
+            {selectedStorageInfo && (
+              <>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Typ</span>
+                  <Badge variant="outline">{selectedStorageInfo.type}</Badge>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Frei</span>
+                  <span>{formatBytes(selectedStorageInfo.available)}</span>
+                </div>
+              </>
+            )}
+            {usingFallback && (
+              <p className="text-xs text-amber-600 mt-1">
+                Storage-Daten vom Quell-Node
+              </p>
+            )}
           </CardContent>
         </Card>
       </div>
 
-      {/* Options summary */}
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm">Migrations-Optionen</CardTitle>
@@ -910,12 +882,10 @@ export default function MigrationsPage() {
       <div>
         <h1 className="text-2xl font-bold">VM-Migrationen</h1>
         <p className="text-muted-foreground text-sm">
-          VMs zwischen Nodes migrieren und Fortschritt in Echtzeit
-          verfolgen.
+          VMs zwischen Nodes migrieren und Fortschritt in Echtzeit verfolgen.
         </p>
       </div>
 
-      {/* Active migrations */}
       {activeMigrations.length > 0 && (
         <Card>
           <CardHeader className="pb-3">
@@ -932,7 +902,6 @@ export default function MigrationsPage() {
         </Card>
       )}
 
-      {/* Wizard */}
       <Card>
         <CardHeader>
           <div className="flex items-center gap-2">
@@ -942,22 +911,17 @@ export default function MigrationsPage() {
             </CardTitle>
           </div>
           <CardDescription>
-            Schritt-fuer-Schritt Assistent zur VM-Migration zwischen
-            Nodes.
+            Schritt-fuer-Schritt Assistent zur VM-Migration zwischen Nodes.
           </CardDescription>
         </CardHeader>
         <CardContent>
           {renderStepIndicator()}
-
-          {/* Step content */}
           <div className="min-h-[300px]">
             {step === 1 && renderStep1()}
             {step === 2 && renderStep2()}
             {step === 3 && renderStep3()}
             {step === 4 && renderStep4()}
           </div>
-
-          {/* Navigation */}
           <div className="flex items-center justify-between mt-8 pt-4 border-t">
             <Button
               variant="outline"
@@ -967,7 +931,6 @@ export default function MigrationsPage() {
               <ArrowLeft className="mr-2 h-4 w-4" />
               Zurueck
             </Button>
-
             {step < 4 ? (
               <Button
                 onClick={() => setStep((s) => s + 1)}
@@ -994,11 +957,8 @@ export default function MigrationsPage() {
         </CardContent>
       </Card>
 
-      {/* Migration history */}
       <div>
-        <h2 className="text-lg font-semibold mb-3">
-          Migrations-Historie
-        </h2>
+        <h2 className="text-lg font-semibold mb-3">Migrations-Historie</h2>
         <MigrationHistory />
       </div>
     </div>
