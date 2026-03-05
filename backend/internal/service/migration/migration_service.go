@@ -562,30 +562,20 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 		restoreVMID = *m.NewVMID
 	}
 
-	// Check if VM already exists on target (e.g. from a previous failed attempt) and remove it
-	tgtVMs, _ := tgtClient.GetVMs(ctx, tgtPVENode)
-	for _, v := range tgtVMs {
-		if v.VMID == restoreVMID {
-			s.broadcastLog(m.ID, fmt.Sprintf("⚠ VM %d existiert bereits auf Target - wird entfernt...", restoreVMID))
-			// Stop if running
-			if v.Status == "running" {
-				stopUPID, err := tgtClient.StopVM(ctx, tgtPVENode, restoreVMID, m.VMType)
-				if err == nil {
-					_ = s.waitForTask(ctx, tgtClient, tgtPVENode, stopUPID, 60*time.Second)
-				}
-			}
-			// Delete the VM
-			delPath := fmt.Sprintf("/nodes/%s/%s/%d", tgtPVENode, m.VMType, restoreVMID)
-			_, delErr := tgtClient.DeleteResource(ctx, delPath)
-			if delErr != nil {
-				s.broadcastLog(m.ID, fmt.Sprintf("⚠ VM %d konnte nicht gelöscht werden: %v", restoreVMID, delErr))
-			} else {
-				// Wait for delete to complete
-				time.Sleep(3 * time.Second)
-				s.broadcastLog(m.ID, fmt.Sprintf("✓ Alte VM %d auf Target entfernt", restoreVMID))
-			}
-			break
+	// Remove any existing VM config on target (e.g. from a previous failed attempt).
+	// We use SSH because the API may not list broken/partially restored VMs.
+	s.broadcastLog(m.ID, fmt.Sprintf("Prüfe ob VM %d auf Target existiert...", restoreVMID))
+	checkResult, _ := tgtSSHClient.RunCommand(ctx, fmt.Sprintf("test -f /etc/pve/nodes/%s/qemu-server/%d.conf && echo exists || echo no", tgtPVENode, restoreVMID))
+	if checkResult != nil && strings.Contains(checkResult.Stdout, "exists") {
+		s.broadcastLog(m.ID, fmt.Sprintf("⚠ VM %d Config existiert auf Target - entferne...", restoreVMID))
+		destroyResult, _ := tgtSSHClient.RunCommand(ctx, fmt.Sprintf("qm destroy %d --purge 2>&1 || rm -f /etc/pve/nodes/%s/qemu-server/%d.conf", restoreVMID, tgtPVENode, restoreVMID))
+		if destroyResult != nil && destroyResult.Stdout != "" {
+			s.broadcastLog(m.ID, fmt.Sprintf("  qm destroy: %s", strings.TrimSpace(destroyResult.Stdout)))
 		}
+		time.Sleep(2 * time.Second)
+		s.broadcastLog(m.ID, fmt.Sprintf("✓ Alte VM %d Config entfernt", restoreVMID))
+	} else {
+		s.broadcastLog(m.ID, fmt.Sprintf("✓ VM %d existiert nicht auf Target", restoreVMID))
 	}
 
 	// Convert filesystem path to Proxmox volume ID format.
