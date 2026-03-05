@@ -48,9 +48,12 @@ import { formatBytes, cn } from "@/lib/utils";
 interface StorageOption {
   storage: string;
   type: string;
+  content: string;
   total: number;
   used: number;
   available: number;
+  active: boolean;
+  shared: boolean;
 }
 
 const STEPS = [
@@ -124,7 +127,11 @@ export default function MigrationsPage() {
 
   // UI state
   const [storages, setStorages] = useState<StorageOption[]>([]);
+  const [sourceStorages, setSourceStorages] = useState<StorageOption[]>([]);
   const [loadingStorages, setLoadingStorages] = useState(false);
+  const [storageError, setStorageError] = useState("");
+  const [useSourceFallback, setUseSourceFallback] = useState(false);
+  const [manualStorage, setManualStorage] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
 
@@ -133,11 +140,18 @@ export default function MigrationsPage() {
     fetchMigrations();
   }, [nodes.length, fetchNodes, fetchMigrations]);
 
-  // Load VMs when source node changes
+  // Load VMs and source storages when source node changes
   useEffect(() => {
     if (sourceNodeId) {
       fetchNodeVMs(sourceNodeId);
       setSelectedVmid("");
+      api
+        .get(`/nodes/${sourceNodeId}/storage`)
+        .then((res) => {
+          const data = Array.isArray(res.data) ? res.data : res.data?.data || [];
+          setSourceStorages(data);
+        })
+        .catch(() => setSourceStorages([]));
     }
   }, [sourceNodeId, fetchNodeVMs]);
 
@@ -148,18 +162,36 @@ export default function MigrationsPage() {
       return;
     }
     setTargetStorage("");
+    setStorageError("");
+    setUseSourceFallback(false);
+    setManualStorage("");
     setLoadingStorages(true);
     api
       .get(`/nodes/${targetNodeId}/storage`)
       .then((res) => {
-        const data = Array.isArray(res.data)
-          ? res.data
-          : res.data?.data || [];
-        setStorages(data.filter((s: StorageOption) => s.available > 0));
+        const data = Array.isArray(res.data) ? res.data : res.data?.data || [];
+        setStorages(data);
+        setStorageError("");
       })
-      .catch(() => setStorages([]))
+      .catch((err) => {
+        const status = err?.response?.status;
+        const serverMsg = err?.response?.data?.error || err?.response?.data?.message || "";
+        console.error(`[Migration] Storage fetch failed for node ${targetNodeId}:`, status, serverMsg);
+
+        // Fallback: use source node storages as reference
+        if (sourceStorages.length > 0) {
+          setStorages(sourceStorages);
+          setUseSourceFallback(true);
+          setStorageError("");
+        } else {
+          setStorages([]);
+          setStorageError(
+            `Storage-Abfrage fehlgeschlagen (${status || "Netzwerk"}): ${serverMsg || "Unbekannter Fehler"}`
+          );
+        }
+      })
       .finally(() => setLoadingStorages(false));
-  }, [targetNodeId]);
+  }, [targetNodeId, sourceStorages]);
 
   // WebSocket for live migration updates
   const handleWsMessage = useCallback(
@@ -518,6 +550,17 @@ export default function MigrationsPage() {
       {targetNodeId && (
         <div className="space-y-3">
           <Label className="text-sm font-medium">Ziel-Storage</Label>
+
+          {useSourceFallback && (
+            <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 p-3">
+              <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+              <p className="text-xs text-amber-700 dark:text-amber-400">
+                Ziel-Node Storages nicht ladbar. Zeige Source-Node Storages als Referenz
+                (Storage-Namen sind in Proxmox-Clustern meist identisch).
+              </p>
+            </div>
+          )}
+
           {loadingStorages ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -525,9 +568,43 @@ export default function MigrationsPage() {
                 Storages werden geladen...
               </span>
             </div>
+          ) : storageError ? (
+            <div className="space-y-4">
+              <div className="flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-4">
+                <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+                <p className="text-sm text-destructive">{storageError}</p>
+              </div>
+              <div className="space-y-2 max-w-md">
+                <Label className="text-sm">Storage-Name manuell eingeben</Label>
+                <Input
+                  placeholder="z.B. local-lvm, ceph-pool, nfs-share"
+                  value={manualStorage}
+                  onChange={(e) => {
+                    setManualStorage(e.target.value);
+                    setTargetStorage(e.target.value);
+                  }}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Gib den exakten Storage-Namen des Ziel-Nodes ein.
+                </p>
+              </div>
+            </div>
           ) : storages.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground text-sm">
-              Keine verfuegbaren Storages auf diesem Node.
+            <div className="space-y-4">
+              <div className="text-center py-8 text-muted-foreground text-sm">
+                Keine Storages auf diesem Node gefunden.
+              </div>
+              <div className="space-y-2 max-w-md">
+                <Label className="text-sm">Storage-Name manuell eingeben</Label>
+                <Input
+                  placeholder="z.B. local-lvm"
+                  value={manualStorage}
+                  onChange={(e) => {
+                    setManualStorage(e.target.value);
+                    setTargetStorage(e.target.value);
+                  }}
+                />
+              </div>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -556,9 +633,14 @@ export default function MigrationsPage() {
                           {s.storage}
                         </span>
                       </div>
-                      <Badge variant="outline" className="text-[10px]">
-                        {s.type}
-                      </Badge>
+                      <div className="flex items-center gap-1">
+                        {s.shared && (
+                          <Badge variant="secondary" className="text-[10px]">shared</Badge>
+                        )}
+                        <Badge variant="outline" className="text-[10px]">
+                          {s.type}
+                        </Badge>
+                      </div>
                     </div>
                     <div className="space-y-1">
                       <div className="flex justify-between text-xs text-muted-foreground">
