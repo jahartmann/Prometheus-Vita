@@ -586,6 +586,20 @@ func CreateAPITokenWithTicket(ctx context.Context, hostname string, port int, us
 	return result.Data.FullTokenID, result.Data.Value, nil
 }
 
+// DeleteResource deletes a resource (VM/CT) via its API path. Returns the task UPID.
+func (c *Client) DeleteResource(ctx context.Context, path string) (string, error) {
+	data, err := c.doRequest(ctx, http.MethodDelete, path)
+	if err != nil {
+		return "", fmt.Errorf("delete resource %s: %w", path, err)
+	}
+	var upid string
+	if err := json.Unmarshal(data, &upid); err != nil {
+		// Some endpoints don't return a UPID
+		return "", nil
+	}
+	return upid, nil
+}
+
 // GetStorageRaw returns the raw JSON response from /nodes/{node}/storage for debugging.
 func (c *Client) GetStorageRaw(ctx context.Context, node string) (json.RawMessage, error) {
 	return c.doRequest(ctx, http.MethodGet, fmt.Sprintf("/nodes/%s/storage", node))

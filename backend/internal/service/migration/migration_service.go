@@ -562,6 +562,32 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 		restoreVMID = *m.NewVMID
 	}
 
+	// Check if VM already exists on target (e.g. from a previous failed attempt) and remove it
+	tgtVMs, _ := tgtClient.GetVMs(ctx, tgtPVENode)
+	for _, v := range tgtVMs {
+		if v.VMID == restoreVMID {
+			s.broadcastLog(m.ID, fmt.Sprintf("⚠ VM %d existiert bereits auf Target - wird entfernt...", restoreVMID))
+			// Stop if running
+			if v.Status == "running" {
+				stopUPID, err := tgtClient.StopVM(ctx, tgtPVENode, restoreVMID, m.VMType)
+				if err == nil {
+					_ = s.waitForTask(ctx, tgtClient, tgtPVENode, stopUPID, 60*time.Second)
+				}
+			}
+			// Delete the VM
+			delPath := fmt.Sprintf("/nodes/%s/%s/%d", tgtPVENode, m.VMType, restoreVMID)
+			_, delErr := tgtClient.DeleteResource(ctx, delPath)
+			if delErr != nil {
+				s.broadcastLog(m.ID, fmt.Sprintf("⚠ VM %d konnte nicht gelöscht werden: %v", restoreVMID, delErr))
+			} else {
+				// Wait for delete to complete
+				time.Sleep(3 * time.Second)
+				s.broadcastLog(m.ID, fmt.Sprintf("✓ Alte VM %d auf Target entfernt", restoreVMID))
+			}
+			break
+		}
+	}
+
 	// Convert filesystem path to Proxmox volume ID format.
 	// API tokens cannot use raw filesystem paths (only root can).
 	// /var/lib/vz/dump/vzdump-qemu-11000-... → local:backup/vzdump-qemu-11000-...
