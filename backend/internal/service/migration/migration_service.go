@@ -319,9 +319,16 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 		handleError("preflight", fmt.Errorf("VM %d nicht auf Source-Node gefunden", m.VMID))
 		return
 	}
-	vmDiskSize := vmInfo.MaxDisk
-	s.broadcastLog(m.ID, fmt.Sprintf("✓ VM %d (%s) gefunden - Disk: %s, Status: %s",
-		vmInfo.VMID, vmInfo.Name, formatBytesLog(vmDiskSize), vmInfo.Status))
+	// Use actual disk usage (not allocated size) for space estimates.
+	// vzdump with zstd compresses to ~50% of used data.
+	vmDiskUsed := vmInfo.Disk
+	if vmDiskUsed <= 0 {
+		vmDiskUsed = vmInfo.MaxDisk
+	}
+	estimatedBackupSize := int64(float64(vmDiskUsed) * 0.6) // 60% of used = safety margin with zstd
+	s.broadcastLog(m.ID, fmt.Sprintf("✓ VM %d (%s) gefunden - Disk: %s belegt / %s alloziert, Status: %s",
+		vmInfo.VMID, vmInfo.Name, formatBytesLog(vmDiskUsed), formatBytesLog(vmInfo.MaxDisk), vmInfo.Status))
+	s.broadcastLog(m.ID, fmt.Sprintf("  Geschätzte Backup-Größe (zstd): ~%s", formatBytesLog(estimatedBackupSize)))
 
 	// 3. Check target storage exists and has enough space
 	s.broadcastLog(m.ID, fmt.Sprintf("Prüfe Zielspeicher '%s'...", m.TargetStorage))
@@ -350,34 +357,37 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 		targetStorageInfo.Storage, formatBytesLog(targetStorageInfo.Available),
 		formatBytesLog(targetStorageInfo.Total), targetStorageInfo.UsagePercent))
 
-	// Check if target storage has enough space (need at least VM disk size)
-	if targetStorageInfo.Total > 0 && vmDiskSize > 0 {
-		if targetStorageInfo.Available < vmDiskSize {
-			handleError("preflight", fmt.Errorf("nicht genügend Speicherplatz auf '%s': benötigt %s, verfügbar %s",
-				m.TargetStorage, formatBytesLog(vmDiskSize), formatBytesLog(targetStorageInfo.Available)))
+	// Check if target storage has enough space for the VM disk (used size)
+	if targetStorageInfo.Total > 0 && vmDiskUsed > 0 {
+		if targetStorageInfo.Available < vmDiskUsed {
+			handleError("preflight", fmt.Errorf("nicht genügend Speicherplatz auf '%s': benötigt ~%s, verfügbar %s",
+				m.TargetStorage, formatBytesLog(vmDiskUsed), formatBytesLog(targetStorageInfo.Available)))
 			return
 		}
-		s.broadcastLog(m.ID, fmt.Sprintf("✓ Genügend Speicherplatz: benötigt %s, verfügbar %s",
-			formatBytesLog(vmDiskSize), formatBytesLog(targetStorageInfo.Available)))
+		s.broadcastLog(m.ID, fmt.Sprintf("✓ Genügend Speicherplatz auf Ziel: benötigt ~%s, verfügbar %s",
+			formatBytesLog(vmDiskUsed), formatBytesLog(targetStorageInfo.Available)))
 	}
 
-	// 4. Find a vzdump-capable storage on source for backup
-	vzdumpStorage := s.findVzdumpStorage(ctx, srcClient, srcPVENode, srcSSHClient)
+	// 4. Find a vzdump-capable storage on source for backup (with enough space)
+	vzdumpStorage := s.findVzdumpStorage(ctx, srcClient, srcPVENode, srcSSHClient, estimatedBackupSize)
 	s.broadcastLog(m.ID, fmt.Sprintf("✓ Vzdump-Storage: %s", vzdumpStorage))
 
-	// 5. Check source node disk space for vzdump file
-	if vzdumpStorage == "local" || vzdumpStorage == "" {
-		s.broadcastLog(m.ID, "Prüfe freien Speicherplatz auf Source für Backup...")
-		result, err := srcSSHClient.RunCommand(ctx, "df -B1 /var/lib/vz/dump/ | tail -1 | awk '{print $4}'")
-		if err == nil && result.ExitCode == 0 {
-			var freeSpace int64
-			fmt.Sscanf(strings.TrimSpace(result.Stdout), "%d", &freeSpace)
-			if freeSpace > 0 && vmDiskSize > 0 && freeSpace < vmDiskSize {
-				handleError("preflight", fmt.Errorf("nicht genügend Speicherplatz auf Source für vzdump: benötigt ca. %s, verfügbar %s auf /var/lib/vz/dump/",
-					formatBytesLog(vmDiskSize), formatBytesLog(freeSpace)))
-				return
-			}
-			s.broadcastLog(m.ID, fmt.Sprintf("✓ Source-Speicher für Backup: %s frei", formatBytesLog(freeSpace)))
+	// 5. Check source node disk space for vzdump file (warning, not blocking)
+	s.broadcastLog(m.ID, "Prüfe freien Speicherplatz auf Source für Backup...")
+	result, err := srcSSHClient.RunCommand(ctx, fmt.Sprintf("df -B1 $(pvesm path %s:) 2>/dev/null | tail -1 | awk '{print $4}'", vzdumpStorage))
+	if err != nil || result.ExitCode != 0 {
+		// Fallback: check /var/lib/vz/dump/
+		result, err = srcSSHClient.RunCommand(ctx, "df -B1 /var/lib/vz/dump/ 2>/dev/null | tail -1 | awk '{print $4}'")
+	}
+	if err == nil && result.ExitCode == 0 {
+		var freeSpace int64
+		fmt.Sscanf(strings.TrimSpace(result.Stdout), "%d", &freeSpace)
+		if freeSpace > 0 && estimatedBackupSize > 0 && freeSpace < estimatedBackupSize {
+			s.broadcastLog(m.ID, fmt.Sprintf("⚠ Wenig Speicherplatz: geschätzt ~%s benötigt, %s verfügbar. Versuche trotzdem...",
+				formatBytesLog(estimatedBackupSize), formatBytesLog(freeSpace)))
+		} else if freeSpace > 0 {
+			s.broadcastLog(m.ID, fmt.Sprintf("✓ Source-Speicher für Backup: %s frei (benötigt ~%s)",
+				formatBytesLog(freeSpace), formatBytesLog(estimatedBackupSize)))
 		}
 	}
 
@@ -742,24 +752,39 @@ func (s *Service) getTaskLogForError(ctx context.Context, client *proxmox.Client
 }
 
 // findVzdumpStorage finds a storage capable of holding vzdump backups on the source node.
-func (s *Service) findVzdumpStorage(ctx context.Context, client *proxmox.Client, pveNode string, sshClient *ssh.Client) string {
+// It prefers storages with enough available space for the estimated backup size.
+func (s *Service) findVzdumpStorage(ctx context.Context, client *proxmox.Client, pveNode string, sshClient *ssh.Client, estimatedSize int64) string {
 	storages, err := client.GetStorage(ctx, pveNode)
 	if err != nil {
 		return "local" // fallback
 	}
 
-	// Look for a storage with "backup" or "dump" content type
+	// Collect all backup-capable storages, sorted by available space (largest first)
+	type candidate struct {
+		name      string
+		available int64
+	}
+	var candidates []candidate
+
 	for _, st := range storages {
 		if strings.Contains(st.Content, "backup") || strings.Contains(st.Content, "vzdump") {
-			slog.Info("migration: found vzdump storage", slog.String("storage", st.Storage), slog.String("content", st.Content))
-			return st.Storage
+			candidates = append(candidates, candidate{name: st.Storage, available: st.Available})
 		}
 	}
 
-	// Check if /var/lib/vz/dump exists (local storage default dump path)
-	result, err := sshClient.RunCommand(ctx, "test -d /var/lib/vz/dump && echo ok")
-	if err == nil && result.ExitCode == 0 && strings.Contains(result.Stdout, "ok") {
-		return "local"
+	// Pick the one with the most available space
+	if len(candidates) > 0 {
+		best := candidates[0]
+		for _, c := range candidates[1:] {
+			if c.available > best.available {
+				best = c
+			}
+		}
+		slog.Info("migration: found vzdump storage",
+			slog.String("storage", best.name),
+			slog.String("available", formatBytesLog(best.available)),
+			slog.String("estimated_backup", formatBytesLog(estimatedSize)))
+		return best.name
 	}
 
 	return "local"
