@@ -159,14 +159,20 @@ func (h *NodeHandler) GetStorage(c echo.Context) error {
 		return apiPkg.BadRequest(c, "invalid node id")
 	}
 
+	slog.Info("handler GetStorage called", slog.String("node_id", id.String()))
+
 	storage, err := h.service.GetStorage(c.Request().Context(), id)
 	if err != nil {
 		// Include full error details for debugging connectivity issues
-		slog.Error("GetStorage failed",
+		slog.Error("handler GetStorage failed",
 			slog.String("node_id", id.String()),
 			slog.Any("error", err))
 		return handleNodeError(c, err, fmt.Sprintf("failed to get storage: %v", err))
 	}
+
+	slog.Info("handler GetStorage returning",
+		slog.String("node_id", id.String()),
+		slog.Int("storage_count", len(storage)))
 
 	return apiPkg.Success(c, storage)
 }
@@ -480,6 +486,20 @@ func (h *NodeHandler) SyncTags(c echo.Context) error {
 	}
 
 	return apiPkg.Success(c, map[string]int{"imported": count})
+}
+
+func (h *NodeHandler) DebugStorage(c echo.Context) error {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return apiPkg.BadRequest(c, "invalid node id")
+	}
+
+	result, err := h.service.DebugStorage(c.Request().Context(), id)
+	if err != nil {
+		return handleNodeError(c, err, "failed to debug storage")
+	}
+
+	return apiPkg.Success(c, result)
 }
 
 func (h *NodeHandler) DiagnoseConnectivity(c echo.Context) error {

@@ -15,22 +15,31 @@ interface AppLayoutProps {
 
 export function AppLayout({ children }: AppLayoutProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
   const router = useRouter();
-  const { isAuthenticated, _hasHydrated } = useAuthStore();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 
   useEffect(() => {
-    // Wait for Zustand to rehydrate from localStorage before checking auth
-    if (_hasHydrated && !isAuthenticated) {
+    // Check if already hydrated synchronously (persist hydrates sync from localStorage)
+    if (useAuthStore.persist.hasHydrated()) {
+      setHydrated(true);
+    } else {
+      // If not yet hydrated, wait for it
+      const unsub = useAuthStore.persist.onFinishHydration(() => {
+        setHydrated(true);
+      });
+      return unsub;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (hydrated && !isAuthenticated) {
       router.push("/login");
     }
-  }, [isAuthenticated, _hasHydrated, router]);
+  }, [isAuthenticated, hydrated, router]);
 
   // Show nothing until hydration is complete (prevents flash)
-  if (!_hasHydrated) {
-    return null;
-  }
-
-  if (!isAuthenticated) {
+  if (!hydrated || !isAuthenticated) {
     return null;
   }
 

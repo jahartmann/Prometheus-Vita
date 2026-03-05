@@ -96,6 +96,7 @@ func SetupRouter(e *echo.Echo, cfg *config.Config, jwtSvc *auth.JWTService, h Ha
 	nodes.GET("/:id/status", h.Node.GetStatus)
 	nodes.GET("/:id/vms", h.Node.GetVMs)
 	nodes.GET("/:id/storage", h.Node.GetStorage)
+	nodes.GET("/:id/storage/debug", h.Node.DebugStorage)
 	nodes.GET("/:id/network", h.Node.GetNetworkInterfaces)
 	nodes.GET("/:id/disks", h.Node.GetDisks)
 	nodes.GET("/:id/tags", h.Tag.GetNodeTags)

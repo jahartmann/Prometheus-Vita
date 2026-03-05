@@ -207,12 +207,35 @@ func (c *Client) GetVMs(ctx context.Context, node string) ([]VMInfo, error) {
 }
 
 func (c *Client) GetStorage(ctx context.Context, node string) ([]StorageInfo, error) {
+	slog.Info("proxmox GetStorage called", slog.String("node", node), slog.String("path", fmt.Sprintf("/nodes/%s/storage", node)))
+
 	data, err := c.doRequest(ctx, http.MethodGet, fmt.Sprintf("/nodes/%s/storage", node))
 	if err != nil {
+		slog.Error("proxmox GetStorage request failed", slog.String("node", node), slog.Any("error", err))
 		return nil, err
 	}
 
-	slog.Debug("proxmox storage raw response", slog.String("node", node), slog.Int("bytes", len(data)))
+	slog.Info("proxmox GetStorage raw response",
+		slog.String("node", node),
+		slog.Int("raw_bytes", len(data)),
+		slog.String("raw_preview", truncateJSON(data, 500)))
+
+	// Parse into generic interface first to see what Proxmox actually returned
+	var genericRaw []map[string]interface{}
+	if genErr := json.Unmarshal(data, &genericRaw); genErr != nil {
+		slog.Warn("proxmox GetStorage: could not parse as generic array",
+			slog.String("node", node), slog.Any("error", genErr))
+	} else {
+		slog.Info("proxmox GetStorage generic parse",
+			slog.String("node", node),
+			slog.Int("generic_count", len(genericRaw)))
+		for i, item := range genericRaw {
+			slog.Info("proxmox GetStorage raw item",
+				slog.String("node", node),
+				slog.Int("index", i),
+				slog.Any("item", item))
+		}
+	}
 
 	var raw []struct {
 		Storage string `json:"storage"`
@@ -226,17 +249,36 @@ func (c *Client) GetStorage(ctx context.Context, node string) ([]StorageInfo, er
 		Shared  *int   `json:"shared"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
+		slog.Error("proxmox GetStorage unmarshal failed",
+			slog.String("node", node),
+			slog.Any("error", err),
+			slog.String("raw_data", string(data)))
 		return nil, fmt.Errorf("unmarshal storage: %w", err)
 	}
 
+	slog.Info("proxmox GetStorage parsed items",
+		slog.String("node", node),
+		slog.Int("parsed_count", len(raw)))
+
+	// Return ALL storages without filtering - let the frontend handle filtering
 	storages := make([]StorageInfo, 0, len(raw))
 	for _, r := range raw {
-		// Only skip if explicitly disabled (enabled == 0). If field is missing/null, include it.
-		if r.Enabled != nil && *r.Enabled == 0 {
-			continue
-		}
 		isActive := r.Active == nil || *r.Active == 1
 		isShared := r.Shared != nil && *r.Shared == 1
+		isEnabled := r.Enabled == nil || *r.Enabled == 1
+
+		slog.Info("proxmox GetStorage processing item",
+			slog.String("node", node),
+			slog.String("storage", r.Storage),
+			slog.String("type", r.Type),
+			slog.String("content", r.Content),
+			slog.Int64("total", r.Total),
+			slog.Int64("used", r.Used),
+			slog.Int64("avail", r.Avail),
+			slog.Bool("active", isActive),
+			slog.Bool("enabled", isEnabled),
+			slog.Bool("shared", isShared))
+
 		s := StorageInfo{
 			Storage:   r.Storage,
 			Type:      r.Type,
@@ -253,7 +295,20 @@ func (c *Client) GetStorage(ctx context.Context, node string) ([]StorageInfo, er
 		storages = append(storages, s)
 	}
 
+	slog.Info("proxmox GetStorage returning",
+		slog.String("node", node),
+		slog.Int("returned_count", len(storages)))
+
 	return storages, nil
+}
+
+// truncateJSON returns a truncated string representation of JSON data for logging.
+func truncateJSON(data json.RawMessage, maxLen int) string {
+	s := string(data)
+	if len(s) > maxLen {
+		return s[:maxLen] + "..."
+	}
+	return s
 }
 
 func (c *Client) GetNetworkInterfaces(ctx context.Context, node string) ([]NetworkInterface, error) {
@@ -571,39 +626,66 @@ func CreateAPITokenWithTicket(ctx context.Context, hostname string, port int, us
 	return result.Data.FullTokenID, result.Data.Value, nil
 }
 
+// GetStorageRaw returns the raw JSON response from /nodes/{node}/storage for debugging.
+func (c *Client) GetStorageRaw(ctx context.Context, node string) (json.RawMessage, error) {
+	return c.doRequest(ctx, http.MethodGet, fmt.Sprintf("/nodes/%s/storage", node))
+}
+
+// GetClusterResourcesRaw returns the raw JSON response from /cluster/resources?type=storage for debugging.
+func (c *Client) GetClusterResourcesRaw(ctx context.Context) (json.RawMessage, error) {
+	return c.doRequest(ctx, http.MethodGet, "/cluster/resources?type=storage")
+}
+
 // GetClusterStorages fetches storage info across all cluster nodes via
 // /cluster/resources?type=storage. This avoids needing a specific PVE node name.
 func (c *Client) GetClusterStorages(ctx context.Context) ([]StorageInfo, error) {
+	slog.Info("proxmox GetClusterStorages called")
+
 	data, err := c.doRequest(ctx, http.MethodGet, "/cluster/resources?type=storage")
 	if err != nil {
+		slog.Error("proxmox GetClusterStorages request failed", slog.Any("error", err))
 		return nil, err
 	}
 
+	slog.Info("proxmox GetClusterStorages raw response",
+		slog.Int("raw_bytes", len(data)),
+		slog.String("raw_preview", truncateJSON(data, 500)))
+
 	var raw []struct {
-		Storage    string  `json:"storage"`
-		Node       string  `json:"node"`
-		Type       string  `json:"type"`
-		Content    string  `json:"content"`
-		MaxDisk    int64   `json:"maxdisk"`
-		Disk       int64   `json:"disk"`
-		Status     string  `json:"status"`
-		Shared     int     `json:"shared"`
-		PluginType string  `json:"plugintype"`
+		Storage    string `json:"storage"`
+		Node       string `json:"node"`
+		Type       string `json:"type"`
+		Content    string `json:"content"`
+		MaxDisk    int64  `json:"maxdisk"`
+		Disk       int64  `json:"disk"`
+		Status     string `json:"status"`
+		Shared     int    `json:"shared"`
+		PluginType string `json:"plugintype"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
+		slog.Error("proxmox GetClusterStorages unmarshal failed",
+			slog.Any("error", err),
+			slog.String("raw_data", string(data)))
 		return nil, fmt.Errorf("unmarshal cluster storages: %w", err)
 	}
+
+	slog.Info("proxmox GetClusterStorages parsed items", slog.Int("parsed_count", len(raw)))
 
 	// Deduplicate shared storages (appear once per node)
 	seen := make(map[string]bool)
 	storages := make([]StorageInfo, 0, len(raw))
 	for _, r := range raw {
-		// Only skip if explicitly marked as not available (some PVE versions use different status values)
-		if r.Status == "unknown" {
-			continue
-		}
+		slog.Info("proxmox GetClusterStorages raw item",
+			slog.String("storage", r.Storage),
+			slog.String("node", r.Node),
+			slog.String("type", r.Type),
+			slog.String("status", r.Status),
+			slog.Int("shared", r.Shared),
+			slog.String("plugintype", r.PluginType))
+
 		key := r.Storage
 		if seen[key] {
+			slog.Info("proxmox GetClusterStorages skipping duplicate", slog.String("storage", r.Storage))
 			continue
 		}
 		seen[key] = true
@@ -615,7 +697,7 @@ func (c *Client) GetClusterStorages(ctx context.Context) ([]StorageInfo, error) 
 			Total:     r.MaxDisk,
 			Used:      r.Disk,
 			Available: r.MaxDisk - r.Disk,
-			Active:    true,
+			Active:    r.Status != "unknown",
 			Shared:    r.Shared == 1,
 		}
 		if s.Total > 0 {
@@ -623,6 +705,8 @@ func (c *Client) GetClusterStorages(ctx context.Context) ([]StorageInfo, error) 
 		}
 		storages = append(storages, s)
 	}
+
+	slog.Info("proxmox GetClusterStorages returning", slog.Int("returned_count", len(storages)))
 
 	return storages, nil
 }

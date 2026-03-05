@@ -604,33 +604,63 @@ func (s *Service) getVMsViaCluster(ctx context.Context, targetID uuid.UUID) ([]p
 }
 
 func (s *Service) GetStorage(ctx context.Context, id uuid.UUID) ([]proxmox.StorageInfo, error) {
+	slog.Info("GetStorage called", slog.String("node_id", id.String()))
+
 	node, client, pveNode, err := s.getClientAndNode(ctx, id)
 	if err == nil {
+		slog.Info("GetStorage: resolved client and node",
+			slog.String("node_name", node.Name),
+			slog.String("pve_node", pveNode))
+
 		// Try node-specific endpoint first
 		storage, storErr := client.GetStorage(ctx, pveNode)
 		if storErr == nil {
+			slog.Info("GetStorage: SUCCESS via direct node endpoint",
+				slog.String("node", node.Name),
+				slog.String("pve_node", pveNode),
+				slog.Int("count", len(storage)))
 			return storage, nil
 		}
-		slog.Warn("direct storage fetch failed",
+		slog.Warn("GetStorage: direct storage fetch failed",
 			slog.String("node", node.Name), slog.String("pve_node", pveNode), slog.Any("error", storErr))
 
 		// Try cluster-level endpoint (doesn't need correct node name)
 		clusterStorage, clusterErr := client.GetClusterStorages(ctx)
 		if clusterErr == nil {
+			slog.Info("GetStorage: SUCCESS via cluster endpoint",
+				slog.String("node", node.Name),
+				slog.Int("count", len(clusterStorage)))
 			return clusterStorage, nil
 		}
+		slog.Warn("GetStorage: cluster endpoint also failed",
+			slog.String("node", node.Name), slog.Any("error", clusterErr))
 
 		// The PVE node name might be wrong - try re-resolving it
 		if storage, resolved := s.retryStorageWithResolvedName(ctx, node, client, pveNode); resolved {
+			slog.Info("GetStorage: SUCCESS via retry with re-resolved PVE node name",
+				slog.String("node", node.Name),
+				slog.Int("count", len(storage)))
 			return storage, nil
 		}
+		slog.Warn("GetStorage: retry with re-resolved name also failed", slog.String("node", node.Name))
 	} else {
-		slog.Warn("cannot reach node for storage, trying cluster fallback",
+		slog.Warn("GetStorage: cannot reach node, trying cluster fallback",
 			slog.String("node_id", id.String()), slog.Any("error", err))
 	}
 
 	// Cluster fallback: query storage through any other reachable node
-	return s.getStorageViaCluster(ctx, id)
+	slog.Info("GetStorage: attempting cluster fallback via other nodes", slog.String("node_id", id.String()))
+	fallbackStorage, fallbackErr := s.getStorageViaCluster(ctx, id)
+	if fallbackErr == nil {
+		slog.Info("GetStorage: SUCCESS via cluster fallback",
+			slog.String("node_id", id.String()),
+			slog.Int("count", len(fallbackStorage)))
+	} else {
+		slog.Error("GetStorage: all methods failed",
+			slog.String("node_id", id.String()),
+			slog.Any("error", fallbackErr))
+	}
+	return fallbackStorage, fallbackErr
 }
 
 // retryStorageWithResolvedName re-resolves the PVE node name when the initial
@@ -1098,6 +1128,80 @@ func (s *Service) DiagnoseConnectivity(ctx context.Context, id uuid.UUID) map[st
 	result["storage_by_pve_node"] = storageResults
 
 	return result
+}
+
+// DebugStorage returns raw Proxmox API responses for storage endpoints.
+// This bypasses all parsing/filtering so you can see exactly what PVE returns.
+func (s *Service) DebugStorage(ctx context.Context, id uuid.UUID) (map[string]interface{}, error) {
+	result := map[string]interface{}{
+		"node_id":   id.String(),
+		"timestamp": time.Now().UTC().Format(time.RFC3339),
+	}
+
+	node, err := s.nodeRepo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	result["node_name"] = node.Name
+	result["hostname"] = node.Hostname
+	result["port"] = node.Port
+	result["cached_pve_node"] = getCachedPVENode(node)
+
+	client, err := s.clientFactory.CreateClient(node)
+	if err != nil {
+		result["error"] = fmt.Sprintf("failed to create client: %v", err)
+		return result, nil
+	}
+
+	// Get PVE node list
+	pveNodes, err := client.GetNodes(ctx)
+	if err != nil {
+		result["get_nodes_error"] = err.Error()
+		return result, nil
+	}
+	result["pve_nodes"] = pveNodes
+
+	// For each PVE node, call GetStorageRaw
+	perNodeRaw := make(map[string]interface{})
+	for _, pn := range pveNodes {
+		raw, rawErr := client.GetStorageRaw(ctx, pn)
+		if rawErr != nil {
+			perNodeRaw[pn] = map[string]interface{}{"error": rawErr.Error()}
+		} else {
+			// Parse into generic structure so it renders as proper JSON
+			var parsed interface{}
+			if jsonErr := json.Unmarshal(raw, &parsed); jsonErr != nil {
+				perNodeRaw[pn] = map[string]interface{}{"raw_string": string(raw), "parse_error": jsonErr.Error()}
+			} else {
+				perNodeRaw[pn] = map[string]interface{}{"data": parsed, "raw_bytes": len(raw)}
+			}
+		}
+	}
+	result["storage_per_node_raw"] = perNodeRaw
+
+	// Cluster-level storage raw
+	clusterRaw, clusterErr := client.GetClusterResourcesRaw(ctx)
+	if clusterErr != nil {
+		result["cluster_resources_error"] = clusterErr.Error()
+	} else {
+		var parsed interface{}
+		if jsonErr := json.Unmarshal(clusterRaw, &parsed); jsonErr != nil {
+			result["cluster_resources_raw"] = map[string]interface{}{"raw_string": string(clusterRaw), "parse_error": jsonErr.Error()}
+		} else {
+			result["cluster_resources_raw"] = map[string]interface{}{"data": parsed, "raw_bytes": len(clusterRaw)}
+		}
+	}
+
+	// Also include the parsed result from the normal GetStorage path for comparison
+	storage, storErr := s.GetStorage(ctx, id)
+	if storErr != nil {
+		result["parsed_storage_error"] = storErr.Error()
+	} else {
+		result["parsed_storage_count"] = len(storage)
+		result["parsed_storage"] = storage
+	}
+
+	return result, nil
 }
 
 func (s *Service) buildSSHConfig(node *model.Node) (ssh.SSHConfig, error) {
