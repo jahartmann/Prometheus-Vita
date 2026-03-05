@@ -764,6 +764,90 @@ func (s *Service) getStorageViaCluster(ctx context.Context, targetID uuid.UUID) 
 	return nil, fmt.Errorf("%w: %s", ErrNodeUnreachable, detail)
 }
 
+// ClusterStorageItem represents a storage pool with its owning node info.
+type ClusterStorageItem struct {
+	NodeID       string  `json:"node_id"`
+	NodeName     string  `json:"node_name"`
+	Storage      string  `json:"storage"`
+	Type         string  `json:"type"`
+	Content      string  `json:"content"`
+	Total        int64   `json:"total"`
+	Used         int64   `json:"used"`
+	Available    int64   `json:"available"`
+	UsagePercent float64 `json:"usage_percent"`
+	Active       bool    `json:"active"`
+	Shared       bool    `json:"shared"`
+}
+
+// GetClusterStorage aggregates storage from all online PVE nodes.
+func (s *Service) GetClusterStorage(ctx context.Context) ([]ClusterStorageItem, error) {
+	allNodes, err := s.nodeRepo.List(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list nodes: %w", err)
+	}
+
+	type nodeResult struct {
+		items []ClusterStorageItem
+		err   error
+	}
+
+	results := make(chan nodeResult, len(allNodes))
+	var wg sync.WaitGroup
+
+	for i := range allNodes {
+		n := allNodes[i]
+		if !n.IsOnline || n.Type != "pve" {
+			continue
+		}
+		wg.Add(1)
+		go func(node model.Node) {
+			defer wg.Done()
+			storage, storErr := s.GetStorage(ctx, node.ID)
+			if storErr != nil {
+				slog.Warn("GetClusterStorage: failed for node",
+					slog.String("node", node.Name), slog.Any("error", storErr))
+				results <- nodeResult{err: storErr}
+				return
+			}
+			items := make([]ClusterStorageItem, 0, len(storage))
+			for _, st := range storage {
+				items = append(items, ClusterStorageItem{
+					NodeID:       node.ID.String(),
+					NodeName:     node.Name,
+					Storage:      st.Storage,
+					Type:         st.Type,
+					Content:      st.Content,
+					Total:        st.Total,
+					Used:         st.Used,
+					Available:    st.Available,
+					UsagePercent: st.UsagePercent,
+					Active:       st.Active,
+					Shared:       st.Shared,
+				})
+			}
+			results <- nodeResult{items: items}
+		}(n)
+	}
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	var allItems []ClusterStorageItem
+	for res := range results {
+		if res.err == nil {
+			allItems = append(allItems, res.items...)
+		}
+	}
+
+	if allItems == nil {
+		allItems = []ClusterStorageItem{}
+	}
+
+	return allItems, nil
+}
+
 func (s *Service) GetNetworkInterfaces(ctx context.Context, id uuid.UUID) ([]NetworkInterfaceWithAlias, error) {
 	_, client, pveNode, err := s.getClientAndNode(ctx, id)
 	if err != nil {

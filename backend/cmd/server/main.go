@@ -211,7 +211,7 @@ func main() {
 	briefingSvc := briefing.NewService(briefingRepo, nodeRepo, metricsRepo, anomalyRepo, predictionRepo, llmRegistry)
 
 	// Phase 6 Services
-	driftSvc := drift.NewService(driftRepo, backupRepo, backupFileRepo, nodeRepo, encryptor, sshPool)
+	driftSvc := drift.NewService(driftRepo, backupRepo, backupFileRepo, nodeRepo, encryptor, sshPool, llmRegistry)
 	envSvc := environment.NewService(envRepo, nodeRepo)
 	updateSvc := updates.NewService(updateRepo, nodeRepo, encryptor, sshPool)
 	rightsizingSvc := rightsizing.NewService(recRepo, nodeRepo, clientFactory)
@@ -353,6 +353,7 @@ func main() {
 		Brain:        handler.NewBrainHandler(brainSvc),
 		Reflex:       handler.NewReflexHandler(reflexSvc),
 		AgentConfig:  handler.NewAgentConfigHandler(agentConfigRepo, llmRegistry, ollamaProvider),
+		SyncCenter:   handler.NewSyncCenterHandler(nodeSvc, nodeRepo, tagRepo),
 	}
 
 	// Setup routes

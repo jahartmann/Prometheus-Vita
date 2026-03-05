@@ -182,6 +182,11 @@ export const networkApi = {
     api.put(`/nodes/${nodeId}/network/${iface}/alias`, data),
 };
 
+// Storage API (cluster-level)
+export const storageApi = {
+  getClusterStorage: () => api.get("/storage"),
+};
+
 // Disk API
 export const diskApi = {
   getDisks: (nodeId: string) =>
@@ -201,6 +206,7 @@ export const tagApi = {
     api.delete(`/nodes/${nodeId}/tags/${tagId}`),
   syncFromProxmox: (nodeId: string) =>
     api.post(`/nodes/${nodeId}/tags/sync`),
+  syncAll: () => api.post("/tags/sync-all"),
 };
 
 // PBS API
@@ -400,6 +406,11 @@ export const driftApi = {
   listAll: () => api.get("/drift"),
   listByNode: (nodeId: string) => api.get(`/nodes/${nodeId}/drift`),
   triggerCheck: (nodeId: string) => api.post(`/nodes/${nodeId}/drift/check`),
+  acceptBaseline: (checkId: string) => api.post(`/drift/${checkId}/accept`),
+  ignoreDrift: (checkId: string, filePath: string) =>
+    api.post(`/drift/${checkId}/ignore`, { file_path: filePath }),
+  compareNodes: (data: { file_paths: string[]; node_ids: string[] }) =>
+    api.post("/drift/compare-nodes", data),
 };
 
 // Environment API
@@ -468,6 +479,7 @@ export const isoApi = {
   listTemplates: (nodeId: string) => api.get(`/nodes/${nodeId}/templates`),
   syncContent: (nodeId: string, data: { source_node_id: string; volid: string; target_storage: string }) =>
     api.post(`/nodes/${nodeId}/sync-content`, data),
+  listCluster: () => api.get("/isos"),
 };
 
 // Reflex API

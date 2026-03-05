@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { GitCompare, AlertTriangle, Clock, CheckCircle, XCircle, Loader2 } from "lucide-react";
+import { GitCompare, AlertTriangle, Clock, CheckCircle, XCircle, Loader2, Brain, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -20,7 +20,20 @@ interface DriftListProps {
   isLoading: boolean;
 }
 
+function getAISeverity(check: DriftCheck): number | null {
+  if (check.ai_analysis && check.ai_analysis.overall_severity) {
+    return check.ai_analysis.overall_severity;
+  }
+  return null;
+}
+
 function severityFromCheck(check: DriftCheck): "critical" | "warning" | "info" {
+  const aiSev = getAISeverity(check);
+  if (aiSev !== null) {
+    if (aiSev >= 7) return "critical";
+    if (aiSev >= 4) return "warning";
+    return "info";
+  }
   if (check.status === "failed") return "critical";
   const total = check.changed_files + check.added_files + check.removed_files;
   if (total >= 5) return "critical";
@@ -70,6 +83,7 @@ export function DriftList({ checks, nodeNames, isLoading }: DriftListProps) {
             <TableHead>Node</TableHead>
             <TableHead>Aenderungen</TableHead>
             <TableHead>Severity</TableHead>
+            <TableHead>KI</TableHead>
             <TableHead>Zeitpunkt</TableHead>
           </TableRow>
         </TableHeader>
@@ -78,6 +92,7 @@ export function DriftList({ checks, nodeNames, isLoading }: DriftListProps) {
             const severity = severityFromCheck(check);
             const badge = severityBadge[severity];
             const totalChanges = check.changed_files + check.added_files + check.removed_files;
+            const aiSev = getAISeverity(check);
 
             return (
               <TableRow
@@ -120,6 +135,25 @@ export function DriftList({ checks, nodeNames, isLoading }: DriftListProps) {
                   <Badge variant="outline" className={badge.className}>
                     {badge.label}
                   </Badge>
+                </TableCell>
+                <TableCell>
+                  {aiSev !== null ? (
+                    <div className="flex items-center gap-1">
+                      <Brain className="h-3.5 w-3.5 text-violet-500" />
+                      <span className={`text-xs font-mono ${
+                        aiSev >= 7 ? "text-red-500" : aiSev >= 4 ? "text-amber-500" : "text-green-500"
+                      }`}>
+                        {aiSev}/10
+                      </span>
+                    </div>
+                  ) : totalChanges > 0 ? (
+                    <span className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Sparkles className="h-3 w-3 animate-pulse text-violet-400" />
+                      Analysiert...
+                    </span>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">-</span>
+                  )}
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-1 text-sm text-muted-foreground">

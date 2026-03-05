@@ -763,15 +763,68 @@ export interface DriftCheck {
   added_files: number;
   removed_files: number;
   details?: DriftFileDetail[];
+  ai_analysis?: AIAnalysisResult;
   error_message?: string;
+  baseline_updated_at?: string;
   checked_at: string;
   created_at: string;
+}
+
+export interface AIFileAnalysis {
+  file_path: string;
+  severity: number;
+  severity_reason: string;
+  category: 'Security' | 'Performance' | 'Network' | 'Configuration' | 'Cosmetic';
+  risk_assessment: string;
+  recommendation: 'fix' | 'accept' | 'monitor';
+  summary: string;
+}
+
+export interface AIAnalysisResult {
+  analyzed_at: string;
+  model: string;
+  file_analyses: AIFileAnalysis[];
+  overall_severity: number;
+  overall_summary: string;
 }
 
 export interface DriftFileDetail {
   file_path: string;
   status: 'added' | 'removed' | 'modified' | 'unchanged';
   diff?: string;
+  acknowledged: boolean;
+  ai_file_analysis?: AIFileAnalysis;
+}
+
+export interface CompareNodesRequest {
+  file_paths: string[];
+  node_ids: string[];
+}
+
+export interface NodeFileContent {
+  node_id: string;
+  node_name: string;
+  content: string;
+  error?: string;
+}
+
+export interface NodeDifference {
+  node_a: string;
+  node_a_name: string;
+  node_b: string;
+  node_b_name: string;
+  diff: string;
+  identical: boolean;
+}
+
+export interface NodeComparisonEntry {
+  file_path: string;
+  node_files: NodeFileContent[];
+  differences: NodeDifference[];
+}
+
+export interface CompareNodesResponse {
+  comparisons: NodeComparisonEntry[];
 }
 
 // Phase 6: Environment types
@@ -907,10 +960,48 @@ export interface VNCProxyTicket {
 }
 
 
+// Cluster Storage types
+export interface ClusterStorageItem {
+  node_id: string;
+  node_name: string;
+  storage: string;
+  type: string;
+  content: string;
+  total: number;
+  used: number;
+  available: number;
+  usage_percent: number;
+  active: boolean;
+  shared: boolean;
+}
+
 // ISO/Template types
 export interface StorageContent {
   volid: string;
   format: string;
   size: number;
   ctime: number;
+}
+
+// Cluster-wide ISO type
+export interface ClusterISO {
+  name: string;
+  volid: string;
+  format: string;
+  size: number;
+  ctime: number;
+  nodes: string[];
+}
+
+// Tag sync-all response
+export interface TagSyncAllResult {
+  total_imported: number;
+  results: TagSyncNodeResult[];
+}
+
+export interface TagSyncNodeResult {
+  node_id: string;
+  node_name: string;
+  imported: number;
+  error?: string;
 }

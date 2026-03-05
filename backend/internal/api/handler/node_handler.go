@@ -177,6 +177,15 @@ func (h *NodeHandler) GetStorage(c echo.Context) error {
 	return apiPkg.Success(c, storage)
 }
 
+func (h *NodeHandler) GetClusterStorage(c echo.Context) error {
+	storage, err := h.service.GetClusterStorage(c.Request().Context())
+	if err != nil {
+		return apiPkg.InternalError(c, fmt.Sprintf("failed to get cluster storage: %v", err))
+	}
+
+	return apiPkg.Success(c, storage)
+}
+
 func (h *NodeHandler) TestConnection(c echo.Context) error {
 	var req model.TestConnectionRequest
 	if err := c.Bind(&req); err != nil {

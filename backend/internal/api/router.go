@@ -43,6 +43,7 @@ type Handlers struct {
 	Brain        *handler.BrainHandler
 	Reflex       *handler.ReflexHandler
 	AgentConfig  *handler.AgentConfigHandler
+	SyncCenter   *handler.SyncCenterHandler
 }
 
 func SetupRouter(e *echo.Echo, cfg *config.Config, jwtSvc *auth.JWTService, h Handlers, gatewaySvc *gateway.Service, redisClient *redis.Client, auditRepo repository.AuditRepository) {
@@ -88,6 +89,9 @@ func SetupRouter(e *echo.Echo, cfg *config.Config, jwtSvc *auth.JWTService, h Ha
 
 	// Auth - protected
 	protected.GET("/auth/me", h.Auth.Me)
+
+	// Cluster-level storage (aggregates all nodes)
+	protected.GET("/storage", h.Node.GetClusterStorage)
 
 	// Nodes
 	nodes := protected.Group("/nodes")
@@ -184,6 +188,15 @@ func SetupRouter(e *echo.Echo, cfg *config.Config, jwtSvc *auth.JWTService, h Ha
 	tagsAdminOnly := tags.Group("")
 	tagsAdminOnly.Use(middleware.RequireRole(model.RoleAdmin))
 	tagsAdminOnly.DELETE("/:id", h.Tag.DeleteTag)
+
+	// Sync Center (cluster-wide ISO + tag sync)
+	if h.SyncCenter != nil {
+		protected.GET("/isos", h.SyncCenter.ListClusterISOs)
+
+		syncCenterAdmin := protected.Group("")
+		syncCenterAdmin.Use(middleware.RequireRole(model.RoleAdmin, model.RoleOperator))
+		syncCenterAdmin.POST("/tags/sync-all", h.SyncCenter.SyncAllTags)
+	}
 
 	// Users (admin only)
 	users := protected.Group("/users")
@@ -345,6 +358,9 @@ func SetupRouter(e *echo.Echo, cfg *config.Config, jwtSvc *auth.JWTService, h Ha
 	if h.Drift != nil {
 		driftRoutes := protected.Group("/drift")
 		driftRoutes.GET("", h.Drift.ListAll)
+		driftRoutes.POST("/compare-nodes", h.Drift.CompareNodes)
+		driftRoutes.POST("/:id/accept", h.Drift.AcceptBaseline)
+		driftRoutes.POST("/:id/ignore", h.Drift.IgnoreDrift)
 
 		// Node-scoped drift
 		nodes.GET("/:id/drift", h.Drift.ListByNode)

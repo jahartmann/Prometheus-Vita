@@ -25,6 +25,8 @@ import {
   GitCompare,
   Zap,
   GitBranch,
+  Package,
+  Tag,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -50,12 +52,25 @@ const mainNavItems: NavItem[] = [
 ];
 
 const featureNavItems: NavItem[] = [
+  { label: "Speicher", href: "/storage", icon: HardDrive, matchPrefix: "/storage" },
   { label: "Backups", href: "/backups", icon: Archive, matchPrefix: "/backups" },
   { label: "Migration", href: "/migrations", icon: ArrowRightLeft, matchPrefix: "/migrations" },
   { label: "Disaster Recovery", href: "/disaster-recovery", icon: Shield, matchPrefix: "/disaster-recovery" },
   { label: "Drift Detection", href: "/drift", icon: GitCompare, matchPrefix: "/drift" },
   { label: "Reflex-Regeln", href: "/reflex", icon: Zap, matchPrefix: "/reflex" },
   { label: "Topologie", href: "/topology", icon: GitBranch, matchPrefix: "/topology" },
+];
+
+interface ResourceSubItem {
+  label: string;
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
+  matchPrefix: string;
+}
+
+const resourceSubItems: ResourceSubItem[] = [
+  { label: "Tags", href: "/tags", icon: Tag, matchPrefix: "/tags" },
+  { label: "ISOs & Vorlagen", href: "/isos", icon: Disc, matchPrefix: "/isos" },
 ];
 
 const bottomNavItems: NavItem[] = [
@@ -95,6 +110,7 @@ export function Sidebar({ collapsed = false }: SidebarProps) {
   const [nodesOpen, setNodesOpen] = useState(pathname.startsWith("/nodes"));
   const [openNodes, setOpenNodes] = useState<Record<string, boolean>>({});
   const [onboardOpen, setOnboardOpen] = useState(false);
+  const [resourcesOpen, setResourcesOpen] = useState(pathname.startsWith("/tags") || pathname.startsWith("/isos"));
 
   useEffect(() => {
     const token = useAuthStore.getState().accessToken;
@@ -179,6 +195,7 @@ export function Sidebar({ collapsed = false }: SidebarProps) {
       ...mainNavItems,
       { label: "Server", href: "/nodes", icon: Server, matchPrefix: "/nodes" },
       ...featureNavItems,
+      { label: "Ressourcen", href: "/tags", icon: Package, matchPrefix: "/tags" },
       ...bottomNavItems,
     ];
 
@@ -292,6 +309,47 @@ export function Sidebar({ collapsed = false }: SidebarProps) {
 
           {/* Feature Nav Items */}
           {featureNavItems.map((item) => renderNavLink(item))}
+
+          {/* Ressourcen (Sync Center) */}
+          <Collapsible open={resourcesOpen} onOpenChange={setResourcesOpen}>
+            <CollapsibleTrigger
+              className={cn(
+                "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                (pathname.startsWith("/tags") || pathname.startsWith("/isos"))
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+              )}
+            >
+              <Package className="h-4 w-4 shrink-0" />
+              <span className="flex-1 text-left">Ressourcen</span>
+              {resourcesOpen ? (
+                <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+              ) : (
+                <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+              )}
+            </CollapsibleTrigger>
+            <CollapsibleContent className="ml-2 space-y-0.5 border-l border-muted pl-2">
+              {resourceSubItems.map((sub) => {
+                const SubIcon = sub.icon;
+                const subActive = pathname.startsWith(sub.matchPrefix);
+                return (
+                  <Link
+                    key={sub.href}
+                    href={sub.href}
+                    className={cn(
+                      "flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition-colors",
+                      subActive
+                        ? "bg-primary/10 text-primary font-medium"
+                        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                    )}
+                  >
+                    <SubIcon className="h-3.5 w-3.5 shrink-0" />
+                    <span>{sub.label}</span>
+                  </Link>
+                );
+              })}
+            </CollapsibleContent>
+          </Collapsible>
 
           <div className="my-2 border-t border-border" />
 

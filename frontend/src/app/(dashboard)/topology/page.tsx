@@ -5,10 +5,10 @@ import { TopologyMap } from "@/components/topology/topology-map";
 
 export default function TopologyPage() {
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Cluster-Topologie</h1>
-        <p className="text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           Interaktive Visualisierung der Cluster-Infrastruktur mit Hosts, VMs, Storage und Netzwerk.
         </p>
       </div>

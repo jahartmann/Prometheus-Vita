@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertTriangle, CheckCircle, RefreshCw, FileWarning } from "lucide-react";
+import { AlertTriangle, CheckCircle, RefreshCw, FileWarning, Brain, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -36,6 +36,7 @@ export function DriftSummaryCard({ nodeId }: DriftSummaryCardProps) {
   };
 
   const hasDrift = latest && (latest.changed_files > 0 || latest.added_files > 0 || latest.removed_files > 0);
+  const aiAnalysis = latest?.ai_analysis;
 
   return (
     <>
@@ -70,7 +71,7 @@ export function DriftSummaryCard({ nodeId }: DriftSummaryCardProps) {
                 <AlertTriangle className="h-4 w-4 text-yellow-500" />
                 <span className="text-sm font-medium text-yellow-600">Drift erkannt</span>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 {latest.changed_files > 0 && (
                   <Badge variant="secondary">{latest.changed_files} geaendert</Badge>
                 )}
@@ -81,6 +82,33 @@ export function DriftSummaryCard({ nodeId }: DriftSummaryCardProps) {
                   <Badge variant="secondary">{latest.removed_files} entfernt</Badge>
                 )}
               </div>
+
+              {/* AI Analysis Summary */}
+              {aiAnalysis && (
+                <div className="mt-2 rounded-md border border-violet-500/20 bg-gradient-to-r from-violet-500/5 to-purple-500/5 p-2">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <Brain className="h-3 w-3 text-violet-500" />
+                    <span className="text-xs font-medium text-violet-600">KI-Analyse</span>
+                    <Sparkles className="h-2.5 w-2.5 text-violet-400" />
+                    <Badge
+                      variant="outline"
+                      className={`ml-auto text-xs font-mono ${
+                        aiAnalysis.overall_severity >= 7
+                          ? "bg-red-500/10 text-red-600 border-red-500/20"
+                          : aiAnalysis.overall_severity >= 4
+                          ? "bg-amber-500/10 text-amber-600 border-amber-500/20"
+                          : "bg-green-500/10 text-green-600 border-green-500/20"
+                      }`}
+                    >
+                      {aiAnalysis.overall_severity}/10
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-violet-700 dark:text-violet-300 line-clamp-2">
+                    {aiAnalysis.overall_summary}
+                  </p>
+                </div>
+              )}
+
               <p className="text-xs text-muted-foreground">
                 {new Date(latest.checked_at).toLocaleString("de-DE")} - {latest.total_files} Dateien geprueft
               </p>
