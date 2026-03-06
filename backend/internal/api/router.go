@@ -29,6 +29,7 @@ type Handlers struct {
 	Migration    *handler.MigrationHandler
 	Escalation   *handler.EscalationHandler
 	Telegram     *handler.TelegramHandler
+	Cluster      *handler.ClusterHandler
 	Anomaly      *handler.AnomalyHandler
 	Prediction   *handler.PredictionHandler
 	Briefing     *handler.BriefingHandler
@@ -92,6 +93,13 @@ func SetupRouter(e *echo.Echo, cfg *config.Config, jwtSvc *auth.JWTService, h Ha
 
 	// Cluster-level storage (aggregates all nodes)
 	protected.GET("/storage", h.Node.GetClusterStorage)
+
+	// Cluster Dashboard
+	if h.Cluster != nil {
+		cluster := protected.Group("/cluster")
+		cluster.GET("/summary", h.Cluster.GetSummary)
+		cluster.GET("/history", h.Cluster.GetHistory)
+	}
 
 	// Nodes
 	nodes := protected.Group("/nodes")
@@ -353,6 +361,7 @@ func SetupRouter(e *echo.Echo, cfg *config.Config, jwtSvc *auth.JWTService, h Ha
 		briefings := protected.Group("/briefings")
 		briefings.GET("", h.Briefing.List)
 		briefings.GET("/latest", h.Briefing.GetLatest)
+		briefings.GET("/live", h.Briefing.GetLiveSummary)
 	}
 
 	// Agent Approvals

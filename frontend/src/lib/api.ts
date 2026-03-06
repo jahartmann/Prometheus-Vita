@@ -417,6 +417,7 @@ export const briefingApi = {
   list: (limit?: number) => {
     return api.get("/briefings", { params: limit !== undefined ? { limit } : undefined }).then((r) => toArray(r.data));
   },
+  getLive: () => api.get("/briefings/live").then((r) => r.data),
 };
 
 // Approval API
@@ -537,6 +538,13 @@ export const reflexApi = {
   delete: (id: string) => api.delete(`/reflexes/${id}`),
 };
 
+
+// Cluster API
+export const clusterApi = {
+  getSummary: () => api.get("/cluster/summary"),
+  getHistory: (period?: string) =>
+    api.get("/cluster/history", { params: { period: period || "24h" } }),
+};
 
 // Topology API
 export const topologyApi = {

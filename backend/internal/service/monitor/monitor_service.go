@@ -170,6 +170,73 @@ func (s *Service) GetMetricsSummary(ctx context.Context, nodeID uuid.UUID, since
 	return summary, nil
 }
 
+type ClusterHistoryPoint struct {
+	Time    time.Time `json:"time"`
+	CPUAvg  float64   `json:"cpu_avg"`
+	MemPct  float64   `json:"mem_pct"`
+	DiskPct float64   `json:"disk_pct"`
+	NetIn   int64     `json:"net_in"`
+	NetOut  int64     `json:"net_out"`
+}
+
+func (s *Service) GetClusterHistory(ctx context.Context, since, until time.Time) ([]ClusterHistoryPoint, error) {
+	records, err := s.metricsRepo.GetAllMetrics(ctx, since, until)
+	if err != nil {
+		return nil, fmt.Errorf("get cluster history: %w", err)
+	}
+
+	// Group by time bucket (5-min intervals)
+	buckets := map[time.Time][]model.MetricsRecord{}
+	for _, r := range records {
+		bucket := r.RecordedAt.Truncate(5 * time.Minute)
+		buckets[bucket] = append(buckets[bucket], r)
+	}
+
+	// Aggregate each bucket
+	points := make([]ClusterHistoryPoint, 0, len(buckets))
+	for t, recs := range buckets {
+		var cpuSum, memUsed, memTotal, diskUsed, diskTotal float64
+		var netIn, netOut int64
+		for _, r := range recs {
+			cpuSum += r.CPUUsage
+			memUsed += float64(r.MemUsed)
+			memTotal += float64(r.MemTotal)
+			diskUsed += float64(r.DiskUsed)
+			diskTotal += float64(r.DiskTotal)
+			netIn += r.NetIn
+			netOut += r.NetOut
+		}
+		n := float64(len(recs))
+		memPct := 0.0
+		if memTotal > 0 {
+			memPct = memUsed / memTotal * 100
+		}
+		diskPct := 0.0
+		if diskTotal > 0 {
+			diskPct = diskUsed / diskTotal * 100
+		}
+		points = append(points, ClusterHistoryPoint{
+			Time:    t,
+			CPUAvg:  cpuSum / n,
+			MemPct:  memPct,
+			DiskPct: diskPct,
+			NetIn:   netIn / int64(n),
+			NetOut:  netOut / int64(n),
+		})
+	}
+
+	// Sort by time
+	for i := 0; i < len(points)-1; i++ {
+		for j := i + 1; j < len(points); j++ {
+			if points[j].Time.Before(points[i].Time) {
+				points[i], points[j] = points[j], points[i]
+			}
+		}
+	}
+
+	return points, nil
+}
+
 func (s *Service) GetVMMetricsHistory(ctx context.Context, nodeID uuid.UUID, vmid int, start, end time.Time) ([]model.VMMetricsRecord, error) {
 	records, err := s.metricsRepo.GetVMMetricsHistory(ctx, nodeID, vmid, start, end)
 	if err != nil {

@@ -15,6 +15,7 @@ import (
 type MetricsRepository interface {
 	Insert(ctx context.Context, record *model.MetricsRecord) error
 	GetByNode(ctx context.Context, nodeID uuid.UUID, since, until time.Time) ([]model.MetricsRecord, error)
+	GetAllMetrics(ctx context.Context, since, until time.Time) ([]model.MetricsRecord, error)
 	GetLatest(ctx context.Context, nodeID uuid.UUID) (*model.MetricsRecord, error)
 	DeleteOlderThan(ctx context.Context, before time.Time) (int64, error)
 
@@ -61,6 +62,32 @@ func (r *pgMetricsRepository) GetByNode(ctx context.Context, nodeID uuid.UUID, s
 		 ORDER BY recorded_at ASC`, nodeID, since, until)
 	if err != nil {
 		return nil, fmt.Errorf("get metrics by node: %w", err)
+	}
+	defer rows.Close()
+
+	var records []model.MetricsRecord
+	for rows.Next() {
+		var m model.MetricsRecord
+		if err := rows.Scan(&m.ID, &m.NodeID, &m.RecordedAt, &m.CPUUsage,
+			&m.MemUsed, &m.MemTotal,
+			&m.DiskUsed, &m.DiskTotal,
+			&m.NetIn, &m.NetOut, &m.LoadAvg); err != nil {
+			return nil, fmt.Errorf("scan metrics record: %w", err)
+		}
+		records = append(records, m)
+	}
+	return records, rows.Err()
+}
+
+func (r *pgMetricsRepository) GetAllMetrics(ctx context.Context, since, until time.Time) ([]model.MetricsRecord, error) {
+	rows, err := r.db.Query(ctx,
+		`SELECT id, node_id, recorded_at, cpu_usage, mem_used, mem_total,
+		        disk_used, disk_total, net_in, net_out, load_avg
+		 FROM metrics_records
+		 WHERE recorded_at BETWEEN $1 AND $2
+		 ORDER BY recorded_at ASC`, since, until)
+	if err != nil {
+		return nil, fmt.Errorf("get all metrics: %w", err)
 	}
 	defer rows.Close()
 

@@ -27,6 +27,10 @@ import {
   GitBranch,
   Package,
   Tag,
+  AlertTriangle,
+  Lightbulb,
+  Sun,
+  Layers,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -49,6 +53,8 @@ interface NavItem {
 
 const mainNavItems: NavItem[] = [
   { label: "Dashboard", href: "/", icon: LayoutDashboard },
+  { label: "Cluster", href: "/cluster", icon: Layers, matchPrefix: "/cluster" },
+  { label: "Briefing", href: "/briefing", icon: Sun, matchPrefix: "/briefing" },
 ];
 
 const featureNavItems: NavItem[] = [
@@ -59,6 +65,8 @@ const featureNavItems: NavItem[] = [
   { label: "Drift Detection", href: "/drift", icon: GitCompare, matchPrefix: "/drift" },
   { label: "Reflex-Regeln", href: "/reflex", icon: Zap, matchPrefix: "/reflex" },
   { label: "Topologie", href: "/topology", icon: GitBranch, matchPrefix: "/topology" },
+  { label: "Empfehlungen", href: "/recommendations", icon: Lightbulb, matchPrefix: "/recommendations" },
+  { label: "Alerts", href: "/alerts", icon: AlertTriangle, matchPrefix: "/alerts" },
 ];
 
 interface ResourceSubItem {

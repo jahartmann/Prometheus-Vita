@@ -30,7 +30,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useNodeStore } from "@/stores/node-store";
-import { metricsApi, nodeApi, toArray } from "@/lib/api";
+import { metricsApi, anomalyApi, predictionApi, nodeApi, toArray } from "@/lib/api";
 import { formatBandwidth, formatBytes, formatPercentage } from "@/lib/utils";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { KPICards } from "@/components/monitoring/kpi-cards";
@@ -39,8 +39,9 @@ import { LiveBandwidthGauge } from "@/components/monitoring/live-bandwidth-gauge
 import { VMMetricsTable } from "@/components/monitoring/vm-metrics-table";
 import { NetworkTraffic } from "@/components/monitoring/network-traffic";
 import { VMNetworkTraffic } from "@/components/monitoring/vm-network-traffic";
+import { AnomalyOverlay } from "@/components/monitoring/anomaly-overlay";
 import { useNodeMetrics } from "@/hooks/use-node-metrics";
-import type { MetricsRecord, MetricsSummary, RRDDataPoint, VM, VMMetricsRecord } from "@/types/api";
+import type { MetricsRecord, MetricsSummary, RRDDataPoint, VM, VMMetricsRecord, AnomalyRecord, MaintenancePrediction } from "@/types/api";
 
 const periods = [
   { label: "1h", value: "1h", hours: 1, rrdTimeframe: "hour" },
@@ -83,6 +84,8 @@ export default function NodeMonitoringPage() {
   const [vms, setVMs] = useState<VM[]>([]);
   const [vmHistory, setVMHistory] = useState<Record<number, Array<{ cpu: number; mem: number }>>>({});
   const [period, setPeriod] = useState("24h");
+  const [anomalies, setAnomalies] = useState<AnomalyRecord[]>([]);
+  const [predictions, setPredictions] = useState<MaintenancePrediction[]>([]);
   const [activeTab, setActiveTab] = useState("overview");
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
@@ -123,6 +126,10 @@ export default function NodeMonitoringPage() {
         .then((res) => setRrdData(toArray<RRDDataPoint>(res.data)))
         .catch(() => setRrdData([])),
     ]).then(() => setLastUpdated(new Date()));
+
+    // Fetch anomalies and predictions
+    anomalyApi.listByNode(nodeId).then(setAnomalies).catch(() => setAnomalies([]));
+    predictionApi.listByNode(nodeId).then(setPredictions).catch(() => setPredictions([]));
   }, [nodeId, period]);
 
   // Fetch VM metrics history for sparklines
@@ -210,6 +217,11 @@ export default function NodeMonitoringPage() {
         disk: m.disk_total > 0 ? (m.disk_used / m.disk_total) * 100 : 0,
       })),
     [metrics]
+  );
+
+  const chartDataTimes = useMemo(
+    () => overviewChartData.map((d) => d.time),
+    [overviewChartData]
   );
 
   // Memory & Disk chart data
@@ -409,11 +421,111 @@ export default function NodeMonitoringPage() {
                       strokeWidth={2}
                       name="disk"
                     />
+                    {/* Anomaly overlay dots */}
+                    <AnomalyOverlay
+                      anomalies={anomalies}
+                      metric="cpu"
+                      chartDataTimes={chartDataTimes}
+                    />
+                    <AnomalyOverlay
+                      anomalies={anomalies}
+                      metric="memory"
+                      chartDataTimes={chartDataTimes}
+                    />
+                    <AnomalyOverlay
+                      anomalies={anomalies}
+                      metric="disk"
+                      chartDataTimes={chartDataTimes}
+                    />
                   </AreaChart>
                 </ResponsiveContainer>
               )}
             </CardContent>
           </Card>
+
+          {/* Predictions Info */}
+          {predictions.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Trend-Prognosen</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  {predictions.map((p) => {
+                    const label = p.metric.includes("cpu") ? "CPU" : p.metric.includes("mem") ? "RAM" : "Disk";
+                    const severityColor = p.severity === "critical" ? "text-red-500" : p.severity === "warning" ? "text-amber-500" : "text-blue-500";
+                    return (
+                      <div key={p.id} className="rounded-lg border p-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium">{label}</span>
+                          <Badge variant="outline" className={severityColor}>
+                            {p.severity}
+                          </Badge>
+                        </div>
+                        <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                          <div>Aktuell: {p.current_value.toFixed(1)}%</div>
+                          <div>Prognose: {p.predicted_value.toFixed(1)}%</div>
+                          {p.days_until_threshold != null && (
+                            <div className={severityColor}>
+                              Schwellwert ({p.threshold.toFixed(0)}%) in ~{p.days_until_threshold.toFixed(1)} Tagen
+                            </div>
+                          )}
+                          <div>R²: {p.r_squared.toFixed(2)}</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Anomalies Table */}
+          {anomalies.filter((a) => !a.is_resolved).length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Aktive Anomalien</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-muted-foreground">
+                      <th className="p-3 text-left font-medium">Metrik</th>
+                      <th className="p-3 text-right font-medium">Wert</th>
+                      <th className="p-3 text-right font-medium">Z-Score</th>
+                      <th className="p-3 text-right font-medium">Durchschnitt</th>
+                      <th className="p-3 text-left font-medium">Schwere</th>
+                      <th className="p-3 text-left font-medium">Erkannt</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {anomalies
+                      .filter((a) => !a.is_resolved)
+                      .map((a) => {
+                        const severityColor = a.severity === "critical" ? "text-red-500" : a.severity === "warning" ? "text-amber-500" : "text-blue-500";
+                        return (
+                          <tr key={a.id} className="border-b last:border-0">
+                            <td className="p-3 font-medium">{a.metric}</td>
+                            <td className="p-3 text-right">{a.value.toFixed(1)}%</td>
+                            <td className="p-3 text-right">{a.z_score.toFixed(2)}</td>
+                            <td className="p-3 text-right">{a.mean.toFixed(1)}%</td>
+                            <td className={`p-3 ${severityColor}`}>{a.severity}</td>
+                            <td className="p-3 text-muted-foreground">
+                              {new Date(a.detected_at).toLocaleString("de-DE", {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                                day: "2-digit",
+                                month: "2-digit",
+                              })}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Load Average Card */}
           {loadAvg && (

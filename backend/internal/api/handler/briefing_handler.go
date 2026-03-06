@@ -26,6 +26,14 @@ func (h *BriefingHandler) GetLatest(c echo.Context) error {
 	return apiPkg.Success(c, b)
 }
 
+func (h *BriefingHandler) GetLiveSummary(c echo.Context) error {
+	summary, err := h.service.GetLiveSummary(c.Request().Context())
+	if err != nil {
+		return apiPkg.InternalError(c, "Fehler beim Erstellen des Live-Briefings")
+	}
+	return apiPkg.Success(c, summary)
+}
+
 func (h *BriefingHandler) List(c echo.Context) error {
 	limit := 10
 	if l := c.QueryParam("limit"); l != "" {

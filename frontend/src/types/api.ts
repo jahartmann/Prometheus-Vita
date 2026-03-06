@@ -738,6 +738,52 @@ export interface BriefingNodeSummary {
   disk_pct: number;
 }
 
+// Live Briefing types
+export interface LiveBriefingSummary {
+  nodes_online: number;
+  nodes_offline: number;
+  nodes_total: number;
+  vms_running: number;
+  vms_stopped: number;
+  vms_total: number;
+  avg_cpu: number;
+  avg_ram: number;
+  avg_disk: number;
+  top_nodes_by_cpu: NodeCPURank[];
+  top_vms_by_ram: VMRAMRank[];
+  unresolved_anomalies: number;
+  critical_predictions: number;
+  node_details: LiveNodeDetail[];
+}
+
+export interface NodeCPURank {
+  node_id: string;
+  node_name: string;
+  cpu_usage: number;
+}
+
+export interface VMRAMRank {
+  node_id: string;
+  node_name: string;
+  vmid: number;
+  vm_name: string;
+  mem_used_pct: number;
+  mem_used: number;
+  mem_total: number;
+}
+
+export interface LiveNodeDetail {
+  node_id: string;
+  node_name: string;
+  is_online: boolean;
+  cpu_usage: number;
+  mem_pct: number;
+  disk_pct: number;
+  vm_count: number;
+  vm_running: number;
+  uptime: number;
+}
+
 // Reflex types
 export type ReflexActionType = 'restart_service' | 'clear_cache' | 'notify' | 'run_command' | 'start_vm' | 'stop_vm';
 

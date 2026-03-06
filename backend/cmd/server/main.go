@@ -209,6 +209,7 @@ func main() {
 	anomalySvc := anomaly.NewService(anomalyRepo, metricsRepo, nodeRepo)
 	predictionSvc := prediction.NewService(predictionRepo, metricsRepo, nodeRepo)
 	briefingSvc := briefing.NewService(briefingRepo, nodeRepo, metricsRepo, anomalyRepo, predictionRepo, llmRegistry)
+	briefingSvc.SetNodeService(nodeSvc)
 
 	// Phase 6 Services
 	driftSvc := drift.NewService(driftRepo, backupRepo, backupFileRepo, nodeRepo, encryptor, sshPool, llmRegistry)
@@ -340,6 +341,7 @@ func main() {
 		Migration:    handler.NewMigrationHandler(migrationSvc),
 		Escalation:   handler.NewEscalationHandler(escalationSvc),
 		Telegram:     handler.NewTelegramHandler(telegramLinkRepo, telegramBotSvc, telegramBotEnabled),
+		Cluster:      handler.NewClusterHandler(monitorSvc),
 		Anomaly:      handler.NewAnomalyHandler(anomalySvc),
 		Prediction:   handler.NewPredictionHandler(predictionSvc),
 		Briefing:     handler.NewBriefingHandler(briefingSvc),
