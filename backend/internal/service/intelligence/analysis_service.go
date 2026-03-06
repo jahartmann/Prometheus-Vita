@@ -588,8 +588,8 @@ func (s *Service) buildFullLLMContext(nc *nodeContext) string {
 			}
 			sb.WriteString(fmt.Sprintf("- %s (ID: %d, Status: %s, CPU: %.1f%%, RAM: %s/%s)\n",
 				name, vm.VMID, vm.Status,
-				vm.CPUUsage*100,
-				formatBytes(int64(vm.MemUsed)), formatBytes(int64(vm.MemTotal))))
+				vm.CPU*100,
+				formatBytes(vm.Mem), formatBytes(vm.MaxMem)))
 		}
 	}
 
