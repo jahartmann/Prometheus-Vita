@@ -210,6 +210,8 @@ func main() {
 	predictionSvc := prediction.NewService(predictionRepo, metricsRepo, nodeRepo)
 	briefingSvc := briefing.NewService(briefingRepo, nodeRepo, metricsRepo, anomalyRepo, predictionRepo, llmRegistry)
 	briefingSvc.SetNodeService(nodeSvc)
+	anomalySvc.SetNodeService(nodeSvc)
+	predictionSvc.SetNodeService(nodeSvc)
 
 	// Phase 6 Services
 	driftSvc := drift.NewService(driftRepo, backupRepo, backupFileRepo, nodeRepo, encryptor, sshPool, llmRegistry)

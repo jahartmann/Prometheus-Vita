@@ -695,6 +695,12 @@ export interface AnomalyRecord {
   is_resolved: boolean;
   detected_at: string;
   resolved_at?: string;
+  // Enriched context fields
+  node_name?: string;
+  description?: string;
+  impact?: string;
+  recommendation?: string;
+  affected_vms?: string[];
 }
 
 export interface MaintenancePrediction {
@@ -710,6 +716,13 @@ export interface MaintenancePrediction {
   r_squared: number;
   severity: string;
   predicted_at: string;
+  // Enriched context fields
+  node_name?: string;
+  description?: string;
+  recommendation?: string;
+  trend_direction?: string;
+  affected_vms?: string[];
+  vm_count?: number;
 }
 
 export interface MorningBriefing {

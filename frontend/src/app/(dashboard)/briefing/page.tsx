@@ -32,8 +32,6 @@ import {
   XCircle,
   Zap,
   ArrowRight,
-  ShieldAlert,
-  Gauge,
   Timer,
   Link as LinkIcon,
 } from "lucide-react";
@@ -97,12 +95,15 @@ function severityBadgeVariant(severity: string) {
 
 function metricLabel(metric: string): string {
   switch (metric) {
+    case "cpu_usage":
     case "cpu":
       return "CPU";
+    case "memory_usage":
     case "memory":
     case "ram":
     case "mem":
       return "RAM";
+    case "disk_usage":
     case "disk":
       return "Disk";
     default:
@@ -110,19 +111,29 @@ function metricLabel(metric: string): string {
   }
 }
 
-function predictionRecommendation(p: MaintenancePrediction): string {
-  const days = p.days_until_threshold ?? 0;
-  const label = metricLabel(p.metric);
-  if (p.metric === "disk") {
-    return `Disk-Erweiterung in ${days} Tagen noetig`;
+function metricIcon(metric: string) {
+  if (metric.includes("cpu")) return Cpu;
+  if (metric.includes("mem") || metric.includes("ram")) return MemoryStick;
+  if (metric.includes("disk")) return HardDrive;
+  return Activity;
+}
+
+function trendText(direction?: string): string {
+  switch (direction) {
+    case "rising": return "steigend";
+    case "falling": return "fallend";
+    case "stable": return "stabil";
+    default: return "";
   }
-  if (p.metric === "memory" || p.metric === "ram" || p.metric === "mem") {
-    return `RAM-Aufruestung oder Optimierung in ${days} Tagen empfohlen`;
+}
+
+function trendColor(direction?: string): string {
+  switch (direction) {
+    case "rising": return "text-red-500";
+    case "falling": return "text-green-500";
+    case "stable": return "text-blue-500";
+    default: return "text-muted-foreground";
   }
-  if (p.metric === "cpu") {
-    return `CPU-Last ueberpruefen, Schwellwert in ${days} Tagen erwartet`;
-  }
-  return `${label}-Kapazitaet in ${days} Tagen erschoepft`;
 }
 
 export default function BriefingPage() {
@@ -411,91 +422,102 @@ export default function BriefingPage() {
               {anomalies.length === 0 ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
                   <CheckCircle2 className="h-4 w-4 text-green-500" />
-                  Keine Anomalien erkannt - alle Metriken im Normalbereich
+                  Keine Anomalien erkannt — alle Metriken im Normalbereich
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b text-left text-muted-foreground">
-                        <th className="pb-2 font-medium">Node</th>
-                        <th className="pb-2 font-medium">Metrik</th>
-                        <th className="pb-2 font-medium text-right">Wert</th>
-                        <th className="pb-2 font-medium text-right">Z-Score</th>
-                        <th className="pb-2 font-medium">Severity</th>
-                        <th className="pb-2 font-medium text-right">Erkannt</th>
-                        <th className="pb-2 font-medium text-right"></th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                      {anomalies.map((a) => (
-                        <tr key={a.id} className="hover:bg-muted/50">
-                          <td className="py-2.5">
+                <div className="space-y-3">
+                  {anomalies.map((a) => {
+                    const MetricIcon = metricIcon(a.metric);
+                    return (
+                      <div
+                        key={a.id}
+                        className={`rounded-lg border p-4 ${severityBg(a.severity)}`}
+                      >
+                        {/* Header */}
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
+                              a.severity === "critical" ? "bg-red-500/15" : "bg-orange-500/15"
+                            }`}>
+                              <MetricIcon className={`h-4 w-4 ${severityColor(a.severity)}`} />
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold text-sm">
+                                  {metricLabel(a.metric)} — {a.node_name || a.node_id.slice(0, 8)}
+                                </span>
+                                <Badge variant={severityBadgeVariant(a.severity)} className="text-xs">
+                                  {a.severity === "critical" ? "Kritisch" : "Warnung"}
+                                </Badge>
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                {new Date(a.detected_at).toLocaleString("de-DE", {
+                                  day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
+                                })}
+                                {" · "}Aktuell: <span className="font-mono font-medium">{a.value.toFixed(1)}%</span>
+                                {" · "}Durchschnitt: <span className="font-mono">{a.mean.toFixed(1)}%</span>
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
                             <Link
-                              href={`/monitoring?node=${a.node_id}`}
-                              className="font-medium text-primary hover:underline inline-flex items-center gap-1"
+                              href={`/nodes/${a.node_id}/monitoring`}
+                              className="text-xs text-primary hover:underline inline-flex items-center gap-1"
                             >
-                              {a.node_id.slice(0, 8)}
-                              <LinkIcon className="h-3 w-3" />
+                              Monitoring <LinkIcon className="h-3 w-3" />
                             </Link>
-                          </td>
-                          <td className="py-2.5">
-                            <span className="inline-flex items-center gap-1.5">
-                              {a.metric === "cpu" && (
-                                <Cpu className="h-3.5 w-3.5 text-muted-foreground" />
-                              )}
-                              {(a.metric === "memory" ||
-                                a.metric === "ram" ||
-                                a.metric === "mem") && (
-                                <MemoryStick className="h-3.5 w-3.5 text-muted-foreground" />
-                              )}
-                              {a.metric === "disk" && (
-                                <HardDrive className="h-3.5 w-3.5 text-muted-foreground" />
-                              )}
-                              {metricLabel(a.metric)}
-                            </span>
-                          </td>
-                          <td className="py-2.5 text-right font-mono">
-                            {a.value.toFixed(1)}%
-                          </td>
-                          <td
-                            className={`py-2.5 text-right font-mono ${severityColor(a.severity)}`}
-                          >
-                            {a.z_score.toFixed(2)}
-                          </td>
-                          <td className="py-2.5">
-                            <Badge
-                              variant={severityBadgeVariant(a.severity)}
-                              className="text-xs"
-                            >
-                              {a.severity}
-                            </Badge>
-                          </td>
-                          <td className="py-2.5 text-right text-muted-foreground text-xs">
-                            {new Date(a.detected_at).toLocaleString("de-DE", {
-                              day: "2-digit",
-                              month: "2-digit",
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
-                          </td>
-                          <td className="py-2.5 text-right">
                             <Button
-                              variant="ghost"
+                              variant="outline"
                               size="sm"
                               disabled={resolvingIds.has(a.id)}
                               onClick={() => handleResolve(a.id)}
                               className="h-7 text-xs"
                             >
-                              {resolvingIds.has(a.id)
-                                ? "..."
-                                : "Aufloesen"}
+                              {resolvingIds.has(a.id) ? "..." : "Aufloesen"}
                             </Button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                          </div>
+                        </div>
+
+                        {/* Description */}
+                        {a.description && (
+                          <p className="text-sm mb-2">{a.description}</p>
+                        )}
+
+                        {/* Impact + Recommendation */}
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {a.impact && (
+                            <div className="rounded bg-background/50 p-2.5 text-xs">
+                              <p className="font-medium text-muted-foreground mb-0.5">Auswirkung</p>
+                              <p>{a.impact}</p>
+                            </div>
+                          )}
+                          {a.recommendation && (
+                            <div className="rounded bg-background/50 p-2.5 text-xs">
+                              <p className="font-medium text-muted-foreground mb-0.5">Empfehlung</p>
+                              <p>{a.recommendation}</p>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Affected VMs */}
+                        {a.affected_vms && a.affected_vms.length > 0 && (
+                          <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+                            <span className="text-xs text-muted-foreground">Betroffene VMs:</span>
+                            {a.affected_vms.slice(0, 8).map((vm) => (
+                              <Badge key={vm} variant="secondary" className="text-xs py-0">
+                                {vm}
+                              </Badge>
+                            ))}
+                            {a.affected_vms.length > 8 && (
+                              <span className="text-xs text-muted-foreground">
+                                +{a.affected_vms.length - 8} weitere
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </CardContent>
@@ -531,88 +553,115 @@ export default function BriefingPage() {
               {predictions.length === 0 ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
                   <CheckCircle2 className="h-4 w-4 text-green-500" />
-                  Keine kritischen Vorhersagen - Ressourcen im gruenen Bereich
+                  Keine kritischen Vorhersagen — Ressourcen im gruenen Bereich
                 </div>
               ) : (
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {predictions.map((p) => (
-                    <div
-                      key={p.id}
-                      className={`rounded-lg border p-4 ${severityBg(p.severity)}`}
-                    >
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                          <ShieldAlert
-                            className={`h-4 w-4 ${severityColor(p.severity)}`}
-                          />
-                          <span className="font-medium text-sm">
-                            {metricLabel(p.metric)}
-                          </span>
-                          <Badge
-                            variant={severityBadgeVariant(p.severity)}
-                            className="text-xs"
-                          >
-                            {p.severity}
-                          </Badge>
-                        </div>
-                        <Link
-                          href={`/monitoring?node=${p.node_id}`}
-                          className="text-xs text-primary hover:underline inline-flex items-center gap-1"
-                        >
-                          Node
-                          <LinkIcon className="h-3 w-3" />
-                        </Link>
-                      </div>
-
-                      {/* Current -> Predicted */}
-                      <div className="flex items-center gap-2 mb-3">
-                        <div className="text-center">
-                          <p className="text-lg font-bold font-mono">
-                            {p.current_value.toFixed(1)}%
-                          </p>
-                          <p className="text-xs text-muted-foreground">Aktuell</p>
-                        </div>
-                        <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
-                        <div className="text-center">
-                          <p
-                            className={`text-lg font-bold font-mono ${severityColor(p.severity)}`}
-                          >
-                            {p.predicted_value.toFixed(1)}%
-                          </p>
-                          <p className="text-xs text-muted-foreground">Prognose</p>
-                        </div>
-                        <div className="ml-auto text-center">
-                          <div className="flex items-center gap-1">
-                            <Timer className={`h-4 w-4 ${severityColor(p.severity)}`} />
-                            <p
-                              className={`text-lg font-bold ${severityColor(p.severity)}`}
-                            >
-                              {p.days_until_threshold ?? "?"}d
-                            </p>
+                <div className="space-y-3">
+                  {predictions.map((p) => {
+                    const MetricIcon = metricIcon(p.metric);
+                    const days = p.days_until_threshold != null ? Math.round(p.days_until_threshold) : null;
+                    return (
+                      <div
+                        key={p.id}
+                        className={`rounded-lg border p-4 ${severityBg(p.severity)}`}
+                      >
+                        {/* Header */}
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
+                              p.severity === "critical" ? "bg-red-500/15" : "bg-orange-500/15"
+                            }`}>
+                              <MetricIcon className={`h-4 w-4 ${severityColor(p.severity)}`} />
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold text-sm">
+                                  {metricLabel(p.metric)} — {p.node_name || p.node_id.slice(0, 8)}
+                                </span>
+                                <Badge variant={severityBadgeVariant(p.severity)} className="text-xs">
+                                  {p.severity === "critical" ? "Kritisch" : "Warnung"}
+                                </Badge>
+                                {p.trend_direction && (
+                                  <span className={`text-xs font-medium ${trendColor(p.trend_direction)}`}>
+                                    Trend: {trendText(p.trend_direction)}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                {p.vm_count != null && p.vm_count > 0
+                                  ? `${p.vm_count} laufende VMs betroffen · `
+                                  : ""}
+                                Schwellwert: {p.threshold.toFixed(0)}%
+                                {" · "}R² = {p.r_squared.toFixed(3)}
+                              </p>
+                            </div>
                           </div>
-                          <p className="text-xs text-muted-foreground">
-                            bis Schwellwert
-                          </p>
+                          <Link
+                            href={`/nodes/${p.node_id}/monitoring`}
+                            className="text-xs text-primary hover:underline inline-flex items-center gap-1"
+                          >
+                            Monitoring <LinkIcon className="h-3 w-3" />
+                          </Link>
                         </div>
-                      </div>
 
-                      {/* Confidence */}
-                      <div className="flex items-center justify-between text-xs text-muted-foreground mb-2">
-                        <div className="flex items-center gap-1">
-                          <Gauge className="h-3 w-3" />
-                          Konfidenz: R² = {p.r_squared.toFixed(3)}
+                        {/* Key metrics row */}
+                        <div className="flex items-center gap-4 mb-3">
+                          <div className="flex items-center gap-2 rounded bg-background/50 px-3 py-2">
+                            <span className="text-xs text-muted-foreground">Aktuell</span>
+                            <span className="text-lg font-bold font-mono">{p.current_value.toFixed(1)}%</span>
+                          </div>
+                          <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                          <div className="flex items-center gap-2 rounded bg-background/50 px-3 py-2">
+                            <span className="text-xs text-muted-foreground">Prognose (30d)</span>
+                            <span className={`text-lg font-bold font-mono ${severityColor(p.severity)}`}>
+                              {p.predicted_value.toFixed(1)}%
+                            </span>
+                          </div>
+                          {days != null && (
+                            <div className={`ml-auto flex items-center gap-1.5 rounded px-3 py-2 ${
+                              p.severity === "critical" ? "bg-red-500/10" : "bg-orange-500/10"
+                            }`}>
+                              <Timer className={`h-4 w-4 ${severityColor(p.severity)}`} />
+                              <span className={`text-lg font-bold ${severityColor(p.severity)}`}>
+                                {days}d
+                              </span>
+                              <span className="text-xs text-muted-foreground">bis Limit</span>
+                            </div>
+                          )}
                         </div>
-                        <span>
-                          Schwellwert: {p.threshold.toFixed(0)}%
-                        </span>
-                      </div>
 
-                      {/* Recommendation */}
-                      <div className="rounded bg-muted/50 px-2.5 py-1.5 text-xs">
-                        {predictionRecommendation(p)}
+                        {/* Description */}
+                        {p.description && (
+                          <p className="text-sm mb-2">{p.description}</p>
+                        )}
+
+                        {/* Recommendation */}
+                        {p.recommendation && (
+                          <div className="rounded bg-background/50 p-2.5 text-xs">
+                            <p className="font-medium text-muted-foreground mb-0.5">Empfehlung</p>
+                            <p>{p.recommendation}</p>
+                          </div>
+                        )}
+
+                        {/* Affected VMs */}
+                        {p.affected_vms && p.affected_vms.length > 0 && (
+                          <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+                            <span className="text-xs text-muted-foreground">VMs auf diesem Node:</span>
+                            {p.affected_vms.slice(0, 6).map((vm) => (
+                              <Badge key={vm} variant="secondary" className="text-xs py-0">
+                                {vm}
+                              </Badge>
+                            ))}
+                            {p.affected_vms.length > 6 && (
+                              <span className="text-xs text-muted-foreground">
+                                +{p.affected_vms.length - 6} weitere
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </CardContent>

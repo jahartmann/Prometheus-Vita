@@ -19,4 +19,12 @@ type MaintenancePrediction struct {
 	RSquared           float64   `json:"r_squared"`
 	Severity           string    `json:"severity"`
 	PredictedAt        time.Time `json:"predicted_at"`
+
+	// Enriched fields (not stored in DB, populated by service)
+	NodeName       string   `json:"node_name,omitempty"`
+	Description    string   `json:"description,omitempty"`
+	Recommendation string   `json:"recommendation,omitempty"`
+	TrendDirection string   `json:"trend_direction,omitempty"` // "rising", "stable", "falling"
+	AffectedVMs    []string `json:"affected_vms,omitempty"`
+	VMCount        int      `json:"vm_count,omitempty"`
 }

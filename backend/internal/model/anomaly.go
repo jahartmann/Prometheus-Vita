@@ -18,4 +18,11 @@ type AnomalyRecord struct {
 	IsResolved bool       `json:"is_resolved"`
 	DetectedAt time.Time  `json:"detected_at"`
 	ResolvedAt *time.Time `json:"resolved_at,omitempty"`
+
+	// Enriched fields (not stored in DB, populated by service)
+	NodeName       string   `json:"node_name,omitempty"`
+	Description    string   `json:"description,omitempty"`
+	Impact         string   `json:"impact,omitempty"`
+	Recommendation string   `json:"recommendation,omitempty"`
+	AffectedVMs    []string `json:"affected_vms,omitempty"`
 }
