@@ -2,23 +2,164 @@
 
 import { useEffect, useMemo } from "react";
 import {
-  GitCompare,
-  FileWarning,
+  CheckCircle2,
   AlertTriangle,
-  CheckCircle,
-  Brain,
-  Sparkles,
-  Shield,
+  ShieldAlert,
+  ChevronDown,
+  RefreshCw,
+  FileText,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useDriftStore } from "@/stores/drift-store";
 import { useNodeStore } from "@/stores/node-store";
-import { DriftList } from "@/components/drift/drift-list";
-import { NodeComparison } from "@/components/drift/node-comparison";
+import type { DriftCheck } from "@/types/api";
+
+function timeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `vor ${mins} Min.`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `vor ${hours} Std.`;
+  const days = Math.floor(hours / 24);
+  return `vor ${days} Tag${days > 1 ? "en" : ""}`;
+}
+
+function severityLabel(severity: number): { text: string; className: string } {
+  if (severity >= 7) return { text: "Kritisch", className: "text-red-600 bg-red-50 border-red-200" };
+  if (severity >= 4) return { text: "Pruefen empfohlen", className: "text-amber-600 bg-amber-50 border-amber-200" };
+  return { text: "Unkritisch", className: "text-green-600 bg-green-50 border-green-200" };
+}
+
+function DriftCheckRow({
+  check,
+  nodeName,
+  onAcceptBaseline,
+}: {
+  check: DriftCheck;
+  nodeName: string;
+  onAcceptBaseline: (id: string) => void;
+}) {
+  const totalChanges = check.changed_files + check.added_files + check.removed_files;
+  const aiSeverity = check.ai_analysis?.overall_severity;
+  const sev = aiSeverity != null ? severityLabel(aiSeverity) : null;
+
+  return (
+    <Collapsible>
+      <CollapsibleTrigger asChild>
+        <button className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors text-left border-b last:border-b-0">
+          {/* Severity Dot */}
+          <span
+            className={`h-2.5 w-2.5 rounded-full shrink-0 ${
+              aiSeverity != null && aiSeverity >= 7
+                ? "bg-red-500"
+                : aiSeverity != null && aiSeverity >= 4
+                ? "bg-amber-500"
+                : "bg-yellow-400"
+            }`}
+          />
+
+          {/* Node Name */}
+          <span className="font-medium text-sm min-w-0 truncate">{nodeName}</span>
+
+          {/* Change Summary */}
+          <span className="text-xs text-muted-foreground shrink-0">
+            {totalChanges} {totalChanges === 1 ? "Datei" : "Dateien"} geaendert
+          </span>
+
+          {/* AI Badge */}
+          {sev && (
+            <Badge variant="outline" className={`text-[10px] shrink-0 ${sev.className}`}>
+              {sev.text}
+            </Badge>
+          )}
+
+          {/* Time */}
+          <span className="text-xs text-muted-foreground ml-auto shrink-0">
+            {timeAgo(check.checked_at)}
+          </span>
+
+          <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0 transition-transform [[data-state=open]>&]:rotate-180" />
+        </button>
+      </CollapsibleTrigger>
+
+      <CollapsibleContent>
+        <div className="px-4 py-3 bg-muted/30 border-b space-y-3">
+          {/* File Details */}
+          {check.details && check.details.length > 0 && (
+            <div className="space-y-1">
+              {check.details
+                .filter((d) => d.status !== "unchanged")
+                .map((detail) => (
+                  <div
+                    key={detail.file_path}
+                    className="flex items-center gap-2 text-xs"
+                  >
+                    <FileText className="h-3 w-3 text-muted-foreground shrink-0" />
+                    <span className="font-mono truncate">{detail.file_path}</span>
+                    <Badge
+                      variant="outline"
+                      className={`text-[10px] px-1.5 py-0 shrink-0 ${
+                        detail.status === "added"
+                          ? "text-green-600 border-green-300"
+                          : detail.status === "removed"
+                          ? "text-red-600 border-red-300"
+                          : "text-amber-600 border-amber-300"
+                      }`}
+                    >
+                      {detail.status === "added"
+                        ? "Neu"
+                        : detail.status === "removed"
+                        ? "Entfernt"
+                        : "Geaendert"}
+                    </Badge>
+                    {detail.ai_file_analysis && (
+                      <span className="text-muted-foreground ml-auto">
+                        {detail.ai_file_analysis.summary}
+                      </span>
+                    )}
+                  </div>
+                ))}
+            </div>
+          )}
+
+          {/* AI Summary */}
+          {check.ai_analysis && (
+            <div className="text-xs text-muted-foreground bg-background rounded-md p-2 border">
+              <span className="font-medium">KI-Bewertung:</span>{" "}
+              {check.ai_analysis.overall_summary}
+            </div>
+          )}
+
+          {/* Actions */}
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={(e) => {
+                e.stopPropagation();
+                onAcceptBaseline(check.id);
+              }}
+            >
+              <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+              Baseline aktualisieren
+            </Button>
+          </div>
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
 
 export default function DriftPage() {
-  const { checks, isLoading, fetchAll } = useDriftStore();
+  const { checks, isLoading, fetchAll, acceptBaseline } = useDriftStore();
   const { nodes, fetchNodes } = useNodeStore();
 
   useEffect(() => {
@@ -31,207 +172,127 @@ export default function DriftPage() {
     nodeNames[node.id] = node.name;
   }
 
-  const completedChecks = checks.filter((c) => c.status === "completed");
-  const withDrift = completedChecks.filter(
-    (c) => c.changed_files + c.added_files + c.removed_files > 0
-  );
-  const failedChecks = checks.filter((c) => c.status === "failed");
+  const stats = useMemo(() => {
+    const completed = checks.filter((c) => c.status === "completed");
+    const withDrift = completed.filter(
+      (c) => c.changed_files + c.added_files + c.removed_files > 0
+    );
+    const critical = withDrift.filter(
+      (c) => c.ai_analysis && c.ai_analysis.overall_severity >= 7
+    );
+    return { completed, withDrift, critical };
+  }, [checks]);
 
-  // AI severity distribution
-  const severityDistribution = useMemo(() => {
-    let critical = 0;
-    let warning = 0;
-    let ok = 0;
-    let analyzed = 0;
-    let latestAnalysisTime: string | null = null;
+  // Determine overall status
+  const bannerStatus: "green" | "yellow" | "red" = useMemo(() => {
+    if (stats.critical.length > 0) return "red";
+    if (stats.withDrift.length > 0) return "yellow";
+    return "green";
+  }, [stats]);
 
-    for (const check of completedChecks) {
-      if (check.ai_analysis) {
-        analyzed++;
-        const sev = check.ai_analysis.overall_severity;
-        if (sev >= 7) critical++;
-        else if (sev >= 4) warning++;
-        else ok++;
+  const bannerConfig = {
+    green: {
+      icon: CheckCircle2,
+      text: "Alle Konfigurationen stimmen ueberein",
+      className: "bg-green-50 border-green-200 text-green-800 dark:bg-green-950/30 dark:border-green-800 dark:text-green-300",
+      iconClass: "text-green-600 dark:text-green-400",
+    },
+    yellow: {
+      icon: AlertTriangle,
+      text: `${stats.withDrift.length} Abweichung${stats.withDrift.length !== 1 ? "en" : ""} erkannt`,
+      className: "bg-amber-50 border-amber-200 text-amber-800 dark:bg-amber-950/30 dark:border-amber-800 dark:text-amber-300",
+      iconClass: "text-amber-600 dark:text-amber-400",
+    },
+    red: {
+      icon: ShieldAlert,
+      text: `${stats.critical.length} kritische Abweichung${stats.critical.length !== 1 ? "en" : ""}`,
+      className: "bg-red-50 border-red-200 text-red-800 dark:bg-red-950/30 dark:border-red-800 dark:text-red-300",
+      iconClass: "text-red-600 dark:text-red-400",
+    },
+  };
 
-        if (!latestAnalysisTime || check.ai_analysis.analyzed_at > latestAnalysisTime) {
-          latestAnalysisTime = check.ai_analysis.analyzed_at;
-        }
-      }
-    }
+  const banner = bannerConfig[bannerStatus];
+  const BannerIcon = banner.icon;
 
-    // Top risk items
-    const topRisks = completedChecks
-      .filter((c) => c.ai_analysis && c.ai_analysis.overall_severity >= 7)
-      .sort((a, b) => (b.ai_analysis?.overall_severity || 0) - (a.ai_analysis?.overall_severity || 0))
-      .slice(0, 3);
-
-    return { critical, warning, ok, analyzed, latestAnalysisTime, topRisks };
-  }, [completedChecks]);
-
-  const totalSeverityChecks = severityDistribution.critical + severityDistribution.warning + severityDistribution.ok;
+  if (isLoading && checks.length === 0) {
+    return (
+      <div className="space-y-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Konfigurations-Drift</h1>
+          <p className="text-sm text-muted-foreground">
+            Vergleicht aktuelle VM-Konfigurationen mit der letzten gesicherten Baseline.
+          </p>
+        </div>
+        <Skeleton className="h-20 w-full rounded-xl" />
+        <Skeleton className="h-64 w-full rounded-xl" />
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
+      {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Drift Detection</h1>
-        <p className="text-muted-foreground">
-          Konfigurationsabweichungen zwischen Backups und aktuellem Zustand.
+        <h1 className="text-2xl font-bold tracking-tight">Konfigurations-Drift</h1>
+        <p className="text-sm text-muted-foreground">
+          Vergleicht aktuelle VM-Konfigurationen mit der letzten gesicherten Baseline.
         </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardContent className="flex items-center gap-4 p-4">
-            <GitCompare className="h-8 w-8 text-blue-500" />
-            <div>
-              <p className="text-2xl font-bold">{checks.length}</p>
-              <p className="text-sm text-muted-foreground">Checks gesamt</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-4 p-4">
-            <CheckCircle className="h-8 w-8 text-green-500" />
-            <div>
-              <p className="text-2xl font-bold">{completedChecks.length - withDrift.length}</p>
-              <p className="text-sm text-muted-foreground">Ohne Drift</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-4 p-4">
-            <AlertTriangle className="h-8 w-8 text-yellow-500" />
-            <div>
-              <p className="text-2xl font-bold">{withDrift.length}</p>
-              <p className="text-sm text-muted-foreground">Mit Drift</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-4 p-4">
-            <FileWarning className="h-8 w-8 text-red-500" />
-            <div>
-              <p className="text-2xl font-bold">{failedChecks.length}</p>
-              <p className="text-sm text-muted-foreground">Fehlgeschlagen</p>
-            </div>
-          </CardContent>
-        </Card>
+      {/* Status Banner */}
+      <div className={`flex items-center gap-3 rounded-lg border p-4 ${banner.className}`}>
+        <BannerIcon className={`h-6 w-6 shrink-0 ${banner.iconClass}`} />
+        <div>
+          <p className="font-semibold text-base">{banner.text}</p>
+          <p className="text-xs opacity-75">
+            {stats.completed.length} Checks abgeschlossen
+            {stats.withDrift.length > 0 &&
+              ` | ${stats.withDrift.length} mit Aenderungen`}
+          </p>
+        </div>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="ml-auto shrink-0"
+          onClick={() => fetchAll()}
+        >
+          <RefreshCw className="h-4 w-4" />
+        </Button>
       </div>
 
-      {/* AI Severity Distribution Card */}
-      {severityDistribution.analyzed > 0 && (
-        <Card className="border-violet-500/20">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <Brain className="h-5 w-5 text-violet-500" />
-              <h3 className="text-sm font-semibold text-violet-600">KI-Analyse Uebersicht</h3>
-              <Sparkles className="h-4 w-4 text-violet-400" />
-              {severityDistribution.latestAnalysisTime && (
-                <span className="ml-auto text-xs text-muted-foreground">
-                  Letzte KI-Analyse: {new Date(severityDistribution.latestAnalysisTime).toLocaleString("de-DE")}
-                </span>
-              )}
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              {/* Severity Distribution Bar */}
-              <div>
-                <p className="text-xs text-muted-foreground mb-2">Severity-Verteilung ({severityDistribution.analyzed} analysiert)</p>
-                <div className="flex h-6 w-full rounded-lg overflow-hidden">
-                  {severityDistribution.critical > 0 && (
-                    <div
-                      className="bg-red-500 flex items-center justify-center text-white text-xs font-medium"
-                      style={{ width: `${(severityDistribution.critical / totalSeverityChecks) * 100}%` }}
-                    >
-                      {severityDistribution.critical}
-                    </div>
-                  )}
-                  {severityDistribution.warning > 0 && (
-                    <div
-                      className="bg-amber-500 flex items-center justify-center text-white text-xs font-medium"
-                      style={{ width: `${(severityDistribution.warning / totalSeverityChecks) * 100}%` }}
-                    >
-                      {severityDistribution.warning}
-                    </div>
-                  )}
-                  {severityDistribution.ok > 0 && (
-                    <div
-                      className="bg-green-500 flex items-center justify-center text-white text-xs font-medium"
-                      style={{ width: `${(severityDistribution.ok / totalSeverityChecks) * 100}%` }}
-                    >
-                      {severityDistribution.ok}
-                    </div>
-                  )}
-                </div>
-                <div className="flex justify-between mt-1.5">
-                  <span className="text-xs flex items-center gap-1">
-                    <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block" />
-                    Kritisch ({severityDistribution.critical})
-                  </span>
-                  <span className="text-xs flex items-center gap-1">
-                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block" />
-                    Warnung ({severityDistribution.warning})
-                  </span>
-                  <span className="text-xs flex items-center gap-1">
-                    <span className="w-2.5 h-2.5 rounded-full bg-green-500 inline-block" />
-                    OK ({severityDistribution.ok})
-                  </span>
-                </div>
-              </div>
-
-              {/* Top Risks */}
-              <div>
-                <p className="text-xs text-muted-foreground mb-2">Top Risiken</p>
-                {severityDistribution.topRisks.length === 0 ? (
-                  <div className="flex items-center gap-2 text-sm text-green-600">
-                    <Shield className="h-4 w-4" />
-                    <span>Keine kritischen Risiken erkannt</span>
-                  </div>
-                ) : (
-                  <div className="space-y-1.5">
-                    {severityDistribution.topRisks.map((check) => (
-                      <div
-                        key={check.id}
-                        className="flex items-center gap-2 text-xs rounded-md bg-red-500/5 border border-red-500/10 p-1.5"
-                      >
-                        <AlertTriangle className="h-3 w-3 text-red-500 shrink-0" />
-                        <span className="font-medium">
-                          {nodeNames[check.node_id] || check.node_id.slice(0, 8)}
-                        </span>
-                        <span className="text-muted-foreground truncate">
-                          {check.ai_analysis?.overall_summary?.slice(0, 80)}...
-                        </span>
-                        <span className="ml-auto font-mono text-red-500 shrink-0">
-                          {check.ai_analysis?.overall_severity}/10
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
+      {/* Drift List - only items with drift */}
+      {stats.withDrift.length > 0 && (
+        <Card>
+          <CardContent className="p-0">
+            {stats.withDrift
+              .sort((a, b) => {
+                const sevA = a.ai_analysis?.overall_severity ?? 0;
+                const sevB = b.ai_analysis?.overall_severity ?? 0;
+                return sevB - sevA;
+              })
+              .map((check) => (
+                <DriftCheckRow
+                  key={check.id}
+                  check={check}
+                  nodeName={nodeNames[check.node_id] || check.node_id.slice(0, 8)}
+                  onAcceptBaseline={acceptBaseline}
+                />
+              ))}
           </CardContent>
         </Card>
       )}
 
-      <Tabs defaultValue="checks">
-        <TabsList>
-          <TabsTrigger value="checks">Drift-Checks</TabsTrigger>
-          <TabsTrigger value="comparison">Node-Vergleich</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="checks">
-          <Card>
-            <CardContent className="p-0">
-              <DriftList checks={checks} nodeNames={nodeNames} isLoading={isLoading} />
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="comparison">
-          <NodeComparison nodes={nodes} />
-        </TabsContent>
-      </Tabs>
+      {stats.withDrift.length === 0 && !isLoading && (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <CheckCircle2 className="h-12 w-12 text-green-500 mb-3" />
+            <p className="text-muted-foreground">Keine Abweichungen gefunden.</p>
+            <p className="text-sm text-muted-foreground">
+              Alle Konfigurationen entsprechen der Baseline.
+            </p>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

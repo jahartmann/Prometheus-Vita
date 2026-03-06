@@ -1,11 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { briefingApi } from "@/lib/api";
-import type { LiveBriefingSummary } from "@/types/api";
+import { useEffect, useState, useCallback } from "react";
+import { briefingApi, anomalyApi, predictionApi } from "@/lib/api";
+import { toArray } from "@/lib/api";
+import type {
+  LiveBriefingSummary,
+  AnomalyRecord,
+  MaintenancePrediction,
+} from "@/types/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { KpiCard } from "@/components/ui/kpi-card";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {
   Server,
   ServerCog,
@@ -16,7 +27,17 @@ import {
   AlertTriangle,
   TrendingUp,
   Clock,
+  ChevronDown,
+  CheckCircle2,
+  XCircle,
+  Zap,
+  ArrowRight,
+  ShieldAlert,
+  Gauge,
+  Timer,
+  Link as LinkIcon,
 } from "lucide-react";
+import Link from "next/link";
 
 function formatUptime(seconds: number): string {
   const days = Math.floor(seconds / 86400);
@@ -41,17 +62,110 @@ function getGreeting(): string {
   return "Guten Abend";
 }
 
+function severityColor(severity: string) {
+  switch (severity) {
+    case "critical":
+      return "text-red-500";
+    case "warning":
+      return "text-orange-500";
+    default:
+      return "text-blue-500";
+  }
+}
+
+function severityBg(severity: string) {
+  switch (severity) {
+    case "critical":
+      return "bg-red-500/10 border-red-500/30";
+    case "warning":
+      return "bg-orange-500/10 border-orange-500/30";
+    default:
+      return "bg-blue-500/10 border-blue-500/30";
+  }
+}
+
+function severityBadgeVariant(severity: string) {
+  switch (severity) {
+    case "critical":
+      return "destructive" as const;
+    case "warning":
+      return "warning" as const;
+    default:
+      return "secondary" as const;
+  }
+}
+
+function metricLabel(metric: string): string {
+  switch (metric) {
+    case "cpu":
+      return "CPU";
+    case "memory":
+    case "ram":
+    case "mem":
+      return "RAM";
+    case "disk":
+      return "Disk";
+    default:
+      return metric.toUpperCase();
+  }
+}
+
+function predictionRecommendation(p: MaintenancePrediction): string {
+  const days = p.days_until_threshold ?? 0;
+  const label = metricLabel(p.metric);
+  if (p.metric === "disk") {
+    return `Disk-Erweiterung in ${days} Tagen noetig`;
+  }
+  if (p.metric === "memory" || p.metric === "ram" || p.metric === "mem") {
+    return `RAM-Aufruestung oder Optimierung in ${days} Tagen empfohlen`;
+  }
+  if (p.metric === "cpu") {
+    return `CPU-Last ueberpruefen, Schwellwert in ${days} Tagen erwartet`;
+  }
+  return `${label}-Kapazitaet in ${days} Tagen erschoepft`;
+}
+
 export default function BriefingPage() {
   const [data, setData] = useState<LiveBriefingSummary | null>(null);
+  const [anomalies, setAnomalies] = useState<AnomalyRecord[]>([]);
+  const [predictions, setPredictions] = useState<MaintenancePrediction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [resolvingIds, setResolvingIds] = useState<Set<string>>(new Set());
+  const [anomaliesOpen, setAnomaliesOpen] = useState(true);
+  const [predictionsOpen, setPredictionsOpen] = useState(true);
 
   useEffect(() => {
-    briefingApi
-      .getLive()
-      .then((d) => setData(d))
+    Promise.all([
+      briefingApi.getLive(),
+      anomalyApi.listUnresolved().catch(() => []),
+      predictionApi.listCritical().catch(() => []),
+    ])
+      .then(([briefing, rawAnomalies, rawPredictions]) => {
+        setData(briefing);
+        setAnomalies(toArray<AnomalyRecord>(rawAnomalies) as AnomalyRecord[]);
+        setPredictions(
+          toArray<MaintenancePrediction>(rawPredictions) as MaintenancePrediction[]
+        );
+      })
       .catch(() => setError("Briefing konnte nicht geladen werden"))
       .finally(() => setIsLoading(false));
+  }, []);
+
+  const handleResolve = useCallback(async (id: string) => {
+    setResolvingIds((prev) => new Set(prev).add(id));
+    try {
+      await anomalyApi.resolve(id);
+      setAnomalies((prev) => prev.filter((a) => a.id !== id));
+    } catch {
+      // silent
+    } finally {
+      setResolvingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
   }, []);
 
   if (isLoading) {
@@ -91,11 +205,72 @@ export default function BriefingPage() {
   }
 
   const healthStatus =
-    data.nodes_offline === 0 && data.unresolved_anomalies === 0
+    data.nodes_offline === 0 && anomalies.length === 0
       ? "healthy"
       : data.nodes_offline > 0
         ? "critical"
         : "warning";
+
+  // Build recommended actions
+  const actions: {
+    icon: typeof AlertTriangle;
+    title: string;
+    description: string;
+    href: string;
+    severity: string;
+  }[] = [];
+
+  if (data.nodes_offline > 0) {
+    actions.push({
+      icon: XCircle,
+      title: `${data.nodes_offline} Node${data.nodes_offline > 1 ? "s" : ""} offline`,
+      description: "Offline-Nodes umgehend pruefen und wiederherstellen",
+      href: "/monitoring",
+      severity: "critical",
+    });
+  }
+  if (anomalies.length > 0) {
+    const critical = anomalies.filter((a) => a.severity === "critical").length;
+    actions.push({
+      icon: AlertTriangle,
+      title: `${anomalies.length} Anomalie${anomalies.length > 1 ? "n" : ""} pruefen`,
+      description: critical > 0
+        ? `${critical} davon kritisch - sofortige Untersuchung empfohlen`
+        : "Ungewoehnliche Metriken erkannt - Analyse empfohlen",
+      href: "#anomalies",
+      severity: critical > 0 ? "critical" : "warning",
+    });
+  }
+  if (predictions.length > 0) {
+    const minDays = Math.min(
+      ...predictions.map((p) => p.days_until_threshold ?? 999)
+    );
+    actions.push({
+      icon: Timer,
+      title: `Ressourcen-Engpass in ${minDays} Tagen erwartet`,
+      description: `${predictions.length} Vorhersage${predictions.length > 1 ? "n" : ""} zeigen bevorstehende Schwellwertuebrschreitungen`,
+      href: "#predictions",
+      severity: minDays <= 7 ? "critical" : "warning",
+    });
+  }
+  if (data.avg_cpu > 80) {
+    actions.push({
+      icon: Cpu,
+      title: "Cluster stark ausgelastet (CPU)",
+      description: `Durchschnittliche CPU-Last bei ${data.avg_cpu.toFixed(1)}% - Entlastung pruefen`,
+      href: "/monitoring",
+      severity: "warning",
+    });
+  }
+  if (data.avg_ram > 80) {
+    actions.push({
+      icon: MemoryStick,
+      title: "Cluster stark ausgelastet (RAM)",
+      description: `Durchschnittliche RAM-Nutzung bei ${data.avg_ram.toFixed(1)}% - Optimierung pruefen`,
+      href: "/monitoring",
+      severity: "warning",
+    });
+  }
 
   return (
     <div className="space-y-6">
@@ -166,6 +341,286 @@ export default function BriefingPage() {
         />
       </div>
 
+      {/* Recommended Actions */}
+      {actions.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Zap className="h-4 w-4 text-muted-foreground" />
+              Empfohlene Aktionen
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {actions.map((action, i) => (
+                <Link key={i} href={action.href}>
+                  <div
+                    className={`flex items-start gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/50 ${severityBg(action.severity)}`}
+                  >
+                    <div
+                      className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
+                        action.severity === "critical"
+                          ? "bg-red-500/15"
+                          : "bg-orange-500/15"
+                      }`}
+                    >
+                      <action.icon
+                        className={`h-4 w-4 ${severityColor(action.severity)}`}
+                      />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium">{action.title}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {action.description}
+                      </p>
+                    </div>
+                    <ArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Anomalies Section */}
+      <Collapsible open={anomaliesOpen} onOpenChange={setAnomaliesOpen}>
+        <Card id="anomalies">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+                Anomalien
+                {anomalies.length > 0 && (
+                  <Badge variant="warning" className="ml-1 text-xs">
+                    {anomalies.length}
+                  </Badge>
+                )}
+              </CardTitle>
+              <CollapsibleTrigger asChild>
+                <Button variant="ghost" size="sm">
+                  <ChevronDown
+                    className={`h-4 w-4 transition-transform ${anomaliesOpen ? "rotate-180" : ""}`}
+                  />
+                </Button>
+              </CollapsibleTrigger>
+            </div>
+          </CardHeader>
+          <CollapsibleContent>
+            <CardContent>
+              {anomalies.length === 0 ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+                  <CheckCircle2 className="h-4 w-4 text-green-500" />
+                  Keine Anomalien erkannt - alle Metriken im Normalbereich
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b text-left text-muted-foreground">
+                        <th className="pb-2 font-medium">Node</th>
+                        <th className="pb-2 font-medium">Metrik</th>
+                        <th className="pb-2 font-medium text-right">Wert</th>
+                        <th className="pb-2 font-medium text-right">Z-Score</th>
+                        <th className="pb-2 font-medium">Severity</th>
+                        <th className="pb-2 font-medium text-right">Erkannt</th>
+                        <th className="pb-2 font-medium text-right"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {anomalies.map((a) => (
+                        <tr key={a.id} className="hover:bg-muted/50">
+                          <td className="py-2.5">
+                            <Link
+                              href={`/monitoring?node=${a.node_id}`}
+                              className="font-medium text-primary hover:underline inline-flex items-center gap-1"
+                            >
+                              {a.node_id.slice(0, 8)}
+                              <LinkIcon className="h-3 w-3" />
+                            </Link>
+                          </td>
+                          <td className="py-2.5">
+                            <span className="inline-flex items-center gap-1.5">
+                              {a.metric === "cpu" && (
+                                <Cpu className="h-3.5 w-3.5 text-muted-foreground" />
+                              )}
+                              {(a.metric === "memory" ||
+                                a.metric === "ram" ||
+                                a.metric === "mem") && (
+                                <MemoryStick className="h-3.5 w-3.5 text-muted-foreground" />
+                              )}
+                              {a.metric === "disk" && (
+                                <HardDrive className="h-3.5 w-3.5 text-muted-foreground" />
+                              )}
+                              {metricLabel(a.metric)}
+                            </span>
+                          </td>
+                          <td className="py-2.5 text-right font-mono">
+                            {a.value.toFixed(1)}%
+                          </td>
+                          <td
+                            className={`py-2.5 text-right font-mono ${severityColor(a.severity)}`}
+                          >
+                            {a.z_score.toFixed(2)}
+                          </td>
+                          <td className="py-2.5">
+                            <Badge
+                              variant={severityBadgeVariant(a.severity)}
+                              className="text-xs"
+                            >
+                              {a.severity}
+                            </Badge>
+                          </td>
+                          <td className="py-2.5 text-right text-muted-foreground text-xs">
+                            {new Date(a.detected_at).toLocaleString("de-DE", {
+                              day: "2-digit",
+                              month: "2-digit",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </td>
+                          <td className="py-2.5 text-right">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              disabled={resolvingIds.has(a.id)}
+                              onClick={() => handleResolve(a.id)}
+                              className="h-7 text-xs"
+                            >
+                              {resolvingIds.has(a.id)
+                                ? "..."
+                                : "Aufloesen"}
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </CollapsibleContent>
+        </Card>
+      </Collapsible>
+
+      {/* Predictions Section */}
+      <Collapsible open={predictionsOpen} onOpenChange={setPredictionsOpen}>
+        <Card id="predictions">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Activity className="h-4 w-4 text-muted-foreground" />
+                Vorhersagen
+                {predictions.length > 0 && (
+                  <Badge variant="destructive" className="ml-1 text-xs">
+                    {predictions.length}
+                  </Badge>
+                )}
+              </CardTitle>
+              <CollapsibleTrigger asChild>
+                <Button variant="ghost" size="sm">
+                  <ChevronDown
+                    className={`h-4 w-4 transition-transform ${predictionsOpen ? "rotate-180" : ""}`}
+                  />
+                </Button>
+              </CollapsibleTrigger>
+            </div>
+          </CardHeader>
+          <CollapsibleContent>
+            <CardContent>
+              {predictions.length === 0 ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+                  <CheckCircle2 className="h-4 w-4 text-green-500" />
+                  Keine kritischen Vorhersagen - Ressourcen im gruenen Bereich
+                </div>
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {predictions.map((p) => (
+                    <div
+                      key={p.id}
+                      className={`rounded-lg border p-4 ${severityBg(p.severity)}`}
+                    >
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <ShieldAlert
+                            className={`h-4 w-4 ${severityColor(p.severity)}`}
+                          />
+                          <span className="font-medium text-sm">
+                            {metricLabel(p.metric)}
+                          </span>
+                          <Badge
+                            variant={severityBadgeVariant(p.severity)}
+                            className="text-xs"
+                          >
+                            {p.severity}
+                          </Badge>
+                        </div>
+                        <Link
+                          href={`/monitoring?node=${p.node_id}`}
+                          className="text-xs text-primary hover:underline inline-flex items-center gap-1"
+                        >
+                          Node
+                          <LinkIcon className="h-3 w-3" />
+                        </Link>
+                      </div>
+
+                      {/* Current -> Predicted */}
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="text-center">
+                          <p className="text-lg font-bold font-mono">
+                            {p.current_value.toFixed(1)}%
+                          </p>
+                          <p className="text-xs text-muted-foreground">Aktuell</p>
+                        </div>
+                        <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <div className="text-center">
+                          <p
+                            className={`text-lg font-bold font-mono ${severityColor(p.severity)}`}
+                          >
+                            {p.predicted_value.toFixed(1)}%
+                          </p>
+                          <p className="text-xs text-muted-foreground">Prognose</p>
+                        </div>
+                        <div className="ml-auto text-center">
+                          <div className="flex items-center gap-1">
+                            <Timer className={`h-4 w-4 ${severityColor(p.severity)}`} />
+                            <p
+                              className={`text-lg font-bold ${severityColor(p.severity)}`}
+                            >
+                              {p.days_until_threshold ?? "?"}d
+                            </p>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            bis Schwellwert
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Confidence */}
+                      <div className="flex items-center justify-between text-xs text-muted-foreground mb-2">
+                        <div className="flex items-center gap-1">
+                          <Gauge className="h-3 w-3" />
+                          Konfidenz: R² = {p.r_squared.toFixed(3)}
+                        </div>
+                        <span>
+                          Schwellwert: {p.threshold.toFixed(0)}%
+                        </span>
+                      </div>
+
+                      {/* Recommendation */}
+                      <div className="rounded bg-muted/50 px-2.5 py-1.5 text-xs">
+                        {predictionRecommendation(p)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </CollapsibleContent>
+        </Card>
+      </Collapsible>
+
+      {/* Top Nodes & VMs */}
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Top Nodes by CPU */}
         <Card>
@@ -232,14 +687,19 @@ export default function BriefingPage() {
             {data.top_vms_by_ram && data.top_vms_by_ram.length > 0 ? (
               <div className="space-y-3">
                 {data.top_vms_by_ram.map((vm, i) => (
-                  <div key={`${vm.node_id}-${vm.vmid}`} className="flex items-center gap-3">
+                  <div
+                    key={`${vm.node_id}-${vm.vmid}`}
+                    className="flex items-center gap-3"
+                  >
                     <span className="flex h-6 w-6 items-center justify-center rounded-full bg-muted text-xs font-bold">
                       {i + 1}
                     </span>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
                         <div className="truncate">
-                          <span className="font-medium">{vm.vm_name || `VM ${vm.vmid}`}</span>
+                          <span className="font-medium">
+                            {vm.vm_name || `VM ${vm.vmid}`}
+                          </span>
                           <span className="text-xs text-muted-foreground ml-2">
                             auf {vm.node_name}
                           </span>
@@ -270,38 +730,6 @@ export default function BriefingPage() {
           </CardContent>
         </Card>
       </div>
-
-      {/* Alerts & Warnings */}
-      {(data.unresolved_anomalies > 0 || data.critical_predictions > 0) && (
-        <div className="grid gap-4 sm:grid-cols-2">
-          {data.unresolved_anomalies > 0 && (
-            <Card className="border-orange-500/30">
-              <CardContent className="flex items-center gap-4 p-5">
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-orange-500/15">
-                  <AlertTriangle className="h-5 w-5 text-orange-500" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold">{data.unresolved_anomalies}</p>
-                  <p className="text-sm text-muted-foreground">Ungeloeste Anomalien</p>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-          {data.critical_predictions > 0 && (
-            <Card className="border-red-500/30">
-              <CardContent className="flex items-center gap-4 p-5">
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-red-500/15">
-                  <Activity className="h-5 w-5 text-red-500" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold">{data.critical_predictions}</p>
-                  <p className="text-sm text-muted-foreground">Kritische Vorhersagen</p>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      )}
 
       {/* Node Details */}
       <Card>
@@ -339,13 +767,19 @@ export default function BriefingPage() {
                         </Badge>
                       </td>
                       <td className="py-2.5 text-right font-mono">
-                        {node.is_online ? `${(node.cpu_usage ?? 0).toFixed(1)}%` : "-"}
+                        {node.is_online
+                          ? `${(node.cpu_usage ?? 0).toFixed(1)}%`
+                          : "-"}
                       </td>
                       <td className="py-2.5 text-right font-mono">
-                        {node.is_online ? `${(node.mem_pct ?? 0).toFixed(1)}%` : "-"}
+                        {node.is_online
+                          ? `${(node.mem_pct ?? 0).toFixed(1)}%`
+                          : "-"}
                       </td>
                       <td className="py-2.5 text-right font-mono">
-                        {node.is_online ? `${(node.disk_pct ?? 0).toFixed(1)}%` : "-"}
+                        {node.is_online
+                          ? `${(node.disk_pct ?? 0).toFixed(1)}%`
+                          : "-"}
                       </td>
                       <td className="py-2.5 text-right">
                         {node.is_online
@@ -383,7 +817,9 @@ export default function BriefingPage() {
           <div className="flex items-center gap-4">
             <div className="flex-1">
               <div className="flex items-center justify-between mb-1.5">
-                <span className="text-sm text-muted-foreground">Durchschnittliche Disk-Auslastung</span>
+                <span className="text-sm text-muted-foreground">
+                  Durchschnittliche Disk-Auslastung
+                </span>
                 <span className="text-sm font-mono font-medium">
                   {data.avg_disk.toFixed(1)}%
                 </span>

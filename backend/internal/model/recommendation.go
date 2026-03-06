@@ -27,5 +27,7 @@ type ResourceRecommendation struct {
 	MaxUsage           float64            `json:"max_usage"`
 	RecommendationType RecommendationType `json:"recommendation_type"`
 	Reason             string             `json:"reason,omitempty"`
+	VMContext          string             `json:"vm_context,omitempty"`
+	ContextReason      string             `json:"context_reason,omitempty"`
 	CreatedAt          time.Time          `json:"created_at"`
 }

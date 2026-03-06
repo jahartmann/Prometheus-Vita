@@ -919,6 +919,8 @@ export interface ResourceRecommendation {
   max_usage: number;
   recommendation_type: RecommendationType;
   reason?: string;
+  vm_context?: string;
+  context_reason?: string;
   created_at: string;
 }
 

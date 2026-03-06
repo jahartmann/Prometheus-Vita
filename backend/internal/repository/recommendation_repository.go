@@ -27,11 +27,11 @@ func NewRecommendationRepository(db *pgxpool.Pool) RecommendationRepository {
 func (r *pgRecommendationRepository) Create(ctx context.Context, rec *model.ResourceRecommendation) error {
 	rec.ID = uuid.New()
 	_, err := r.db.Exec(ctx,
-		`INSERT INTO resource_recommendations (id, node_id, vmid, vm_name, vm_type, resource_type, current_value, recommended_value, avg_usage, max_usage, recommendation_type, reason, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())`,
+		`INSERT INTO resource_recommendations (id, node_id, vmid, vm_name, vm_type, resource_type, current_value, recommended_value, avg_usage, max_usage, recommendation_type, reason, vm_context, context_reason, created_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW())`,
 		rec.ID, rec.NodeID, rec.VMID, rec.VMName, rec.VMType, rec.ResourceType,
 		rec.CurrentValue, rec.RecommendedValue, rec.AvgUsage, rec.MaxUsage,
-		rec.RecommendationType, rec.Reason,
+		rec.RecommendationType, rec.Reason, rec.VMContext, rec.ContextReason,
 	)
 	if err != nil {
 		return fmt.Errorf("create recommendation: %w", err)
@@ -44,7 +44,7 @@ func (r *pgRecommendationRepository) ListByNode(ctx context.Context, nodeID uuid
 		limit = 50
 	}
 	rows, err := r.db.Query(ctx,
-		`SELECT id, node_id, vmid, vm_name, vm_type, resource_type, current_value, recommended_value, avg_usage, max_usage, recommendation_type, COALESCE(reason, ''), created_at
+		`SELECT id, node_id, vmid, vm_name, vm_type, resource_type, current_value, recommended_value, avg_usage, max_usage, recommendation_type, COALESCE(reason, ''), COALESCE(vm_context, ''), COALESCE(context_reason, ''), created_at
 		 FROM resource_recommendations WHERE node_id = $1 ORDER BY created_at DESC LIMIT $2`, nodeID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list recommendations by node: %w", err)
@@ -56,7 +56,7 @@ func (r *pgRecommendationRepository) ListByNode(ctx context.Context, nodeID uuid
 		var rec model.ResourceRecommendation
 		if err := rows.Scan(&rec.ID, &rec.NodeID, &rec.VMID, &rec.VMName, &rec.VMType,
 			&rec.ResourceType, &rec.CurrentValue, &rec.RecommendedValue, &rec.AvgUsage, &rec.MaxUsage,
-			&rec.RecommendationType, &rec.Reason, &rec.CreatedAt); err != nil {
+			&rec.RecommendationType, &rec.Reason, &rec.VMContext, &rec.ContextReason, &rec.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan recommendation: %w", err)
 		}
 		recs = append(recs, rec)
@@ -69,7 +69,7 @@ func (r *pgRecommendationRepository) ListAll(ctx context.Context, limit int) ([]
 		limit = 100
 	}
 	rows, err := r.db.Query(ctx,
-		`SELECT id, node_id, vmid, vm_name, vm_type, resource_type, current_value, recommended_value, avg_usage, max_usage, recommendation_type, COALESCE(reason, ''), created_at
+		`SELECT id, node_id, vmid, vm_name, vm_type, resource_type, current_value, recommended_value, avg_usage, max_usage, recommendation_type, COALESCE(reason, ''), COALESCE(vm_context, ''), COALESCE(context_reason, ''), created_at
 		 FROM resource_recommendations ORDER BY created_at DESC LIMIT $1`, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list all recommendations: %w", err)
@@ -81,7 +81,7 @@ func (r *pgRecommendationRepository) ListAll(ctx context.Context, limit int) ([]
 		var rec model.ResourceRecommendation
 		if err := rows.Scan(&rec.ID, &rec.NodeID, &rec.VMID, &rec.VMName, &rec.VMType,
 			&rec.ResourceType, &rec.CurrentValue, &rec.RecommendedValue, &rec.AvgUsage, &rec.MaxUsage,
-			&rec.RecommendationType, &rec.Reason, &rec.CreatedAt); err != nil {
+			&rec.RecommendationType, &rec.Reason, &rec.VMContext, &rec.ContextReason, &rec.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan recommendation: %w", err)
 		}
 		recs = append(recs, rec)
