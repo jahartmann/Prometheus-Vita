@@ -24,7 +24,7 @@ export function useWebSocket({
   onClose,
   onError,
   enabled = true,
-  maxReconnectAttempts = 10,
+  maxReconnectAttempts = Infinity,
 }: UseWebSocketOptions) {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectAttemptsRef = useRef(0);
@@ -53,8 +53,19 @@ export function useWebSocket({
 
     isConnectingRef.current = true;
 
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.host}${url}?token=${accessToken}`;
+    // Build WS URL: use NEXT_PUBLIC_API_URL for direct backend connection
+    // (Next.js rewrites only handle HTTP, not WebSocket upgrades)
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+    let wsUrl: string;
+    if (apiUrl) {
+      // Direct backend connection: http://host:port → ws://host:port
+      const base = apiUrl.replace(/^http/, "ws");
+      wsUrl = `${base}${url}?token=${accessToken}`;
+    } else {
+      // Same-origin fallback (works behind a reverse proxy that handles WS)
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      wsUrl = `${protocol}//${window.location.host}${url}?token=${accessToken}`;
+    }
 
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;

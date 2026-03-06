@@ -89,7 +89,7 @@ export function CPUDetailChart({ metrics, rrdData }: CPUDetailChartProps) {
         <CardContent>
           {cpuChartData.length === 0 ? (
             <div className="flex h-[300px] items-center justify-center text-sm text-muted-foreground">
-              Keine CPU-Daten verfuegbar.
+              Warte auf CPU-Daten... (Sammlung alle 60s)
             </div>
           ) : (
             <ResponsiveContainer width="100%" height={300}>
@@ -192,7 +192,7 @@ export function CPUDetailChart({ metrics, rrdData }: CPUDetailChartProps) {
         <CardContent>
           {loadData.length === 0 ? (
             <div className="flex h-[250px] items-center justify-center text-sm text-muted-foreground">
-              Keine Load-Daten verfuegbar.
+              Warte auf Load-Daten... (Sammlung alle 60s)
             </div>
           ) : (
             <ResponsiveContainer width="100%" height={250}>

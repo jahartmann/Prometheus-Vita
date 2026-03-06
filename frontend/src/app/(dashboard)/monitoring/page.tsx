@@ -1,29 +1,72 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
-import { Activity, Cpu, MemoryStick, HardDrive, Server, Monitor, Box } from "lucide-react";
+import { Activity, Cpu, MemoryStick, HardDrive, Server, Monitor, Box, RefreshCw, Wifi, WifiOff } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
+import { Button } from "@/components/ui/button";
 import { useNodeStore } from "@/stores/node-store";
 import { formatBytes } from "@/lib/utils";
 
+const POLL_INTERVAL = 30_000; // 30 seconds
+
+function timeSince(date: Date): string {
+  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (seconds < 5) return "gerade eben";
+  if (seconds < 60) return `vor ${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  return `vor ${minutes}m`;
+}
+
 export default function MonitoringPage() {
   const { nodes, nodeStatus, isLoading, fetchNodes, fetchNodeStatus } = useNodeStore();
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [displayTime, setDisplayTime] = useState("");
+  const pollRef = useRef<ReturnType<typeof setInterval>>(undefined);
+  const isMountedRef = useRef(true);
 
-  useEffect(() => {
-    fetchNodes();
+  const refreshAll = useCallback(async () => {
+    await fetchNodes();
   }, [fetchNodes]);
 
+  // Initial load
   useEffect(() => {
-    nodes.forEach((node) => {
-      if (node.is_online) {
-        fetchNodeStatus(node.id);
-      }
+    isMountedRef.current = true;
+    refreshAll();
+    return () => { isMountedRef.current = false; };
+  }, [refreshAll]);
+
+  // Fetch status for each online node when nodes change
+  useEffect(() => {
+    if (nodes.length === 0) return;
+    const promises = nodes
+      .filter((n) => n.is_online)
+      .map((n) => fetchNodeStatus(n.id));
+    Promise.all(promises).then(() => {
+      if (isMountedRef.current) setLastUpdated(new Date());
     });
   }, [nodes, fetchNodeStatus]);
+
+  // Auto-refresh polling
+  useEffect(() => {
+    pollRef.current = setInterval(() => {
+      refreshAll();
+    }, POLL_INTERVAL);
+    return () => clearInterval(pollRef.current);
+  }, [refreshAll]);
+
+  // Update displayed time every 5s
+  useEffect(() => {
+    if (!lastUpdated) return;
+    setDisplayTime(timeSince(lastUpdated));
+    const timer = setInterval(() => {
+      if (lastUpdated) setDisplayTime(timeSince(lastUpdated));
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [lastUpdated]);
 
   const onlineNodes = nodes.filter((n) => n.is_online);
   const statuses = Object.values(nodeStatus);
@@ -38,11 +81,30 @@ export default function MonitoringPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Monitoring</h1>
-        <p className="text-muted-foreground">
-          Echtzeit-Status aller Nodes.
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Monitoring</h1>
+          <p className="text-muted-foreground">
+            Echtzeit-Status aller Nodes.
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          {lastUpdated && (
+            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Wifi className="h-3 w-3 text-green-500" />
+              Aktualisiert {displayTime}
+            </span>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={refreshAll}
+            disabled={isLoading}
+          >
+            <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${isLoading ? "animate-spin" : ""}`} />
+            Aktualisieren
+          </Button>
+        </div>
       </div>
 
       {/* Summary Cards */}
@@ -101,7 +163,7 @@ export default function MonitoringPage() {
       </div>
 
       {/* Node Status Grid */}
-      {isLoading ? (
+      {isLoading && nodes.length === 0 ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 3 }).map((_, i) => (
             <Skeleton key={i} className="h-48 w-full" />
@@ -111,7 +173,10 @@ export default function MonitoringPage() {
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
             <Server className="mb-3 h-10 w-10 text-muted-foreground" />
-            <p className="text-muted-foreground">Noch keine Nodes konfiguriert.</p>
+            <p className="font-medium">Noch keine Nodes konfiguriert</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Fuege einen Proxmox-Node hinzu, um Monitoring-Daten zu sehen.
+            </p>
           </CardContent>
         </Card>
       ) : (
@@ -208,10 +273,16 @@ export default function MonitoringPage() {
                           <span>PVE {status.pve_version}</span>
                         </div>
                       </div>
+                    ) : node.is_online ? (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                        Statusdaten werden geladen...
+                      </div>
                     ) : (
-                      <p className="text-sm text-muted-foreground">
-                        Keine Statusdaten verfuegbar.
-                      </p>
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <WifiOff className="h-3.5 w-3.5" />
+                        Node ist offline.
+                      </div>
                     )}
                   </CardContent>
                 </Card>

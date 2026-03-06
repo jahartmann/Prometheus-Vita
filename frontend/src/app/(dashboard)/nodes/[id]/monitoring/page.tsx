@@ -11,6 +11,8 @@ import {
   Network,
   Server,
   Wifi,
+  WifiOff,
+  RefreshCw,
 } from "lucide-react";
 import {
   AreaChart,
@@ -38,7 +40,7 @@ import { VMMetricsTable } from "@/components/monitoring/vm-metrics-table";
 import { NetworkTraffic } from "@/components/monitoring/network-traffic";
 import { VMNetworkTraffic } from "@/components/monitoring/vm-network-traffic";
 import { useNodeMetrics } from "@/hooks/use-node-metrics";
-import type { MetricsRecord, MetricsSummary, RRDDataPoint, VM } from "@/types/api";
+import type { MetricsRecord, MetricsSummary, RRDDataPoint, VM, VMMetricsRecord } from "@/types/api";
 
 const periods = [
   { label: "1h", value: "1h", hours: 1, rrdTimeframe: "hour" },
@@ -79,8 +81,10 @@ export default function NodeMonitoringPage() {
   const [summary, setSummary] = useState<MetricsSummary | null>(null);
   const [rrdData, setRrdData] = useState<RRDDataPoint[]>([]);
   const [vms, setVMs] = useState<VM[]>([]);
+  const [vmHistory, setVMHistory] = useState<Record<number, Array<{ cpu: number; mem: number }>>>({});
   const [period, setPeriod] = useState("24h");
   const [activeTab, setActiveTab] = useState("overview");
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   // Live WebSocket metrics
   const { latestMetrics, metrics: wsMetrics } = useNodeMetrics(nodeId, true);
@@ -105,26 +109,56 @@ export default function NodeMonitoringPage() {
     const since = new Date();
     since.setHours(since.getHours() - periodConfig.hours);
 
-    metricsApi
-      .getHistory(nodeId, since.toISOString(), new Date().toISOString())
-      .then((res) => setMetrics(toArray<MetricsRecord>(res.data)))
-      .catch(() => setMetrics([]));
-
-    metricsApi
-      .getSummary(nodeId, period)
-      .then((res) => setSummary(res.data?.data ?? res.data ?? null))
-      .catch(() => setSummary(null));
-
-    metricsApi
-      .getNodeRRD(nodeId, periodConfig.rrdTimeframe)
-      .then((res) => {
-        const d = res.data;
-        if (Array.isArray(d)) setRrdData(d);
-        else if (d && Array.isArray(d.data)) setRrdData(d.data);
-        else setRrdData([]);
-      })
-      .catch(() => setRrdData([]));
+    Promise.all([
+      metricsApi
+        .getHistory(nodeId, since.toISOString(), new Date().toISOString())
+        .then((res) => setMetrics(toArray<MetricsRecord>(res.data)))
+        .catch(() => setMetrics([])),
+      metricsApi
+        .getSummary(nodeId, period)
+        .then((res) => setSummary(res.data ?? null))
+        .catch(() => setSummary(null)),
+      metricsApi
+        .getNodeRRD(nodeId, periodConfig.rrdTimeframe)
+        .then((res) => setRrdData(toArray<RRDDataPoint>(res.data)))
+        .catch(() => setRrdData([])),
+    ]).then(() => setLastUpdated(new Date()));
   }, [nodeId, period]);
+
+  // Fetch VM metrics history for sparklines
+  useEffect(() => {
+    if (!nodeId || vms.length === 0) return;
+    const since = new Date();
+    since.setHours(since.getHours() - 1); // Last hour for sparklines
+
+    const runningVMs = vms.filter((v) => v.status === "running");
+    if (runningVMs.length === 0) return;
+
+    // Fetch for up to 10 VMs to avoid excessive requests
+    const fetchVMs = runningVMs.slice(0, 10);
+    Promise.all(
+      fetchVMs.map((vm) =>
+        metricsApi
+          .getVMMetrics(nodeId, vm.vmid, since.toISOString(), new Date().toISOString())
+          .then((res) => ({
+            vmid: vm.vmid,
+            records: toArray<VMMetricsRecord>(res.data),
+          }))
+          .catch(() => ({ vmid: vm.vmid, records: [] as VMMetricsRecord[] }))
+      )
+    ).then((results) => {
+      const history: Record<number, Array<{ cpu: number; mem: number }>> = {};
+      for (const { vmid, records } of results) {
+        if (records.length > 0) {
+          history[vmid] = records.map((r) => ({
+            cpu: r.cpu_usage,
+            mem: r.memory_total > 0 ? (r.memory_used / r.memory_total) * 100 : 0,
+          }));
+        }
+      }
+      setVMHistory(history);
+    });
+  }, [nodeId, vms]);
 
   // Computed data for KPI cards
   const kpiData = useMemo(() => {
@@ -242,11 +276,20 @@ export default function NodeMonitoringPage() {
             <p className="text-sm text-muted-foreground">{node.name}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          {latestMetrics && (
+        <div className="flex items-center gap-3">
+          {latestMetrics ? (
             <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/30">
               <Wifi className="mr-1 h-3 w-3" /> Live
             </Badge>
+          ) : lastUpdated ? (
+            <Badge variant="outline" className="text-muted-foreground">
+              <WifiOff className="mr-1 h-3 w-3" /> Polling
+            </Badge>
+          ) : null}
+          {lastUpdated && (
+            <span className="text-xs text-muted-foreground">
+              Daten von {lastUpdated.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+            </span>
           )}
           <PeriodSelector period={period} onPeriodChange={setPeriod} />
         </div>
@@ -297,8 +340,10 @@ export default function NodeMonitoringPage() {
             </CardHeader>
             <CardContent>
               {overviewChartData.length === 0 ? (
-                <div className="flex h-[350px] items-center justify-center text-sm text-muted-foreground">
-                  Keine Metriken-Daten verfuegbar.
+                <div className="flex h-[350px] flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
+                  <RefreshCw className="h-5 w-5 animate-spin" />
+                  <span>Warte auf Metriken-Daten...</span>
+                  <span className="text-xs">Daten werden alle 60 Sekunden gesammelt.</span>
                 </div>
               ) : (
                 <ResponsiveContainer width="100%" height={350}>
@@ -413,7 +458,7 @@ export default function NodeMonitoringPage() {
               <CardContent>
                 {memDiskChartData.length === 0 ? (
                   <div className="flex h-[300px] items-center justify-center text-sm text-muted-foreground">
-                    Keine Speicher-Daten verfuegbar.
+                    Warte auf Speicher-Daten... (Sammlung alle 60s)
                   </div>
                 ) : (
                   <ResponsiveContainer width="100%" height={300}>
@@ -498,7 +543,7 @@ export default function NodeMonitoringPage() {
               <CardContent>
                 {memDiskChartData.length === 0 ? (
                   <div className="flex h-[300px] items-center justify-center text-sm text-muted-foreground">
-                    Keine Disk-Daten verfuegbar.
+                    Warte auf Disk-Daten... (Sammlung alle 60s)
                   </div>
                 ) : (
                   <ResponsiveContainer width="100%" height={300}>
@@ -663,7 +708,7 @@ export default function NodeMonitoringPage() {
         {/* ====== Tab 5: VMs ====== */}
         <TabsContent value="vms" className="space-y-6">
           <ErrorBoundary>
-            <VMMetricsTable vms={vms} nodeId={nodeId} />
+            <VMMetricsTable vms={vms} nodeId={nodeId} vmHistory={vmHistory} />
           </ErrorBoundary>
         </TabsContent>
       </Tabs>

@@ -158,7 +158,7 @@ export function NetworkTraffic({ nodeId }: NetworkTrafficProps) {
             </div>
           ) : chartData.length === 0 ? (
             <div className="flex h-[300px] items-center justify-center text-sm text-muted-foreground">
-              Keine Netzwerk-Daten verfuegbar.
+              Warte auf Netzwerk-Daten... (Sammlung alle 60s)
             </div>
           ) : (
             <ResponsiveContainer width="100%" height={300}>

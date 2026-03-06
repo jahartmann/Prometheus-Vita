@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useWebSocket } from "./use-websocket";
+import { metricsApi, toArray } from "@/lib/api";
+import type { MetricsRecord } from "@/types/api";
 
 interface RawMetric {
   node_id?: string;
@@ -26,12 +28,32 @@ export interface ProcessedMetric {
 }
 
 const MAX_DATA_POINTS = 60;
+const POLL_INTERVAL = 15_000; // 15s fallback polling when WS is disconnected
+
+function recordToProcessed(m: MetricsRecord): ProcessedMetric {
+  return {
+    timestamp: m.recorded_at,
+    cpu_usage: m.cpu_usage ?? 0,
+    memory_usage:
+      m.memory_total && m.memory_total > 0
+        ? ((m.memory_used ?? 0) / m.memory_total) * 100
+        : 0,
+    disk_usage:
+      m.disk_total && m.disk_total > 0
+        ? ((m.disk_used ?? 0) / m.disk_total) * 100
+        : 0,
+    network_in: m.net_in ?? 0,
+    network_out: m.net_out ?? 0,
+  };
+}
 
 export function useNodeMetrics(nodeId: string, enabled = true) {
   const [metrics, setMetrics] = useState<ProcessedMetric[]>([]);
   const [latestMetrics, setLatestMetrics] = useState<ProcessedMetric | null>(
     null
   );
+  const pollTimerRef = useRef<ReturnType<typeof setInterval>>(undefined);
+  const lastPollRef = useRef<string>("");
 
   const handleMessage = useCallback(
     (data: unknown) => {
@@ -83,6 +105,66 @@ export function useNodeMetrics(nodeId: string, enabled = true) {
     onMessage: handleMessage,
     enabled: enabled && !!nodeId,
   });
+
+  // Fallback REST polling when WebSocket is not connected
+  const pollMetrics = useCallback(async () => {
+    if (!nodeId || !enabled) return;
+    try {
+      const since = new Date();
+      since.setMinutes(since.getMinutes() - 2); // Last 2 minutes
+      const res = await metricsApi.getHistory(
+        nodeId,
+        since.toISOString(),
+        new Date().toISOString()
+      );
+      const records = toArray<MetricsRecord>(res.data);
+      if (records.length === 0) return;
+
+      // Only process new records (after last poll timestamp)
+      const newRecords = lastPollRef.current
+        ? records.filter((r) => r.recorded_at > lastPollRef.current)
+        : records.slice(-1); // First poll: only latest
+
+      if (newRecords.length === 0) return;
+      lastPollRef.current = newRecords[newRecords.length - 1].recorded_at;
+
+      const processed = newRecords.map(recordToProcessed);
+      setLatestMetrics(processed[processed.length - 1]);
+      setMetrics((prev) => {
+        const next = [...prev, ...processed];
+        return next.length > MAX_DATA_POINTS
+          ? next.slice(next.length - MAX_DATA_POINTS)
+          : next;
+      });
+    } catch {
+      // Silent - will retry on next poll
+    }
+  }, [nodeId, enabled]);
+
+  // Start/stop fallback polling based on WS connection status
+  useEffect(() => {
+    if (isConnected) {
+      // WS is connected, stop polling
+      if (pollTimerRef.current) {
+        clearInterval(pollTimerRef.current);
+        pollTimerRef.current = undefined;
+      }
+      return;
+    }
+
+    if (!enabled || !nodeId) return;
+
+    // WS is not connected, start polling as fallback
+    pollMetrics(); // immediate first poll
+    pollTimerRef.current = setInterval(pollMetrics, POLL_INTERVAL);
+
+    return () => {
+      if (pollTimerRef.current) {
+        clearInterval(pollTimerRef.current);
+        pollTimerRef.current = undefined;
+      }
+    };
+  }, [isConnected, enabled, nodeId, pollMetrics]);
 
   return { metrics, latestMetrics, isConnected };
 }
