@@ -174,10 +174,11 @@ export default function NodeMonitoringPage() {
     const cpuUsage = latest?.cpu_usage ?? s?.cpu_current ?? 0;
     const memoryUsage = latest?.memory_usage ?? s?.memory_current_percent ?? s?.memory_avg_percent ?? 0;
     const diskUsage = s?.disk_current_percent ?? s?.disk_avg_percent ?? 0;
-    // Network: prefer live WS data, then latest REST metrics record
-    const lastRecord = metrics.length > 0 ? metrics[metrics.length - 1] : null;
-    const netIn = latest?.network_in ?? lastRecord?.net_in ?? 0;
-    const netOut = latest?.network_out ?? lastRecord?.net_out ?? 0;
+    // Network: prefer live WS data, then latest REST record with actual data
+    // Skip records with net_in=0 (first delta after scheduler restart is always 0)
+    const lastNetRecord = [...metrics].reverse().find((m) => (m.net_in ?? 0) > 0 || (m.net_out ?? 0) > 0) ?? null;
+    const netIn = latest?.network_in ?? lastNetRecord?.net_in ?? 0;
+    const netOut = latest?.network_out ?? lastNetRecord?.net_out ?? 0;
 
     // Build sparkline history from WS metrics (last 20 points) or from regular metrics
     const historySource = wsMetrics.length >= 5 ? wsMetrics : [];

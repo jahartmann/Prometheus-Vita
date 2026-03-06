@@ -91,31 +91,44 @@ export function LiveBandwidthGauge({ netIn, netOut, maxRate }: LiveBandwidthGaug
     return currentMax * 2;
   }, [netIn, netOut, maxRate]);
 
+  const noData = netIn === 0 && netOut === 0;
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Live-Bandwidth</CardTitle>
+        <CardTitle className="text-base">Live-Bandbreite</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="flex items-center justify-around">
-          <GaugeArc
-            value={netIn}
-            maxValue={effectiveMax}
-            color="hsl(210, 80%, 55%)"
-            label="Eingehend"
-          />
-          <GaugeArc
-            value={netOut}
-            maxValue={effectiveMax}
-            color="hsl(142, 71%, 45%)"
-            label="Ausgehend"
-          />
-        </div>
-        <div className="mt-3 flex justify-center gap-6 text-xs text-muted-foreground">
-          <span>
-            Gesamt: <strong className="text-foreground">{formatBandwidth(netIn + netOut)}</strong>
-          </span>
-        </div>
+        {noData ? (
+          <div className="flex h-[140px] items-center justify-center text-sm text-muted-foreground">
+            <div className="text-center">
+              <p>Warte auf Netzwerk-Daten...</p>
+              <p className="text-xs mt-1">Daten werden alle 60s erfasst. Nach Neustart dauert es 2 Zyklen.</p>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center justify-around">
+              <GaugeArc
+                value={netIn}
+                maxValue={effectiveMax}
+                color="hsl(210, 80%, 55%)"
+                label="Eingehend"
+              />
+              <GaugeArc
+                value={netOut}
+                maxValue={effectiveMax}
+                color="hsl(142, 71%, 45%)"
+                label="Ausgehend"
+              />
+            </div>
+            <div className="mt-3 flex justify-center gap-6 text-xs text-muted-foreground">
+              <span>
+                Gesamt: <strong className="text-foreground">{formatBandwidth(netIn + netOut)}</strong>
+              </span>
+            </div>
+          </>
+        )}
       </CardContent>
     </Card>
   );

@@ -15,9 +15,15 @@ import (
 )
 
 const (
-	zScoreWarning  = 2.5
-	zScoreCritical = 3.5
-	minDataPoints  = 10
+	// Only flag truly significant deviations — avoid noise from normal fluctuations
+	zScoreWarning  = 3.5
+	zScoreCritical = 5.0
+	minDataPoints  = 30 // Need at least 30 data points (30+ minutes of data)
+
+	// Minimum absolute value thresholds — don't flag low-usage anomalies
+	minCPUForAnomaly  = 70.0  // CPU must be >70% to be flagged
+	minRAMForAnomaly  = 75.0  // RAM must be >75% to be flagged
+	minDiskForAnomaly = 80.0  // Disk must be >80% to be flagged
 )
 
 // NodeServiceInterface allows fetching VMs for context enrichment.
@@ -103,10 +109,37 @@ func (s *Service) checkMetric(ctx context.Context, nodeID uuid.UUID, metric stri
 		return
 	}
 
-	latestValue := values[len(values)-1]
-	zScore := (latestValue - mean) / stddev
+	// Check the last 5 data points (sustained anomaly, not a single spike)
+	recentCount := 5
+	if len(values) < recentCount {
+		recentCount = len(values)
+	}
+	recentValues := values[len(values)-recentCount:]
+	recentMean := 0.0
+	for _, v := range recentValues {
+		recentMean += v
+	}
+	recentMean /= float64(len(recentValues))
+
+	zScore := (recentMean - mean) / stddev
 
 	if math.Abs(zScore) < zScoreWarning {
+		return
+	}
+
+	// Enforce minimum absolute thresholds — don't flag low-usage "anomalies"
+	minThreshold := 0.0
+	switch metric {
+	case "cpu_usage":
+		minThreshold = minCPUForAnomaly
+	case "memory_usage":
+		minThreshold = minRAMForAnomaly
+	case "disk_usage":
+		minThreshold = minDiskForAnomaly
+	}
+
+	// Only flag if the value is actually in a concerning range
+	if recentMean < minThreshold {
 		return
 	}
 
@@ -118,7 +151,7 @@ func (s *Service) checkMetric(ctx context.Context, nodeID uuid.UUID, metric stri
 	record := &model.AnomalyRecord{
 		NodeID:   nodeID,
 		Metric:   metric,
-		Value:    latestValue,
+		Value:    recentMean,
 		ZScore:   zScore,
 		Mean:     mean,
 		StdDev:   stddev,
