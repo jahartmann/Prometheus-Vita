@@ -53,16 +53,16 @@ export function useWebSocket({
 
     isConnectingRef.current = true;
 
-    // Build WS URL: use NEXT_PUBLIC_API_URL for direct backend connection
-    // (Next.js rewrites only handle HTTP, not WebSocket upgrades)
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+    // Build WS URL:
+    // 1. NEXT_PUBLIC_WS_URL override (set to browser-accessible backend WS URL)
+    // 2. Same-origin fallback (works behind reverse proxy that handles WS upgrades)
+    // NOTE: Do NOT use NEXT_PUBLIC_API_URL here - it may contain Docker-internal
+    // hostnames (e.g. "backend:8080") that the browser cannot resolve.
+    const wsOverride = process.env.NEXT_PUBLIC_WS_URL;
     let wsUrl: string;
-    if (apiUrl) {
-      // Direct backend connection: http://host:port → ws://host:port
-      const base = apiUrl.replace(/^http/, "ws");
-      wsUrl = `${base}${url}?token=${accessToken}`;
+    if (wsOverride) {
+      wsUrl = `${wsOverride}${url}?token=${accessToken}`;
     } else {
-      // Same-origin fallback (works behind a reverse proxy that handles WS)
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
       wsUrl = `${protocol}//${window.location.host}${url}?token=${accessToken}`;
     }

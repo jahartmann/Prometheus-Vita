@@ -8,6 +8,17 @@ import type {
 } from "@/types/api";
 import { chatApi, toArray } from "@/lib/api";
 
+// generateId() is unavailable in non-secure contexts (HTTP without TLS).
+function generateId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return generateId();
+  }
+  // Fallback: random hex string
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 interface ChatState {
   conversations: ChatConversation[];
   currentConversation: ChatConversation | null;
@@ -73,7 +84,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     const { currentConversation } = get();
 
     // Optimistically add user message
-    const tempId = "temp-" + crypto.randomUUID();
+    const tempId = "temp-" + generateId();
     const tempUserMsg: ChatMessage = {
       id: tempId,
       conversation_id: currentConversation?.id || "",
@@ -113,7 +124,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
           ...s.messages.filter((m) => m.id !== tempUserMsg.id),
           {
             ...tempUserMsg,
-            id: "user-" + crypto.randomUUID(),
+            id: "user-" + generateId(),
             conversation_id: resp.conversation_id,
           },
           resp.message,
