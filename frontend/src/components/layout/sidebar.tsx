@@ -20,6 +20,7 @@ import {
   Bell,
   Archive,
   Shield,
+  ShieldCheck,
   Disc,
   ArrowRightLeft,
   GitCompare,
@@ -66,6 +67,7 @@ const featureNavItems: NavItem[] = [
   { label: "Reflex-Regeln", href: "/reflex", icon: Zap, matchPrefix: "/reflex" },
   { label: "Topologie", href: "/topology", icon: GitBranch, matchPrefix: "/topology" },
   { label: "Empfehlungen", href: "/recommendations", icon: Lightbulb, matchPrefix: "/recommendations" },
+  { label: "Sicherheit", href: "/security", icon: ShieldCheck, matchPrefix: "/security" },
   { label: "Alerts", href: "/alerts", icon: AlertTriangle, matchPrefix: "/alerts" },
 ];
 

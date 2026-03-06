@@ -539,6 +539,17 @@ export const reflexApi = {
 };
 
 
+// Security API
+export const securityApi = {
+  getEvents: () => api.get("/security/events").then((r) => toArray(r.data)),
+  getRecent: (limit = 50) => api.get(`/security/events/recent?limit=${limit}`).then((r) => toArray(r.data)),
+  getStats: () => api.get("/security/events/stats").then((r) => r.data),
+  getByNode: (nodeId: string) => api.get(`/nodes/${nodeId}/security/events`).then((r) => toArray(r.data)),
+  acknowledge: (id: string) => api.post(`/security/events/${id}/acknowledge`),
+  getMode: () => api.get("/security/mode").then((r) => r.data),
+  setMode: (mode: string) => api.put("/security/mode", { mode }),
+};
+
 // Cluster API
 export const clusterApi = {
   getSummary: () => api.get("/cluster/summary"),

@@ -26,6 +26,7 @@ import (
 	"github.com/antigravity/prometheus/internal/service/drift"
 	"github.com/antigravity/prometheus/internal/service/environment"
 	"github.com/antigravity/prometheus/internal/service/gateway"
+	"github.com/antigravity/prometheus/internal/service/intelligence"
 	migrationService "github.com/antigravity/prometheus/internal/service/migration"
 	"github.com/antigravity/prometheus/internal/service/monitor"
 	nodeService "github.com/antigravity/prometheus/internal/service/node"
@@ -140,6 +141,9 @@ func main() {
 	apiTokenRepo := repository.NewAPITokenRepository(dbPool)
 	auditRepo := repository.NewAuditRepository(dbPool)
 
+	// Phase 8 Repositories
+	securityEventRepo := repository.NewSecurityEventRepository(dbPool)
+
 	// Phase 7 Repositories
 	brainRepo := repository.NewBrainRepository(dbPool)
 	reflexRepo := repository.NewReflexRuleRepository(dbPool)
@@ -221,6 +225,10 @@ func main() {
 	sshkeySvc := sshkeys.NewService(sshKeyRepo, nodeRepo, encryptor, sshPool)
 	gatewaySvc := gateway.NewService(apiTokenRepo, userRepo)
 	topologySvc := topologyService.NewService(nodeRepo, clientFactory)
+
+	// Phase 8 Services
+	analysisSvc := intelligence.NewAnalysisService(securityEventRepo, metricsRepo, nodeRepo, anomalyRepo, predictionRepo, llmRegistry, wsHub)
+	analysisSvc.SetNodeService(nodeSvc)
 
 	// Phase 7 Services
 	brainSvc := brain.NewService(brainRepo)
@@ -304,6 +312,8 @@ func main() {
 	sched.AddJob(keyRotationJob)
 	reflexEvalJob := scheduler.NewReflexEvaluationJob(reflexSvc, 30*time.Second)
 	sched.AddJob(reflexEvalJob)
+	intelligenceJob := scheduler.NewIntelligenceJob(analysisSvc, 10*time.Minute)
+	sched.AddJob(intelligenceJob)
 
 	if telegramBotEnabled && telegramBotSvc != nil {
 		pollInterval := time.Duration(cfg.Telegram.PollInterval) * time.Second
@@ -359,6 +369,7 @@ func main() {
 		Reflex:       handler.NewReflexHandler(reflexSvc),
 		AgentConfig:  handler.NewAgentConfigHandler(agentConfigRepo, llmRegistry, ollamaProvider),
 		SyncCenter:   handler.NewSyncCenterHandler(nodeSvc, nodeRepo, tagRepo),
+		Security:     handler.NewSecurityHandler(securityEventRepo, analysisSvc),
 	}
 
 	// Setup routes

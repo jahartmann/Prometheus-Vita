@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useNodeStore } from "@/stores/node-store";
 import { DashboardOverview } from "@/components/dashboard/dashboard-overview";
 import { BriefingWidget } from "@/components/dashboard/briefing-widget";
+import { SecurityWidget } from "@/components/dashboard/security-widget";
 
 export default function DashboardPage() {
   const { fetchNodes } = useNodeStore();
@@ -21,6 +22,7 @@ export default function DashboardPage() {
         </p>
       </div>
       <BriefingWidget />
+      <SecurityWidget />
       <DashboardOverview />
     </div>
   );

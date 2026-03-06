@@ -1101,6 +1101,35 @@ export interface ClusterISO {
   nodes: string[];
 }
 
+// Security Event types
+export type SecurityCategory = "performance" | "security" | "capacity" | "availability" | "config";
+export type SecuritySeverity = "info" | "warning" | "critical" | "emergency";
+
+export interface SecurityEvent {
+  id: string;
+  node_id: string;
+  category: SecurityCategory;
+  severity: SecuritySeverity;
+  title: string;
+  description: string;
+  impact: string;
+  recommendation: string;
+  metrics?: Record<string, unknown>;
+  affected_vms?: string[];
+  node_name?: string;
+  is_acknowledged: boolean;
+  detected_at: string;
+  acknowledged_at?: string;
+  analysis_model?: string;
+}
+
+export interface SecurityStats {
+  total: number;
+  unacknowledged: number;
+  by_severity: Record<string, number>;
+  by_category: Record<string, number>;
+}
+
 // Tag sync-all response
 export interface TagSyncAllResult {
   total_imported: number;

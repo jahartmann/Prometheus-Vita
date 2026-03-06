@@ -45,6 +45,7 @@ type Handlers struct {
 	Reflex       *handler.ReflexHandler
 	AgentConfig  *handler.AgentConfigHandler
 	SyncCenter   *handler.SyncCenterHandler
+	Security     *handler.SecurityHandler
 }
 
 func SetupRouter(e *echo.Echo, cfg *config.Config, jwtSvc *auth.JWTService, h Handlers, gatewaySvc *gateway.Service, redisClient *redis.Client, auditRepo repository.AuditRepository) {
@@ -501,6 +502,24 @@ func SetupRouter(e *echo.Echo, cfg *config.Config, jwtSvc *auth.JWTService, h Ha
 		agentRoutes.GET("/config", h.AgentConfig.GetConfig)
 		agentRoutes.PUT("/config", h.AgentConfig.UpdateConfig)
 		agentRoutes.GET("/models", h.AgentConfig.GetModels)
+	}
+
+	// Security Events
+	if h.Security != nil {
+		security := protected.Group("/security")
+		security.GET("/events", h.Security.ListUnacknowledged)
+		security.GET("/events/recent", h.Security.ListRecent)
+		security.GET("/events/stats", h.Security.GetStats)
+
+		security.GET("/mode", h.Security.GetMode)
+
+		securityAdmin := security.Group("")
+		securityAdmin.Use(middleware.RequireRole(model.RoleAdmin, model.RoleOperator))
+		securityAdmin.POST("/events/:id/acknowledge", h.Security.Acknowledge)
+		securityAdmin.PUT("/mode", h.Security.SetMode)
+
+		// Node-scoped security events
+		nodes.GET("/:id/security/events", h.Security.ListByNode)
 	}
 
 	// Backup Recovery Guide
