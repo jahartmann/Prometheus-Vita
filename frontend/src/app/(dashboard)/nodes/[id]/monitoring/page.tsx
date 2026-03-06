@@ -128,8 +128,8 @@ export default function NodeMonitoringPage() {
     ]).then(() => setLastUpdated(new Date()));
 
     // Fetch anomalies and predictions
-    anomalyApi.listByNode(nodeId).then(setAnomalies).catch(() => setAnomalies([]));
-    predictionApi.listByNode(nodeId).then(setPredictions).catch(() => setPredictions([]));
+    anomalyApi.listByNode(nodeId).then((d) => setAnomalies(d as AnomalyRecord[])).catch(() => setAnomalies([]));
+    predictionApi.listByNode(nodeId).then((d) => setPredictions(d as MaintenancePrediction[])).catch(() => setPredictions([]));
   }, [nodeId, period]);
 
   // Fetch VM metrics history for sparklines
