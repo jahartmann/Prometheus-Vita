@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useTheme } from "next-themes";
 import {
   LayoutDashboard,
   Server,
@@ -16,7 +17,6 @@ import {
   FolderArchive,
   BarChart3,
   Plus,
-  Brain,
   Bell,
   Archive,
   Shield,
@@ -26,19 +26,16 @@ import {
   GitCompare,
   Zap,
   GitBranch,
-  Package,
   Tag,
   AlertTriangle,
   Lightbulb,
+  Search,
+  Moon,
   Sun,
-  Layers,
+  LogOut,
+  ChevronUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useNodeStore } from "@/stores/node-store";
 import { useAuthStore } from "@/stores/auth-store";
@@ -52,56 +49,53 @@ interface NavItem {
   excludePrefix?: string[];
 }
 
-const mainNavItems: NavItem[] = [
-  { label: "Dashboard", href: "/", icon: LayoutDashboard },
-  { label: "Cluster", href: "/cluster", icon: Layers, matchPrefix: "/cluster" },
-  { label: "Briefing", href: "/briefing", icon: Sun, matchPrefix: "/briefing" },
-];
-
-const featureNavItems: NavItem[] = [
-  { label: "Speicher", href: "/storage", icon: HardDrive, matchPrefix: "/storage" },
-  { label: "Backups", href: "/backups", icon: Archive, matchPrefix: "/backups" },
-  { label: "Migration", href: "/migrations", icon: ArrowRightLeft, matchPrefix: "/migrations" },
-  { label: "Disaster Recovery", href: "/disaster-recovery", icon: Shield, matchPrefix: "/disaster-recovery" },
-  { label: "Drift Detection", href: "/drift", icon: GitCompare, matchPrefix: "/drift" },
-  { label: "Reflex-Regeln", href: "/reflex", icon: Zap, matchPrefix: "/reflex" },
-  { label: "Topologie", href: "/topology", icon: GitBranch, matchPrefix: "/topology" },
-  { label: "Empfehlungen", href: "/recommendations", icon: Lightbulb, matchPrefix: "/recommendations" },
-  { label: "Sicherheit", href: "/security", icon: ShieldCheck, matchPrefix: "/security" },
-  { label: "Alerts", href: "/alerts", icon: AlertTriangle, matchPrefix: "/alerts" },
-];
-
-interface ResourceSubItem {
+interface NavSection {
   label: string;
-  href: string;
-  icon: React.ComponentType<{ className?: string }>;
-  matchPrefix: string;
+  items: NavItem[];
 }
 
-const resourceSubItems: ResourceSubItem[] = [
-  { label: "Tags", href: "/tags", icon: Tag, matchPrefix: "/tags" },
-  { label: "ISOs & Vorlagen", href: "/isos", icon: Disc, matchPrefix: "/isos" },
+const topNavItems: NavItem[] = [
+  { label: "Suche", href: "/chat", icon: Search, matchPrefix: "/chat" },
+  { label: "Benachrichtigungen", href: "/settings/notifications", icon: Bell, matchPrefix: "/settings/notifications" },
 ];
 
-const bottomNavItems: NavItem[] = [
-  { label: "Benachrichtigungen", href: "/settings/notifications", icon: Bell, matchPrefix: "/settings/notifications" },
-  { label: "KI-Assistent", href: "/chat", icon: Brain, matchPrefix: "/chat" },
+const mainNavItems: NavItem[] = [
+  { label: "Dashboard", href: "/", icon: LayoutDashboard },
+  { label: "Monitoring", href: "/monitoring", icon: BarChart3, matchPrefix: "/monitoring" },
+];
+
+const sections: NavSection[] = [
   {
-    label: "Einstellungen",
-    href: "/settings/nodes",
-    icon: Settings,
-    matchPrefix: "/settings",
-    excludePrefix: ["/settings/notifications"],
+    label: "Infrastruktur",
+    items: [
+      { label: "Speicher", href: "/storage", icon: HardDrive, matchPrefix: "/storage" },
+      { label: "Backups", href: "/backups", icon: Archive, matchPrefix: "/backups" },
+      { label: "Migration", href: "/migrations", icon: ArrowRightLeft, matchPrefix: "/migrations" },
+      { label: "Disaster Recovery", href: "/disaster-recovery", icon: Shield, matchPrefix: "/disaster-recovery" },
+    ],
+  },
+  {
+    label: "Sicherheit & KI",
+    items: [
+      { label: "Sicherheit", href: "/security", icon: ShieldCheck, matchPrefix: "/security" },
+      { label: "Alerts", href: "/alerts", icon: AlertTriangle, matchPrefix: "/alerts" },
+      { label: "Drift-Erkennung", href: "/drift", icon: GitCompare, matchPrefix: "/drift" },
+      { label: "Empfehlungen", href: "/recommendations", icon: Lightbulb, matchPrefix: "/recommendations" },
+    ],
+  },
+  {
+    label: "System",
+    items: [
+      { label: "Topologie", href: "/topology", icon: GitBranch, matchPrefix: "/topology" },
+      { label: "Reflex-Regeln", href: "/reflex", icon: Zap, matchPrefix: "/reflex" },
+      { label: "Tags", href: "/tags", icon: Tag, matchPrefix: "/tags" },
+      { label: "ISOs & Vorlagen", href: "/isos", icon: Disc, matchPrefix: "/isos" },
+      { label: "Einstellungen", href: "/settings/nodes", icon: Settings, matchPrefix: "/settings", excludePrefix: ["/settings/notifications"] },
+    ],
   },
 ];
 
-interface NodeSubItem {
-  label: string;
-  path: string;
-  icon: React.ComponentType<{ className?: string }>;
-}
-
-const nodeSubItems: NodeSubItem[] = [
+const nodeSubItems = [
   { label: "VMs & Container", path: "vms", icon: Monitor },
   { label: "Storage", path: "storage", icon: HardDrive },
   { label: "Netzwerk", path: "network", icon: Network },
@@ -110,37 +104,31 @@ const nodeSubItems: NodeSubItem[] = [
   { label: "Monitoring", path: "monitoring", icon: BarChart3 },
 ];
 
-interface SidebarProps {
-  collapsed?: boolean;
-}
-
-export function Sidebar({ collapsed = false }: SidebarProps) {
+export function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const { theme, setTheme } = useTheme();
   const { nodes, fetchNodes } = useNodeStore();
-  const [nodesOpen, setNodesOpen] = useState(pathname.startsWith("/nodes"));
+  const { user, logout } = useAuthStore();
+  const [serversOpen, setServersOpen] = useState(pathname.startsWith("/nodes"));
   const [openNodes, setOpenNodes] = useState<Record<string, boolean>>({});
   const [onboardOpen, setOnboardOpen] = useState(false);
-  const [resourcesOpen, setResourcesOpen] = useState(pathname.startsWith("/tags") || pathname.startsWith("/isos"));
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
 
   useEffect(() => {
     const token = useAuthStore.getState().accessToken;
-    if (token) {
-      fetchNodes();
-    }
+    if (token) fetchNodes();
     const unsub = useAuthStore.subscribe((state) => {
-      if (state.accessToken) {
-        fetchNodes();
-      }
+      if (state.accessToken) fetchNodes();
     });
     return () => unsub();
   }, [fetchNodes]);
 
   useEffect(() => {
     if (pathname.startsWith("/nodes/")) {
-      const segments = pathname.split("/");
-      const activeNodeId = segments[2];
+      const activeNodeId = pathname.split("/")[2];
       if (activeNodeId) {
-        setNodesOpen(true);
+        setServersOpen(true);
         setOpenNodes((prev) => ({ ...prev, [activeNodeId]: true }));
       }
     }
@@ -148,145 +136,98 @@ export function Sidebar({ collapsed = false }: SidebarProps) {
 
   const isActive = (href: string, matchPrefix?: string, excludePrefix?: string[]) => {
     if (matchPrefix) {
-      if (excludePrefix?.some((ex) => pathname.startsWith(ex))) {
-        return false;
-      }
+      if (excludePrefix?.some((ex) => pathname.startsWith(ex))) return false;
       return pathname.startsWith(matchPrefix);
     }
     return pathname === href;
   };
 
-  const isNodeActive = (nodeId: string) => {
-    return pathname.startsWith(`/nodes/${nodeId}`);
+  const handleLogout = () => {
+    logout();
+    router.push("/login");
   };
 
-  const isNodeSubActive = (nodeId: string, subPath: string) => {
-    return pathname === `/nodes/${nodeId}/${subPath}`;
-  };
-
-  const toggleNode = (nodeId: string) => {
-    setOpenNodes((prev) => ({ ...prev, [nodeId]: !prev[nodeId] }));
-  };
+  const initials = user?.username ? user.username.slice(0, 2).toUpperCase() : "??";
 
   const renderNavLink = (item: NavItem) => {
     const active = isActive(item.href, item.matchPrefix, item.excludePrefix);
     const Icon = item.icon;
-
-    const link = (
+    return (
       <Link
         key={item.href}
         href={item.href}
         className={cn(
-          "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+          "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
           active
-            ? "bg-primary/10 text-primary"
-            : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+            ? "bg-accent text-foreground font-semibold"
+            : "text-sidebar-muted hover:bg-accent hover:text-foreground"
         )}
       >
         <Icon className="h-4 w-4 shrink-0" />
-        {!collapsed && <span>{item.label}</span>}
+        <span>{item.label}</span>
       </Link>
     );
-
-    if (collapsed) {
-      return (
-        <Tooltip key={item.href} delayDuration={0}>
-          <TooltipTrigger asChild>{link}</TooltipTrigger>
-          <TooltipContent side="right">{item.label}</TooltipContent>
-        </Tooltip>
-      );
-    }
-
-    return link;
   };
-
-  if (collapsed) {
-    const allCollapsedItems: NavItem[] = [
-      ...mainNavItems,
-      { label: "Server", href: "/nodes", icon: Server, matchPrefix: "/nodes" },
-      ...featureNavItems,
-      { label: "Ressourcen", href: "/tags", icon: Package, matchPrefix: "/tags" },
-      ...bottomNavItems,
-    ];
-
-    return (
-      <>
-        <aside className="flex h-screen w-16 flex-col border-r bg-card/80 backdrop-blur-sm transition-all duration-300">
-          <div className="flex h-14 items-center justify-center border-b">
-            <Flame className="h-6 w-6 shrink-0 text-primary" />
-          </div>
-          <nav className="flex-1 space-y-1 p-2">
-            {allCollapsedItems.map((item) => renderNavLink(item))}
-          </nav>
-        </aside>
-        <OnboardNodeDialog open={onboardOpen} onOpenChange={setOnboardOpen} />
-      </>
-    );
-  }
 
   return (
     <>
-      <aside className="flex h-screen w-60 flex-col border-r bg-card/80 backdrop-blur-sm transition-all duration-300">
-        <div className="flex h-14 items-center gap-2 border-b px-4">
-          <Flame className="h-6 w-6 shrink-0 text-primary" />
-          <span className="text-lg font-bold tracking-tight">Prometheus</span>
+      <aside className="flex h-screen w-60 flex-col bg-sidebar border-r border-border">
+        {/* Logo */}
+        <div className="flex h-14 items-center gap-2 px-4">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-900 dark:bg-white">
+            <Flame className="h-4 w-4 text-white dark:text-zinc-900" />
+          </div>
+          <span className="text-sm font-semibold">Prometheus</span>
         </div>
 
-        <nav className="flex-1 space-y-1 overflow-y-auto p-2">
-          {mainNavItems.map((item) => renderNavLink(item))}
+        {/* Top Nav */}
+        <nav className="space-y-0.5 px-3">
+          {topNavItems.map(renderNavLink)}
+        </nav>
 
-          {/* Server (Nodes) Tree */}
-          <Collapsible open={nodesOpen} onOpenChange={setNodesOpen}>
+        <div className="mx-3 my-2 border-t border-border" />
+
+        {/* Main Nav + Sections */}
+        <nav className="flex-1 space-y-0.5 overflow-y-auto px-3">
+          {mainNavItems.map(renderNavLink)}
+
+          {/* Server Collapsible */}
+          <Collapsible open={serversOpen} onOpenChange={setServersOpen}>
             <CollapsibleTrigger
               className={cn(
-                "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
                 pathname.startsWith("/nodes")
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                  ? "bg-accent text-foreground font-semibold"
+                  : "text-sidebar-muted hover:bg-accent hover:text-foreground"
               )}
             >
               <Server className="h-4 w-4 shrink-0" />
               <span className="flex-1 text-left">Server</span>
-              {nodesOpen ? (
-                <ChevronDown className="h-3.5 w-3.5 shrink-0" />
-              ) : (
-                <ChevronRight className="h-3.5 w-3.5 shrink-0" />
-              )}
+              {serversOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
             </CollapsibleTrigger>
-
-            <CollapsibleContent className="ml-2 space-y-0.5 border-l border-muted pl-2">
+            <CollapsibleContent className="ml-4 space-y-0.5 border-l border-border pl-3">
               {nodes.map((node) => (
                 <Collapsible
                   key={node.id}
                   open={openNodes[node.id] ?? false}
-                  onOpenChange={() => toggleNode(node.id)}
+                  onOpenChange={() => setOpenNodes((prev) => ({ ...prev, [node.id]: !prev[node.id] }))}
                 >
                   <CollapsibleTrigger
                     className={cn(
                       "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition-colors",
-                      isNodeActive(node.id)
-                        ? "bg-primary/10 text-primary font-medium"
-                        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                      pathname.startsWith(`/nodes/${node.id}`)
+                        ? "bg-accent text-foreground font-medium"
+                        : "text-sidebar-muted hover:bg-accent hover:text-foreground"
                     )}
                   >
-                    <span
-                      className={cn(
-                        "h-2 w-2 shrink-0 rounded-full",
-                        node.is_online ? "bg-green-500" : "bg-red-500"
-                      )}
-                    />
+                    <span className={cn("h-2 w-2 shrink-0 rounded-full", node.is_online ? "bg-green-500" : "bg-red-500")} />
                     <span className="flex-1 truncate text-left">{node.name}</span>
-                    {openNodes[node.id] ? (
-                      <ChevronDown className="h-3 w-3 shrink-0" />
-                    ) : (
-                      <ChevronRight className="h-3 w-3 shrink-0" />
-                    )}
+                    {openNodes[node.id] ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
                   </CollapsibleTrigger>
-
-                  <CollapsibleContent className="ml-3 space-y-0.5 border-l border-muted pl-2">
+                  <CollapsibleContent className="ml-3 space-y-0.5 border-l border-border pl-2">
                     {nodeSubItems.map((sub) => {
                       const SubIcon = sub.icon;
-                      const subActive = isNodeSubActive(node.id, sub.path);
+                      const subActive = pathname === `/nodes/${node.id}/${sub.path}`;
                       return (
                         <Link
                           key={sub.path}
@@ -294,8 +235,8 @@ export function Sidebar({ collapsed = false }: SidebarProps) {
                           className={cn(
                             "flex items-center gap-2 rounded-lg px-2 py-1 text-xs transition-colors",
                             subActive
-                              ? "bg-primary/10 text-primary font-medium"
-                              : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                              ? "bg-accent text-foreground font-medium"
+                              : "text-sidebar-muted hover:bg-accent hover:text-foreground"
                           )}
                         >
                           <SubIcon className="h-3.5 w-3.5 shrink-0" />
@@ -306,10 +247,9 @@ export function Sidebar({ collapsed = false }: SidebarProps) {
                   </CollapsibleContent>
                 </Collapsible>
               ))}
-
               <button
                 onClick={() => setOnboardOpen(true)}
-                className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-sidebar-muted transition-colors hover:bg-accent hover:text-foreground"
               >
                 <Plus className="h-3.5 w-3.5 shrink-0" />
                 <span>Server hinzufuegen</span>
@@ -317,57 +257,49 @@ export function Sidebar({ collapsed = false }: SidebarProps) {
             </CollapsibleContent>
           </Collapsible>
 
-          {/* Feature Nav Items */}
-          {featureNavItems.map((item) => renderNavLink(item))}
-
-          {/* Ressourcen (Sync Center) */}
-          <Collapsible open={resourcesOpen} onOpenChange={setResourcesOpen}>
-            <CollapsibleTrigger
-              className={cn(
-                "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                (pathname.startsWith("/tags") || pathname.startsWith("/isos"))
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-              )}
-            >
-              <Package className="h-4 w-4 shrink-0" />
-              <span className="flex-1 text-left">Ressourcen</span>
-              {resourcesOpen ? (
-                <ChevronDown className="h-3.5 w-3.5 shrink-0" />
-              ) : (
-                <ChevronRight className="h-3.5 w-3.5 shrink-0" />
-              )}
-            </CollapsibleTrigger>
-            <CollapsibleContent className="ml-2 space-y-0.5 border-l border-muted pl-2">
-              {resourceSubItems.map((sub) => {
-                const SubIcon = sub.icon;
-                const subActive = pathname.startsWith(sub.matchPrefix);
-                return (
-                  <Link
-                    key={sub.href}
-                    href={sub.href}
-                    className={cn(
-                      "flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition-colors",
-                      subActive
-                        ? "bg-primary/10 text-primary font-medium"
-                        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                    )}
-                  >
-                    <SubIcon className="h-3.5 w-3.5 shrink-0" />
-                    <span>{sub.label}</span>
-                  </Link>
-                );
-              })}
-            </CollapsibleContent>
-          </Collapsible>
-
-          <div className="my-2 border-t border-border" />
-
-          {/* Bottom Nav Items */}
-          {bottomNavItems.map((item) => renderNavLink(item))}
+          {/* Grouped Sections */}
+          {sections.map((section) => (
+            <div key={section.label}>
+              <div className="mb-1 mt-4 px-3 text-[11px] font-medium uppercase tracking-wider text-sidebar-muted">
+                {section.label}
+              </div>
+              {section.items.map(renderNavLink)}
+            </div>
+          ))}
         </nav>
-      </aside>
 
+        {/* User Area */}
+        <div className="border-t border-border p-3">
+          <button
+            onClick={() => setUserMenuOpen(!userMenuOpen)}
+            className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-sm transition-colors hover:bg-accent"
+          >
+            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-zinc-200 text-xs font-medium text-zinc-700 dark:bg-zinc-700 dark:text-zinc-200">
+              {initials}
+            </div>
+            <span className="flex-1 text-left font-medium text-sm">{user?.username ?? "User"}</span>
+            <ChevronUp className={cn("h-3.5 w-3.5 text-sidebar-muted transition-transform", !userMenuOpen && "rotate-180")} />
+          </button>
+          {userMenuOpen && (
+            <div className="mt-1 space-y-0.5">
+              <button
+                onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                className="flex w-full items-center gap-3 rounded-lg px-2 py-1.5 text-sm text-sidebar-muted transition-colors hover:bg-accent hover:text-foreground"
+              >
+                {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                <span>{theme === "dark" ? "Light Mode" : "Dark Mode"}</span>
+              </button>
+              <button
+                onClick={handleLogout}
+                className="flex w-full items-center gap-3 rounded-lg px-2 py-1.5 text-sm text-sidebar-muted transition-colors hover:bg-accent hover:text-foreground"
+              >
+                <LogOut className="h-4 w-4" />
+                <span>Abmelden</span>
+              </button>
+            </div>
+          )}
+        </div>
+      </aside>
       <OnboardNodeDialog open={onboardOpen} onOpenChange={setOnboardOpen} />
     </>
   );
