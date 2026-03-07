@@ -5,6 +5,7 @@ import { useNodeStore } from "@/stores/node-store";
 import { DashboardOverview } from "@/components/dashboard/dashboard-overview";
 import { BriefingWidget } from "@/components/dashboard/briefing-widget";
 import { SecurityWidget } from "@/components/dashboard/security-widget";
+import { AttentionBanner } from "@/components/dashboard/attention-banner";
 
 export default function DashboardPage() {
   const { fetchNodes } = useNodeStore();
@@ -21,6 +22,7 @@ export default function DashboardPage() {
           Uebersicht ueber Ihre gesamte Infrastruktur.
         </p>
       </div>
+      <AttentionBanner />
       <BriefingWidget />
       <SecurityWidget />
       <DashboardOverview />

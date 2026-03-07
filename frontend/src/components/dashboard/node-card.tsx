@@ -52,8 +52,8 @@ export function NodeCard({ node, status }: NodeCardProps) {
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
-                <Server className="h-4 w-4 text-primary" />
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-100 dark:bg-zinc-800">
+                <Server className="h-4 w-4 text-zinc-600 dark:text-zinc-400" />
               </div>
               <CardTitle className="text-base">{node.name}</CardTitle>
             </div>
