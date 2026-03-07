@@ -83,7 +83,7 @@ function HostGroupNodeComponent({ data, id }: NodeProps) {
     >
       <Handle type="target" position={Position.Top} className="!bg-muted-foreground !w-3 !h-3 !border-2 !border-background !-top-1.5" />
 
-      <div className="px-4 py-3 bg-card/80 dark:bg-card/60 backdrop-blur-sm rounded-t-2xl border-b border-border/30">
+      <div className="px-4 py-3 bg-card rounded-t-2xl border-b border-border/30">
         <div className="flex items-center gap-2.5">
           <div className={cn(
             "h-3 w-3 rounded-full shrink-0 ring-2 ring-offset-1 ring-offset-card",

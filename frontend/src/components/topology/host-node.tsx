@@ -56,7 +56,7 @@ function HostNodeComponent({ data }: NodeProps) {
   return (
     <div
       className={cn(
-        "rounded-2xl border-2 bg-card/95 dark:bg-card/90 backdrop-blur-sm shadow-lg min-w-[200px] transition-all duration-300",
+        "rounded-2xl border-2 bg-card shadow-lg min-w-[200px] transition-all duration-300",
         getStatusBorderClass(d.status),
         online && "shadow-green-500/5 dark:shadow-green-500/10"
       )}

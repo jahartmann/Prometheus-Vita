@@ -33,11 +33,11 @@ export function NetworkInterfaces({ nodeId, interfaces, onRefresh }: NetworkInte
     <div className="space-y-4">
       {/* Summary Cards */}
       <div className="grid gap-4 sm:grid-cols-3">
-        <Card hover className="gradient-blue">
+        <Card hover>
           <CardContent className="p-5">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-kpi-blue/15">
-                <Network className="h-5 w-5 text-kpi-blue" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100 dark:bg-zinc-800">
+                <Network className="h-5 w-5 text-zinc-600 dark:text-zinc-400" />
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Interfaces</p>
@@ -47,11 +47,11 @@ export function NetworkInterfaces({ nodeId, interfaces, onRefresh }: NetworkInte
           </CardContent>
         </Card>
 
-        <Card hover className="gradient-green">
+        <Card hover>
           <CardContent className="p-5">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-kpi-green/15">
-                <Wifi className="h-5 w-5 text-kpi-green" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100 dark:bg-zinc-800">
+                <Wifi className="h-5 w-5 text-zinc-600 dark:text-zinc-400" />
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Aktiv</p>
@@ -64,11 +64,11 @@ export function NetworkInterfaces({ nodeId, interfaces, onRefresh }: NetworkInte
           </CardContent>
         </Card>
 
-        <Card hover className="gradient-orange">
+        <Card hover>
           <CardContent className="p-5">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-kpi-orange/15">
-                <Network className="h-5 w-5 text-kpi-orange" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100 dark:bg-zinc-800">
+                <Network className="h-5 w-5 text-zinc-600 dark:text-zinc-400" />
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Mit IP</p>

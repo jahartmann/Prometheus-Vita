@@ -303,7 +303,7 @@ export default function MigrationsPage() {
                   isActive &&
                     "border-primary bg-primary text-primary-foreground",
                   isCompleted &&
-                    "border-primary bg-primary/10 text-primary",
+                    "border-primary bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100",
                   !isActive &&
                     !isCompleted &&
                     "border-muted-foreground/30 text-muted-foreground"
@@ -734,8 +734,8 @@ export default function MigrationsPage() {
         </Card>
 
         <div className="flex flex-col items-center gap-1">
-          <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-            <ChevronRight className="h-5 w-5 text-primary" />
+          <div className="h-10 w-10 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center">
+            <ChevronRight className="h-5 w-5 text-zinc-600 dark:text-zinc-400" />
           </div>
           <span className="text-xs text-muted-foreground">Migration</span>
         </div>

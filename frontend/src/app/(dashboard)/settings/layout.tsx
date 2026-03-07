@@ -81,7 +81,7 @@ export default function SettingsLayout({
                 className={cn(
                   "flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                   active
-                    ? "bg-primary/10 text-primary"
+                    ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100"
                     : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                 )}
               >

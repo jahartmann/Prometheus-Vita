@@ -80,7 +80,7 @@ function VMNodeComponent({ data }: NodeProps) {
   return (
     <div
       className={cn(
-        "rounded-xl border bg-card/95 dark:bg-card/90 px-3 py-2 shadow-sm min-w-[150px] max-w-[180px] transition-all duration-300",
+        "rounded-xl border bg-card px-3 py-2 shadow-sm min-w-[150px] max-w-[180px] transition-all duration-300",
         getStatusBorderClass(d.status),
         getHeatmapBg(d.cpuUsage, d.memoryPercent),
         d.highlighted && "ring-2 ring-blue-500 ring-offset-1 ring-offset-background shadow-md shadow-blue-500/20",

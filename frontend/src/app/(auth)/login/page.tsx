@@ -37,8 +37,8 @@ export default function LoginPage() {
   return (
     <div className="w-full max-w-md px-4">
       <div className="mb-8 flex flex-col items-center">
-        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10">
-          <Flame className="h-9 w-9 text-primary" />
+        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-zinc-100 dark:bg-zinc-800">
+          <Flame className="h-9 w-9 text-zinc-600 dark:text-zinc-400" />
         </div>
         <h1 className="text-2xl font-bold tracking-tight">Prometheus</h1>
         <p className="mt-1 text-sm text-muted-foreground">

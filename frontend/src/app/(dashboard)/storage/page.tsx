@@ -483,11 +483,11 @@ export default function ClusterStoragePage() {
 
       {/* KPI Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        <Card hover className="gradient-blue">
+        <Card hover>
           <CardContent className="p-5">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-kpi-blue/15">
-                <Database className="h-5 w-5 text-kpi-blue" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100 dark:bg-zinc-800">
+                <Database className="h-5 w-5 text-zinc-600 dark:text-zinc-400" />
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Gesamt-Speicher</p>
@@ -497,11 +497,11 @@ export default function ClusterStoragePage() {
           </CardContent>
         </Card>
 
-        <Card hover className="gradient-orange">
+        <Card hover>
           <CardContent className="p-5">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-kpi-orange/15">
-                <HardDrive className="h-5 w-5 text-kpi-orange" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100 dark:bg-zinc-800">
+                <HardDrive className="h-5 w-5 text-zinc-600 dark:text-zinc-400" />
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Belegt</p>
@@ -511,11 +511,11 @@ export default function ClusterStoragePage() {
           </CardContent>
         </Card>
 
-        <Card hover className="gradient-green">
+        <Card hover>
           <CardContent className="p-5">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-kpi-green/15">
-                <HardDrive className="h-5 w-5 text-kpi-green" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100 dark:bg-zinc-800">
+                <HardDrive className="h-5 w-5 text-zinc-600 dark:text-zinc-400" />
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Verfuegbar</p>
@@ -528,8 +528,8 @@ export default function ClusterStoragePage() {
         <Card hover>
           <CardContent className="p-5">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/15">
-                <TrendingUp className="h-5 w-5 text-primary" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100 dark:bg-zinc-800">
+                <TrendingUp className="h-5 w-5 text-zinc-600 dark:text-zinc-400" />
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Auslastung (Avg)</p>
@@ -544,8 +544,8 @@ export default function ClusterStoragePage() {
         <Card hover>
           <CardContent className="p-5">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/15">
-                <Server className="h-5 w-5 text-primary" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100 dark:bg-zinc-800">
+                <Server className="h-5 w-5 text-zinc-600 dark:text-zinc-400" />
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Pools / Nodes</p>

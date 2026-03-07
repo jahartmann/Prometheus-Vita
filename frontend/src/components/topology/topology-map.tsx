@@ -820,12 +820,12 @@ export function TopologyMap() {
         }}
       >
         <Background variant={BackgroundVariant.Dots} gap={24} size={1} className="opacity-40" />
-        <Controls showInteractive={false} className="!border-border !bg-card/90 !backdrop-blur-sm !rounded-xl !shadow-lg" />
+        <Controls showInteractive={false} className="!border-border !bg-card !rounded-xl !shadow-lg" />
         <MiniMap
           nodeStrokeWidth={2}
           pannable
           zoomable
-          className="!bg-card/90 !backdrop-blur-sm !border-border !rounded-xl !shadow-lg"
+          className="!bg-card !border-border !rounded-xl !shadow-lg"
           nodeColor={(node) => {
             switch (node.type) {
               case "host":
@@ -849,7 +849,7 @@ export function TopologyMap() {
         <Panel position="top-left">
           <div className="flex flex-col gap-2">
             {/* View Mode Toggle */}
-            <div className="glass rounded-xl p-1.5 shadow-lg flex gap-1">
+            <div className="bg-card border border-border rounded-xl p-1.5 shadow-lg flex gap-1">
               <button
                 onClick={() => setViewMode("cluster")}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
@@ -886,7 +886,7 @@ export function TopologyMap() {
             </div>
 
             {/* Search & Filter Bar */}
-            <div className="glass rounded-xl p-2 shadow-lg flex items-center gap-2">
+            <div className="bg-card border border-border rounded-xl p-2 shadow-lg flex items-center gap-2">
               <div className="relative flex-1 min-w-[200px]">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                 <Input
@@ -925,7 +925,7 @@ export function TopologyMap() {
 
             {/* Filter Panel */}
             {showFilters && (
-              <div className="glass rounded-xl p-3 shadow-lg space-y-3">
+              <div className="bg-card border border-border rounded-xl p-3 shadow-lg space-y-3">
                 <div>
                   <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1.5 block">Status</label>
                   <div className="flex gap-1">
@@ -996,7 +996,7 @@ export function TopologyMap() {
 
         {/* Stats Panel - Top Right */}
         <Panel position="top-right">
-          <div className="glass rounded-xl p-3 shadow-lg space-y-2 min-w-[180px]">
+          <div className="bg-card border border-border rounded-xl p-3 shadow-lg space-y-2 min-w-[180px]">
             <h3 className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Infrastruktur</h3>
             <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
               <div className="flex items-center gap-1.5">
