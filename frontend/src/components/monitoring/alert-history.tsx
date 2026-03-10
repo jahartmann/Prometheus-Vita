@@ -42,8 +42,8 @@ export function AlertHistory() {
         predictionApi.listCritical(),
       ]);
 
-      const anomalies: AnomalyRecord[] = Array.isArray(anomaliesRaw) ? anomaliesRaw : [];
-      const predictions: MaintenancePrediction[] = Array.isArray(predictionsRaw) ? predictionsRaw : [];
+      const anomalies: AnomalyRecord[] = Array.isArray(anomaliesRaw) ? (anomaliesRaw as AnomalyRecord[]) : [];
+      const predictions: MaintenancePrediction[] = Array.isArray(predictionsRaw) ? (predictionsRaw as MaintenancePrediction[]) : [];
 
       const anomalyEntries: TimelineEntry[] = anomalies.map((a) => ({
         id: a.id,
