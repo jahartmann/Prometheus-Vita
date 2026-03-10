@@ -9,6 +9,7 @@ import (
 
 	"github.com/antigravity/prometheus/internal/model"
 	"github.com/antigravity/prometheus/internal/repository"
+	"github.com/redis/go-redis/v9"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -17,23 +18,40 @@ var (
 	ErrUserInactive       = errors.New("user account is inactive")
 	ErrTokenRevoked       = errors.New("token has been revoked")
 	ErrTokenExpired       = errors.New("token has expired")
+	ErrAccountLocked      = errors.New("account is temporarily locked")
+)
+
+const (
+	lockoutTTL      = 15 * time.Minute
+	maxLoginAttempts = 5
 )
 
 type Service struct {
 	userRepo  repository.UserRepository
 	tokenRepo repository.TokenRepository
 	jwt       *JWTService
+	redis     *redis.Client
 }
 
-func NewService(userRepo repository.UserRepository, tokenRepo repository.TokenRepository, jwtSvc *JWTService) *Service {
+func NewService(userRepo repository.UserRepository, tokenRepo repository.TokenRepository, jwtSvc *JWTService, redisClient *redis.Client) *Service {
 	return &Service{
 		userRepo:  userRepo,
 		tokenRepo: tokenRepo,
 		jwt:       jwtSvc,
+		redis:     redisClient,
 	}
 }
 
 func (s *Service) Login(ctx context.Context, req model.LoginRequest) (*model.LoginResponse, error) {
+	// Check if account is locked
+	lockoutKey := fmt.Sprintf("lockout:%s", req.Username)
+	exists, err := s.redis.Exists(ctx, lockoutKey).Result()
+	if err != nil {
+		slog.Warn("failed to check lockout status", slog.Any("error", err))
+	} else if exists > 0 {
+		return nil, ErrAccountLocked
+	}
+
 	user, err := s.userRepo.GetByUsername(ctx, req.Username)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
@@ -47,8 +65,25 @@ func (s *Service) Login(ctx context.Context, req model.LoginRequest) (*model.Log
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
+		// Increment failed login attempts
+		attemptsKey := fmt.Sprintf("login_attempts:%s", req.Username)
+		attempts, incrErr := s.redis.Incr(ctx, attemptsKey).Result()
+		if incrErr != nil {
+			slog.Warn("failed to increment login attempts", slog.Any("error", incrErr))
+		} else {
+			if attempts == 1 {
+				s.redis.Expire(ctx, attemptsKey, lockoutTTL)
+			}
+			if attempts >= maxLoginAttempts {
+				s.redis.Set(ctx, lockoutKey, "1", lockoutTTL)
+			}
+		}
 		return nil, ErrInvalidCredentials
 	}
+
+	// Successful login: clear lockout and attempts
+	attemptsKey := fmt.Sprintf("login_attempts:%s", req.Username)
+	s.redis.Del(ctx, lockoutKey, attemptsKey)
 
 	tokenPair, err := s.jwt.GenerateTokenPair(user)
 	if err != nil {
@@ -141,10 +176,11 @@ func (s *Service) SeedAdmin(ctx context.Context, username, password string) erro
 	}
 
 	user := &model.User{
-		Username:     username,
-		PasswordHash: string(hash),
-		Role:         model.RoleAdmin,
-		IsActive:     true,
+		Username:           username,
+		PasswordHash:       string(hash),
+		Role:               model.RoleAdmin,
+		IsActive:           true,
+		MustChangePassword: password == "changeme",
 	}
 
 	if err := s.userRepo.Create(ctx, user); err != nil {

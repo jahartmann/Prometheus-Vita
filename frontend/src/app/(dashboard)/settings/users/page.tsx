@@ -24,6 +24,7 @@ import { CreateUserDialog } from "@/components/users/create-user-dialog";
 import { EditUserDialog } from "@/components/users/edit-user-dialog";
 import { DeleteUserDialog } from "@/components/users/delete-user-dialog";
 import { ChangePasswordDialog } from "@/components/users/change-password-dialog";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type { UserResponse } from "@/types/api";
 
 const roleBadgeVariant: Record<string, "default" | "secondary" | "outline"> = {
@@ -36,6 +37,7 @@ export default function UsersSettingsPage() {
   const { users, isLoading, fetchUsers } = useUserStore();
   const [createOpen, setCreateOpen] = useState(false);
   const [editUser, setEditUser] = useState<UserResponse | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<UserResponse | null>(null);
   const [deleteUser, setDeleteUser] = useState<UserResponse | null>(null);
   const [passwordUser, setPasswordUser] = useState<UserResponse | null>(null);
 
@@ -136,7 +138,7 @@ export default function UsersSettingsPage() {
                             Passwort aendern
                           </DropdownMenuItem>
                           <DropdownMenuItem
-                            onClick={() => setDeleteUser(user)}
+                            onClick={() => setDeleteTarget(user)}
                             className="text-destructive"
                           >
                             <Trash2 className="mr-2 h-4 w-4" />
@@ -163,6 +165,18 @@ export default function UsersSettingsPage() {
         open={!!editUser}
         onOpenChange={(open) => !open && setEditUser(null)}
         onSuccess={fetchUsers}
+      />
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        title="Benutzer loeschen?"
+        description="Diese Aktion kann nicht rueckgaengig gemacht werden."
+        confirmLabel="Loeschen"
+        variant="destructive"
+        onConfirm={() => {
+          setDeleteUser(deleteTarget);
+          setDeleteTarget(null);
+        }}
       />
       <DeleteUserDialog
         user={deleteUser}

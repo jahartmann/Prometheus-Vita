@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { alertApi } from "@/lib/api";
+import { toast } from "sonner";
 import type { AlertRule, AlertSeverity, NotificationChannel, Node, EscalationPolicy } from "@/types/api";
 
 interface AlertRuleDialogProps {
@@ -120,8 +121,10 @@ export function AlertRuleDialog({
       }
       onSuccess();
       onOpenChange(false);
+      toast.success(isEdit ? "Regel aktualisiert" : "Regel erstellt");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Fehler beim Speichern");
+      toast.error("Fehler beim Speichern der Regel");
     } finally {
       setLoading(false);
     }

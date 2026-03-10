@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useAuthStore } from "@/stores/auth-store";
 import { Sidebar } from "./sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ChatPanel } from "@/components/chat/chat-panel";
 import { ChatToggle } from "@/components/chat/chat-toggle";
+import { SearchCommand } from "@/components/search/search-command";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -15,7 +16,8 @@ interface AppLayoutProps {
 export function AppLayout({ children }: AppLayoutProps) {
   const [hydrated, setHydrated] = useState(false);
   const router = useRouter();
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const pathname = usePathname();
+  const { isAuthenticated, user } = useAuthStore();
 
   useEffect(() => {
     if (useAuthStore.persist.hasHydrated()) {
@@ -34,6 +36,17 @@ export function AppLayout({ children }: AppLayoutProps) {
     }
   }, [isAuthenticated, hydrated, router]);
 
+  // Redirect users who must change password
+  useEffect(() => {
+    if (
+      isAuthenticated &&
+      user?.must_change_password &&
+      pathname !== "/change-password"
+    ) {
+      router.push("/change-password?forced=true");
+    }
+  }, [isAuthenticated, user, pathname, router]);
+
   if (!hydrated || !isAuthenticated) {
     return null;
   }
@@ -45,6 +58,7 @@ export function AppLayout({ children }: AppLayoutProps) {
         <main className="flex-1 overflow-auto p-6">{children}</main>
         <ChatPanel />
         <ChatToggle />
+        <SearchCommand />
       </div>
     </TooltipProvider>
   );

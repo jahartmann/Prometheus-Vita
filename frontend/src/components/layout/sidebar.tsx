@@ -16,6 +16,7 @@ import {
   HardDrive,
   FolderArchive,
   BarChart3,
+  FileText,
   Plus,
   Bell,
   Archive,
@@ -102,6 +103,7 @@ const nodeSubItems = [
   { label: "Backups", path: "backups", icon: FolderArchive },
   { label: "ISOs & Templates", path: "iso-templates", icon: Disc },
   { label: "Monitoring", path: "monitoring", icon: BarChart3 },
+  { label: "Logs", path: "logs", icon: FileText },
 ];
 
 export function Sidebar() {

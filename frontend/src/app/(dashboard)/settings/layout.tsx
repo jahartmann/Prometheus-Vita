@@ -2,10 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, Server, Users, Key, Globe, Tag, Shield, Bot, Brain } from "lucide-react";
+import { Bell, Server, Users, Key, Globe, Tag, Shield, Bot, Brain, Lock, ShieldCheck, ClipboardList } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const settingsNav = [
+  {
+    label: "Sicherheit",
+    href: "/settings/security",
+    icon: ShieldCheck,
+  },
   {
     label: "Nodes",
     href: "/settings/nodes",
@@ -50,6 +55,16 @@ const settingsNav = [
     label: "Wissensbasis",
     href: "/settings/brain",
     icon: Brain,
+  },
+  {
+    label: "Passwort-Richtlinie",
+    href: "/settings/password-policy",
+    icon: Lock,
+  },
+  {
+    label: "Audit-Log",
+    href: "/settings/audit-log",
+    icon: ClipboardList,
   },
 ];
 

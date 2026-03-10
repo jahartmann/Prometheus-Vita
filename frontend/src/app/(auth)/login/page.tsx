@@ -28,9 +28,14 @@ export default function LoginPage() {
 
     try {
       await login({ username, password });
-      router.push("/");
+      const user = useAuthStore.getState().user;
+      if (user?.must_change_password) {
+        router.push("/change-password?forced=true");
+      } else {
+        router.push("/");
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login fehlgeschlagen. Bitte versuchen Sie es ernaet.");
+      setError(err instanceof Error ? err.message : "Login fehlgeschlagen. Bitte versuchen Sie es erneut.");
     }
   };
 

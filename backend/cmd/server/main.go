@@ -140,6 +140,7 @@ func main() {
 	sshKeyRepo := repository.NewSSHKeyRepository(dbPool)
 	apiTokenRepo := repository.NewAPITokenRepository(dbPool)
 	auditRepo := repository.NewAuditRepository(dbPool)
+	policyRepo := repository.NewPasswordPolicyRepository(dbPool)
 
 	// Phase 8 Repositories
 	securityEventRepo := repository.NewSecurityEventRepository(dbPool)
@@ -151,7 +152,7 @@ func main() {
 
 	// Services
 	jwtSvc := auth.NewJWTService(cfg.JWT.Secret, cfg.JWT.AccessTokenExpiry, cfg.JWT.RefreshTokenExpiry)
-	authService := auth.NewService(userRepo, tokenRepo, jwtSvc)
+	authService := auth.NewService(userRepo, tokenRepo, jwtSvc, redisClient)
 	clientFactory := proxmox.NewClientFactory(encryptor)
 
 	// SSH Pool
@@ -172,7 +173,8 @@ func main() {
 	restoreSvc := backup.NewRestoreService(backupRepo, backupFileRepo, nodeRepo, encryptor, sshPool)
 
 	// User Service
-	userSvc := userService.NewService(userRepo)
+	pwValidator := userService.NewPasswordValidator(policyRepo)
+	userSvc := userService.NewService(userRepo, pwValidator)
 
 	// Notification Service
 	notifSvc := notification.NewService(channelRepo, historyRepo, encryptor)
@@ -363,13 +365,15 @@ func main() {
 		Update:       handler.NewUpdateHandler(updateSvc),
 		Rightsizing:  handler.NewRightsizingHandler(rightsizingSvc),
 		SSHKey:       handler.NewSSHKeyHandler(sshkeySvc),
-		Gateway:      handler.NewGatewayHandler(gatewaySvc, auditRepo),
-		Topology:     handler.NewTopologyHandler(topologySvc),
-		Brain:        handler.NewBrainHandler(brainSvc),
-		Reflex:       handler.NewReflexHandler(reflexSvc),
-		AgentConfig:  handler.NewAgentConfigHandler(agentConfigRepo, llmRegistry, ollamaProvider),
-		SyncCenter:   handler.NewSyncCenterHandler(nodeSvc, nodeRepo, tagRepo),
-		Security:     handler.NewSecurityHandler(securityEventRepo, analysisSvc),
+		Gateway:        handler.NewGatewayHandler(gatewaySvc, auditRepo),
+		Log:            handler.NewLogHandler(nodeSvc),
+		Topology:       handler.NewTopologyHandler(topologySvc),
+		Brain:          handler.NewBrainHandler(brainSvc),
+		Reflex:         handler.NewReflexHandler(reflexSvc),
+		AgentConfig:    handler.NewAgentConfigHandler(agentConfigRepo, llmRegistry, ollamaProvider),
+		SyncCenter:     handler.NewSyncCenterHandler(nodeSvc, nodeRepo, tagRepo),
+		Security:       handler.NewSecurityHandler(securityEventRepo, analysisSvc),
+		PasswordPolicy: handler.NewPasswordPolicyHandler(policyRepo),
 	}
 
 	// Setup routes

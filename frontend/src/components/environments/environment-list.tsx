@@ -19,6 +19,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useEnvironmentStore } from "@/stores/environment-store";
+import { toast } from "sonner";
 import { EnvironmentForm } from "./environment-form";
 import type { Environment } from "@/types/api";
 
@@ -34,8 +35,9 @@ export function EnvironmentList() {
   const handleDelete = async (id: string) => {
     try {
       await deleteEnvironment(id);
+      toast.success("Umgebung geloescht");
     } catch {
-      // Fehler
+      toast.error("Fehler beim Loeschen der Umgebung");
     }
   };
 

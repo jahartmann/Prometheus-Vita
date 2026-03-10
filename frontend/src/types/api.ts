@@ -5,9 +5,33 @@ export interface User {
   role: string;
   is_active: boolean;
   autonomy_level: number;
+  must_change_password: boolean;
   last_login?: string | null;
   created_at?: string;
   updated_at?: string;
+}
+
+export interface PasswordPolicy {
+  id: string;
+  min_length: number;
+  require_uppercase: boolean;
+  require_lowercase: boolean;
+  require_digit: boolean;
+  require_special: boolean;
+  max_length: number;
+  disallow_username: boolean;
+  updated_at: string;
+  updated_by?: string;
+}
+
+export interface UpdatePasswordPolicyRequest {
+  min_length?: number;
+  require_uppercase?: boolean;
+  require_lowercase?: boolean;
+  require_digit?: boolean;
+  require_special?: boolean;
+  max_length?: number;
+  disallow_username?: boolean;
 }
 
 export interface UserResponse {

@@ -13,6 +13,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { userApi } from "@/lib/api";
+import { toast } from "sonner";
 
 interface CreateUserDialogProps {
   open: boolean;
@@ -41,9 +42,12 @@ export function CreateUserDialog({ open, onOpenChange, onSuccess }: CreateUserDi
       setRole("viewer");
       onOpenChange(false);
       onSuccess();
+      toast.success("Benutzer erstellt");
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { error?: string } } };
-      setError(axiosErr.response?.data?.error || "Benutzer konnte nicht erstellt werden");
+      const msg = axiosErr.response?.data?.error || "Benutzer konnte nicht erstellt werden";
+      setError(msg);
+      toast.error(`Fehler: ${msg}`);
     } finally {
       setIsLoading(false);
     }

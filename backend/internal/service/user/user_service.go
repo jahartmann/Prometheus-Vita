@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/antigravity/prometheus/internal/model"
 	"github.com/antigravity/prometheus/internal/repository"
@@ -20,11 +21,12 @@ var (
 )
 
 type Service struct {
-	userRepo repository.UserRepository
+	userRepo    repository.UserRepository
+	pwValidator *PasswordValidator
 }
 
-func NewService(userRepo repository.UserRepository) *Service {
-	return &Service{userRepo: userRepo}
+func NewService(userRepo repository.UserRepository, pwValidator *PasswordValidator) *Service {
+	return &Service{userRepo: userRepo, pwValidator: pwValidator}
 }
 
 func (s *Service) List(ctx context.Context) ([]model.UserResponse, error) {
@@ -61,6 +63,13 @@ func (s *Service) Create(ctx context.Context, req model.CreateUserRequest) (*mod
 
 	if !req.Role.IsValid() {
 		return nil, fmt.Errorf("invalid role: %s", req.Role)
+	}
+
+	if s.pwValidator != nil {
+		violations := s.pwValidator.Validate(ctx, req.Password, req.Username)
+		if len(violations) > 0 {
+			return nil, fmt.Errorf("password policy: %s", strings.Join(violations, "; "))
+		}
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
@@ -162,14 +171,23 @@ func (s *Service) ChangePassword(ctx context.Context, id uuid.UUID, req model.Ch
 		}
 	}
 
+	// Fetch user for current password verification and policy validation
+	user, err := s.userRepo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+
 	// If current password provided, verify it
 	if req.CurrentPassword != "" {
-		user, err := s.userRepo.GetByID(ctx, id)
-		if err != nil {
-			return err
-		}
 		if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.CurrentPassword)); err != nil {
 			return ErrWrongPassword
+		}
+	}
+
+	if s.pwValidator != nil {
+		violations := s.pwValidator.Validate(ctx, req.NewPassword, user.Username)
+		if len(violations) > 0 {
+			return fmt.Errorf("password policy: %s", strings.Join(violations, "; "))
 		}
 	}
 
@@ -178,5 +196,15 @@ func (s *Service) ChangePassword(ctx context.Context, id uuid.UUID, req model.Ch
 		return fmt.Errorf("hash password: %w", err)
 	}
 
-	return s.userRepo.UpdatePassword(ctx, id, string(hash))
+	if err := s.userRepo.UpdatePassword(ctx, id, string(hash)); err != nil {
+		return err
+	}
+
+	// Clear must_change_password flag
+	if user != nil && user.MustChangePassword {
+		user.MustChangePassword = false
+		_ = s.userRepo.Update(ctx, user)
+	}
+
+	return nil
 }

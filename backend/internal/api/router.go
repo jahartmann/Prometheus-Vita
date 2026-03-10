@@ -39,13 +39,15 @@ type Handlers struct {
 	Update       *handler.UpdateHandler
 	Rightsizing  *handler.RightsizingHandler
 	SSHKey       *handler.SSHKeyHandler
-	Gateway      *handler.GatewayHandler
-	Topology     *handler.TopologyHandler
-	Brain        *handler.BrainHandler
-	Reflex       *handler.ReflexHandler
-	AgentConfig  *handler.AgentConfigHandler
-	SyncCenter   *handler.SyncCenterHandler
-	Security     *handler.SecurityHandler
+	Gateway        *handler.GatewayHandler
+	Log            *handler.LogHandler
+	Topology       *handler.TopologyHandler
+	Brain          *handler.BrainHandler
+	Reflex         *handler.ReflexHandler
+	AgentConfig    *handler.AgentConfigHandler
+	SyncCenter     *handler.SyncCenterHandler
+	Security       *handler.SecurityHandler
+	PasswordPolicy *handler.PasswordPolicyHandler
 }
 
 func SetupRouter(e *echo.Echo, cfg *config.Config, jwtSvc *auth.JWTService, h Handlers, gatewaySvc *gateway.Service, redisClient *redis.Client, auditRepo repository.AuditRepository) {
@@ -53,6 +55,7 @@ func SetupRouter(e *echo.Echo, cfg *config.Config, jwtSvc *auth.JWTService, h Ha
 	e.Use(middleware.Recovery())
 	e.Use(middleware.RequestID())
 	e.Use(middleware.RequestLogger())
+	e.Use(middleware.SecurityHeaders())
 	e.Use(middleware.CORS(cfg.CORS))
 
 	// Rate limiting (applied globally)
@@ -135,6 +138,11 @@ func SetupRouter(e *echo.Echo, cfg *config.Config, jwtSvc *auth.JWTService, h Ha
 
 	// Cluster-wide network summary
 	protected.GET("/network-summary", h.Metrics.GetClusterNetworkSummary)
+
+	// Node logs
+	if h.Log != nil {
+		nodes.GET("/:id/logs", h.Log.GetLogs)
+	}
 
 	// PBS (read)
 	nodes.GET("/:id/pbs/datastores", h.PBS.GetDatastores)
@@ -237,6 +245,15 @@ func SetupRouter(e *echo.Echo, cfg *config.Config, jwtSvc *auth.JWTService, h Ha
 
 	// Password change (admin + self) - protected but not admin-only
 	users.POST("/:id/password", h.User.ChangePassword)
+
+	// Password Policy (admin only for updates, all authenticated for read)
+	if h.PasswordPolicy != nil {
+		policyRoutes := protected.Group("/password-policy")
+		policyRoutes.GET("", h.PasswordPolicy.Get)
+		policyAdmin := policyRoutes.Group("")
+		policyAdmin.Use(middleware.RequireRole(model.RoleAdmin))
+		policyAdmin.PUT("", h.PasswordPolicy.Update)
+	}
 
 	// DR - node-scoped (read)
 	nodes.GET("/:id/dr/profile", h.DR.GetLatestProfile)

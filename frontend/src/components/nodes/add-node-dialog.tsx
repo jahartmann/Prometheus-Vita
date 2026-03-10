@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import api from "@/lib/api";
+import { toast } from "sonner";
 import { useNodeStore } from "@/stores/node-store";
 import type {
   CreateNodeRequest,
@@ -81,8 +82,9 @@ export function AddNodeDialog({ open, onOpenChange }: AddNodeDialogProps) {
       addNode(response.data);
       onOpenChange(false);
       resetForm();
+      toast.success("Node hinzugefuegt");
     } catch {
-      // Fehler wird durch API-Interceptor behandelt
+      toast.error("Fehler beim Hinzufuegen des Nodes");
     }
     setIsSubmitting(false);
   };

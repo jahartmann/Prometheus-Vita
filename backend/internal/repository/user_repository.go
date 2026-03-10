@@ -37,9 +37,9 @@ func NewUserRepository(db *pgxpool.Pool) UserRepository {
 func (r *pgUserRepository) Create(ctx context.Context, user *model.User) error {
 	user.ID = uuid.New()
 	_, err := r.db.Exec(ctx,
-		`INSERT INTO users (id, username, email, password_hash, role, is_active, autonomy_level, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())`,
-		user.ID, user.Username, user.Email, user.PasswordHash, user.Role, user.IsActive, user.AutonomyLevel,
+		`INSERT INTO users (id, username, email, password_hash, role, is_active, autonomy_level, must_change_password, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())`,
+		user.ID, user.Username, user.Email, user.PasswordHash, user.Role, user.IsActive, user.AutonomyLevel, user.MustChangePassword,
 	)
 	if err != nil {
 		return fmt.Errorf("create user: %w", err)
@@ -50,10 +50,10 @@ func (r *pgUserRepository) Create(ctx context.Context, user *model.User) error {
 func (r *pgUserRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.User, error) {
 	var u model.User
 	err := r.db.QueryRow(ctx,
-		`SELECT id, username, email, password_hash, role, is_active, autonomy_level, created_at, updated_at, last_login
+		`SELECT id, username, email, password_hash, role, is_active, autonomy_level, created_at, updated_at, last_login, must_change_password
 		 FROM users WHERE id = $1`, id,
 	).Scan(&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.Role, &u.IsActive, &u.AutonomyLevel,
-		&u.CreatedAt, &u.UpdatedAt, &u.LastLogin)
+		&u.CreatedAt, &u.UpdatedAt, &u.LastLogin, &u.MustChangePassword)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
@@ -66,10 +66,10 @@ func (r *pgUserRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.Us
 func (r *pgUserRepository) GetByUsername(ctx context.Context, username string) (*model.User, error) {
 	var u model.User
 	err := r.db.QueryRow(ctx,
-		`SELECT id, username, email, password_hash, role, is_active, autonomy_level, created_at, updated_at, last_login
+		`SELECT id, username, email, password_hash, role, is_active, autonomy_level, created_at, updated_at, last_login, must_change_password
 		 FROM users WHERE username = $1`, username,
 	).Scan(&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.Role, &u.IsActive, &u.AutonomyLevel,
-		&u.CreatedAt, &u.UpdatedAt, &u.LastLogin)
+		&u.CreatedAt, &u.UpdatedAt, &u.LastLogin, &u.MustChangePassword)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
@@ -81,7 +81,7 @@ func (r *pgUserRepository) GetByUsername(ctx context.Context, username string) (
 
 func (r *pgUserRepository) List(ctx context.Context) ([]model.User, error) {
 	rows, err := r.db.Query(ctx,
-		`SELECT id, username, email, password_hash, role, is_active, autonomy_level, created_at, updated_at, last_login
+		`SELECT id, username, email, password_hash, role, is_active, autonomy_level, created_at, updated_at, last_login, must_change_password
 		 FROM users ORDER BY created_at ASC`)
 	if err != nil {
 		return nil, fmt.Errorf("list users: %w", err)
@@ -92,7 +92,7 @@ func (r *pgUserRepository) List(ctx context.Context) ([]model.User, error) {
 	for rows.Next() {
 		var u model.User
 		if err := rows.Scan(&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.Role, &u.IsActive, &u.AutonomyLevel,
-			&u.CreatedAt, &u.UpdatedAt, &u.LastLogin); err != nil {
+			&u.CreatedAt, &u.UpdatedAt, &u.LastLogin, &u.MustChangePassword); err != nil {
 			return nil, fmt.Errorf("scan user: %w", err)
 		}
 		users = append(users, u)
@@ -102,9 +102,9 @@ func (r *pgUserRepository) List(ctx context.Context) ([]model.User, error) {
 
 func (r *pgUserRepository) Update(ctx context.Context, user *model.User) error {
 	_, err := r.db.Exec(ctx,
-		`UPDATE users SET username=$1, email=$2, password_hash=$3, role=$4, is_active=$5, autonomy_level=$6, updated_at=NOW()
-		 WHERE id=$7`,
-		user.Username, user.Email, user.PasswordHash, user.Role, user.IsActive, user.AutonomyLevel, user.ID,
+		`UPDATE users SET username=$1, email=$2, password_hash=$3, role=$4, is_active=$5, autonomy_level=$6, must_change_password=$7, updated_at=NOW()
+		 WHERE id=$8`,
+		user.Username, user.Email, user.PasswordHash, user.Role, user.IsActive, user.AutonomyLevel, user.MustChangePassword, user.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("update user: %w", err)

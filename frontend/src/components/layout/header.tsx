@@ -2,7 +2,7 @@
 
 import { useTheme } from "next-themes";
 import { useRouter } from "next/navigation";
-import { Moon, Sun, LogOut, User, PanelLeftClose, PanelLeft } from "lucide-react";
+import { Moon, Sun, LogOut, User, PanelLeftClose, PanelLeft, Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -14,6 +14,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useAuthStore } from "@/stores/auth-store";
+import { SearchTrigger } from "@/components/search/search-command";
+import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 
 interface HeaderProps {
   collapsed: boolean;
@@ -36,7 +38,7 @@ export function Header({ collapsed, onToggleCollapse }: HeaderProps) {
 
   return (
     <header className="flex h-14 items-center justify-between border-b bg-card px-4">
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={onToggleCollapse}>
           {collapsed ? (
             <PanelLeft className="h-4 w-4" />
@@ -44,9 +46,13 @@ export function Header({ collapsed, onToggleCollapse }: HeaderProps) {
             <PanelLeftClose className="h-4 w-4" />
           )}
         </Button>
+        <SearchTrigger />
+        <div className="hidden md:block">
+          <Breadcrumbs />
+        </div>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1">
         <Button
           variant="ghost"
           size="icon"

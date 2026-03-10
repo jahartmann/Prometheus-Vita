@@ -30,16 +30,17 @@ const (
 )
 
 type User struct {
-	ID            uuid.UUID  `json:"id"`
-	Username      string     `json:"username"`
-	Email         string     `json:"email"`
-	PasswordHash  string     `json:"-"`
-	Role          UserRole   `json:"role"`
-	IsActive      bool       `json:"is_active"`
-	AutonomyLevel int        `json:"autonomy_level"`
-	CreatedAt     time.Time  `json:"created_at"`
-	UpdatedAt     time.Time  `json:"updated_at"`
-	LastLogin     *time.Time `json:"last_login,omitempty"`
+	ID                 uuid.UUID  `json:"id"`
+	Username           string     `json:"username"`
+	Email              string     `json:"email"`
+	PasswordHash       string     `json:"-"`
+	Role               UserRole   `json:"role"`
+	IsActive           bool       `json:"is_active"`
+	AutonomyLevel      int        `json:"autonomy_level"`
+	MustChangePassword bool       `json:"must_change_password"`
+	CreatedAt          time.Time  `json:"created_at"`
+	UpdatedAt          time.Time  `json:"updated_at"`
+	LastLogin          *time.Time `json:"last_login,omitempty"`
 }
 
 // DTOs
@@ -65,46 +66,50 @@ type RefreshResponse struct {
 }
 
 type UserInfo struct {
-	ID       uuid.UUID `json:"id"`
-	Username string    `json:"username"`
-	Role     UserRole  `json:"role"`
-	IsActive bool      `json:"is_active"`
+	ID                 uuid.UUID `json:"id"`
+	Username           string    `json:"username"`
+	Role               UserRole  `json:"role"`
+	IsActive           bool      `json:"is_active"`
+	MustChangePassword bool      `json:"must_change_password"`
 }
 
 func (u *User) ToInfo() UserInfo {
 	return UserInfo{
-		ID:       u.ID,
-		Username: u.Username,
-		Role:     u.Role,
-		IsActive: u.IsActive,
+		ID:                 u.ID,
+		Username:           u.Username,
+		Role:               u.Role,
+		IsActive:           u.IsActive,
+		MustChangePassword: u.MustChangePassword,
 	}
 }
 
 // User Management DTOs
 
 type UserResponse struct {
-	ID            uuid.UUID  `json:"id"`
-	Username      string     `json:"username"`
-	Email         string     `json:"email"`
-	Role          UserRole   `json:"role"`
-	IsActive      bool       `json:"is_active"`
-	AutonomyLevel int        `json:"autonomy_level"`
-	CreatedAt     time.Time  `json:"created_at"`
-	UpdatedAt     time.Time  `json:"updated_at"`
-	LastLogin     *time.Time `json:"last_login,omitempty"`
+	ID                 uuid.UUID  `json:"id"`
+	Username           string     `json:"username"`
+	Email              string     `json:"email"`
+	Role               UserRole   `json:"role"`
+	IsActive           bool       `json:"is_active"`
+	AutonomyLevel      int        `json:"autonomy_level"`
+	MustChangePassword bool       `json:"must_change_password"`
+	CreatedAt          time.Time  `json:"created_at"`
+	UpdatedAt          time.Time  `json:"updated_at"`
+	LastLogin          *time.Time `json:"last_login,omitempty"`
 }
 
 func (u *User) ToResponse() UserResponse {
 	return UserResponse{
-		ID:            u.ID,
-		Username:      u.Username,
-		Email:         u.Email,
-		Role:          u.Role,
-		IsActive:      u.IsActive,
-		AutonomyLevel: u.AutonomyLevel,
-		CreatedAt:     u.CreatedAt,
-		UpdatedAt:     u.UpdatedAt,
-		LastLogin:     u.LastLogin,
+		ID:                 u.ID,
+		Username:           u.Username,
+		Email:              u.Email,
+		Role:               u.Role,
+		IsActive:           u.IsActive,
+		AutonomyLevel:      u.AutonomyLevel,
+		MustChangePassword: u.MustChangePassword,
+		CreatedAt:          u.CreatedAt,
+		UpdatedAt:          u.UpdatedAt,
+		LastLogin:          u.LastLogin,
 	}
 }
 

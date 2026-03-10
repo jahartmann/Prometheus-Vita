@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Plus, Trash2 } from "lucide-react";
 import { escalationApi } from "@/lib/api";
+import { toast } from "sonner";
 import type { EscalationPolicy, NotificationChannel, CreateEscalationStepInput } from "@/types/api";
 
 interface EscalationPolicyDialogProps {
@@ -104,8 +105,10 @@ export function EscalationPolicyDialog({
       }
       onSuccess();
       onOpenChange(false);
+      toast.success(isEdit ? "Richtlinie aktualisiert" : "Richtlinie erstellt");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Fehler beim Speichern");
+      toast.error("Fehler beim Speichern der Richtlinie");
     } finally {
       setLoading(false);
     }

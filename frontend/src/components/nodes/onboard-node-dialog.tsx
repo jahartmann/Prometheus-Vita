@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import api from "@/lib/api";
+import { toast } from "sonner";
 import { useNodeStore } from "@/stores/node-store";
 import { AddNodeDialog } from "./add-node-dialog";
 import type { Node, NodeType, OnboardNodeRequest } from "@/types/api";
@@ -144,6 +145,7 @@ export function OnboardNodeDialog({ open, onOpenChange }: OnboardNodeDialogProps
         addNode(response.data);
         onOpenChange(false);
         resetForm();
+        toast.success("Node erfolgreich eingerichtet");
       }, 1000);
     } catch (err: unknown) {
       if (stepTimerRef.current) {
@@ -179,6 +181,7 @@ export function OnboardNodeDialog({ open, onOpenChange }: OnboardNodeDialogProps
       );
       setError(apiMessage);
       setIsSubmitting(false);
+      toast.error(`Fehler: ${apiMessage}`);
     }
   };
 

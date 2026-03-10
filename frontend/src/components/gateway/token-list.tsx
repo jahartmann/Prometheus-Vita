@@ -13,6 +13,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { gatewayApi, toArray } from "@/lib/api";
+import { toast } from "sonner";
 import type { APIToken } from "@/types/api";
 
 interface TokenListProps {
@@ -44,8 +45,9 @@ export function TokenList({ refreshKey }: TokenListProps) {
     try {
       await gatewayApi.revokeToken(id);
       fetchTokens();
+      toast.success("Token widerrufen");
     } catch {
-      // Fehler
+      toast.error("Fehler beim Widerrufen des Tokens");
     }
   };
 
@@ -53,8 +55,9 @@ export function TokenList({ refreshKey }: TokenListProps) {
     try {
       await gatewayApi.deleteToken(id);
       fetchTokens();
+      toast.success("Token geloescht");
     } catch {
-      // Fehler
+      toast.error("Fehler beim Loeschen des Tokens");
     }
   };
 

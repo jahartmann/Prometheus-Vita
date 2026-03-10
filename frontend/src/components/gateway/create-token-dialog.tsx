@@ -13,6 +13,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { gatewayApi } from "@/lib/api";
+import { toast } from "sonner";
 
 interface CreateTokenDialogProps {
   open: boolean;
@@ -34,6 +35,9 @@ export function CreateTokenDialog({ open, onOpenChange, onSuccess }: CreateToken
       const data = resp.data?.data || resp.data;
       setCreatedToken(data.token);
       onSuccess();
+      toast.success("Token erstellt");
+    } catch {
+      toast.error("Fehler beim Erstellen des Tokens");
     } finally {
       setSaving(false);
     }
@@ -43,6 +47,7 @@ export function CreateTokenDialog({ open, onOpenChange, onSuccess }: CreateToken
     if (createdToken) {
       navigator.clipboard.writeText(createdToken);
       setCopied(true);
+      toast.success("Token in Zwischenablage kopiert");
       setTimeout(() => setCopied(false), 2000);
     }
   };

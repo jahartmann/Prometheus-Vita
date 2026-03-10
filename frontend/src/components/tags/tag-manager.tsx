@@ -53,15 +53,25 @@ export function TagManager() {
 
   const handleCreate = async () => {
     if (!name.trim()) return;
-    await tagApi.create({ name: name.trim(), color, category: category || undefined });
-    setName("");
-    setCategory("");
-    fetchTags();
+    try {
+      await tagApi.create({ name: name.trim(), color, category: category || undefined });
+      setName("");
+      setCategory("");
+      fetchTags();
+      toast.success("Tag erstellt");
+    } catch {
+      toast.error("Fehler beim Erstellen des Tags");
+    }
   };
 
   const handleDelete = async (id: string) => {
-    await tagApi.delete(id);
-    fetchTags();
+    try {
+      await tagApi.delete(id);
+      fetchTags();
+      toast.success("Tag geloescht");
+    } catch {
+      toast.error("Fehler beim Loeschen des Tags");
+    }
   };
 
   const handleSync = async () => {

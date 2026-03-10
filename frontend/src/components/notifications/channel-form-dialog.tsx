@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { notificationApi } from "@/lib/api";
+import { toast } from "sonner";
 import type { NotificationChannel, NotificationChannelType } from "@/types/api";
 
 interface ChannelFormDialogProps {
@@ -128,13 +129,16 @@ export function ChannelFormDialog({
       const config = buildConfig();
       if (isEdit && channel) {
         await notificationApi.updateChannel(channel.id, { name, config });
+        toast.success("Kanal aktualisiert");
       } else {
         await notificationApi.createChannel({ name, type, config });
+        toast.success("Kanal erstellt");
       }
       onSuccess();
       onOpenChange(false);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Fehler beim Speichern");
+      toast.error("Fehler beim Speichern des Kanals");
     } finally {
       setLoading(false);
     }

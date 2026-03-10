@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { userApi } from "@/lib/api";
+import { toast } from "sonner";
 import type { UserResponse } from "@/types/api";
 
 interface DeleteUserDialogProps {
@@ -33,9 +34,12 @@ export function DeleteUserDialog({ user, open, onOpenChange, onSuccess }: Delete
       await userApi.delete(user.id);
       onOpenChange(false);
       onSuccess();
+      toast.success("Benutzer geloescht");
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { error?: string } } };
-      setError(axiosErr.response?.data?.error || "Benutzer konnte nicht geloescht werden");
+      const msg = axiosErr.response?.data?.error || "Benutzer konnte nicht geloescht werden";
+      setError(msg);
+      toast.error(`Fehler: ${msg}`);
     } finally {
       setIsLoading(false);
     }

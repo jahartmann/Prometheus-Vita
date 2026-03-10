@@ -3,6 +3,7 @@ package handler
 import (
 	"errors"
 	"log/slog"
+	"net/http"
 
 	apiPkg "github.com/antigravity/prometheus/internal/api/response"
 	"github.com/antigravity/prometheus/internal/api/middleware"
@@ -36,6 +37,9 @@ func (h *AuthHandler) Login(c echo.Context) error {
 
 	resp, err := h.authService.Login(c.Request().Context(), req)
 	if err != nil {
+		if errors.Is(err, auth.ErrAccountLocked) {
+			return apiPkg.ErrorResponse(c, http.StatusTooManyRequests, "Konto voruebergehend gesperrt. Bitte in 15 Minuten erneut versuchen.")
+		}
 		if errors.Is(err, auth.ErrInvalidCredentials) {
 			return apiPkg.Unauthorized(c, "Benutzername oder Passwort ist falsch")
 		}

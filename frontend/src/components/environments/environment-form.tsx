@@ -12,6 +12,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { useEnvironmentStore } from "@/stores/environment-store";
+import { toast } from "sonner";
 import type { Environment } from "@/types/api";
 
 interface EnvironmentFormProps {
@@ -48,11 +49,15 @@ export function EnvironmentForm({ environment, open, onOpenChange, onSuccess }: 
     try {
       if (isEdit && environment) {
         await updateEnvironment(environment.id, { name, description, color });
+        toast.success("Umgebung aktualisiert");
       } else {
         await createEnvironment({ name, description, color });
+        toast.success("Umgebung erstellt");
       }
       onSuccess();
       onOpenChange(false);
+    } catch {
+      toast.error("Fehler beim Speichern der Umgebung");
     } finally {
       setSaving(false);
     }

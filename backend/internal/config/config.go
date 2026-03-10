@@ -112,7 +112,7 @@ func Load() (*Config, error) {
 			User:     getEnv("POSTGRES_USER", "prometheus"),
 			Password: getEnv("POSTGRES_PASSWORD", "changeme_db_password"),
 			DBName:   getEnv("POSTGRES_DB", "prometheus"),
-			SSLMode:  getEnv("POSTGRES_SSLMODE", "disable"),
+			SSLMode:  getEnv("POSTGRES_SSLMODE", "prefer"),
 			MaxConns: getEnvInt("POSTGRES_MAX_CONNS", 20),
 		},
 		Redis: RedisConfig{

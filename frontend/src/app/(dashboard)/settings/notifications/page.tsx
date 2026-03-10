@@ -43,6 +43,7 @@ import { EscalationPolicyDialog } from "@/components/notifications/escalation-po
 import { IncidentList } from "@/components/notifications/incident-list";
 import { TelegramLinkCard } from "@/components/notifications/telegram-link-card";
 import { SmtpConfigCard } from "@/components/notifications/smtp-config-card";
+import { toast } from "sonner";
 import type { NotificationChannel, AlertRule, AlertSeverity, EscalationPolicy, ReflexRule } from "@/types/api";
 
 const channelTypeBadge: Record<string, "default" | "secondary" | "outline"> = {
@@ -138,16 +139,22 @@ export default function NotificationsSettingsPage() {
   }, [fetchChannels, fetchHistory, fetchAlertRules, fetchNodes, fetchPolicies, fetchIncidents]);
 
   const handleDeleteChannel = async (id: string) => {
-    await notificationApi.deleteChannel(id);
-    fetchChannels();
+    try {
+      await notificationApi.deleteChannel(id);
+      fetchChannels();
+      toast.success("Kanal geloescht");
+    } catch {
+      toast.error("Fehler beim Loeschen des Kanals");
+    }
   };
 
   const handleTestChannel = async (id: string) => {
     setTestingId(id);
     try {
       await notificationApi.testChannel(id);
+      toast.success("Testbenachrichtigung gesendet");
     } catch {
-      // Error handled silently, user sees test result in history
+      toast.error("Fehler beim Senden der Testbenachrichtigung");
     } finally {
       setTestingId(null);
       fetchHistory();
@@ -155,18 +162,33 @@ export default function NotificationsSettingsPage() {
   };
 
   const handleDeleteRule = async (id: string) => {
-    await alertApi.deleteRule(id);
-    fetchAlertRules();
+    try {
+      await alertApi.deleteRule(id);
+      fetchAlertRules();
+      toast.success("Regel geloescht");
+    } catch {
+      toast.error("Fehler beim Loeschen der Regel");
+    }
   };
 
   const handleToggleRule = async (rule: AlertRule) => {
-    await alertApi.updateRule(rule.id, { is_active: !rule.is_active });
-    fetchAlertRules();
+    try {
+      await alertApi.updateRule(rule.id, { is_active: !rule.is_active });
+      fetchAlertRules();
+      toast.success(rule.is_active ? "Regel deaktiviert" : "Regel aktiviert");
+    } catch {
+      toast.error("Fehler beim Aendern der Regel");
+    }
   };
 
   const handleDeletePolicy = async (id: string) => {
-    await escalationApi.deletePolicy(id);
-    fetchPolicies();
+    try {
+      await escalationApi.deletePolicy(id);
+      fetchPolicies();
+      toast.success("Richtlinie geloescht");
+    } catch {
+      toast.error("Fehler beim Loeschen der Richtlinie");
+    }
   };
 
   const handleDeleteReflex = async (id: string) => {

@@ -12,6 +12,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { sshKeyApi } from "@/lib/api";
+import { toast } from "sonner";
 
 interface GenerateKeyDialogProps {
   nodeId: string;
@@ -34,6 +35,9 @@ export function GenerateKeyDialog({ nodeId, open, onOpenChange, onSuccess }: Gen
       onSuccess();
       onOpenChange(false);
       setName("");
+      toast.success("SSH-Schluessel generiert");
+    } catch {
+      toast.error("Fehler beim Generieren des Schluessels");
     } finally {
       setSaving(false);
     }

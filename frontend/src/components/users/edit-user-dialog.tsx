@@ -13,6 +13,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { userApi } from "@/lib/api";
+import { toast } from "sonner";
 import type { UserResponse } from "@/types/api";
 
 interface EditUserDialogProps {
@@ -50,9 +51,12 @@ export function EditUserDialog({ user, open, onOpenChange, onSuccess }: EditUser
       await userApi.update(user.id, { username, email, role, is_active: isActive });
       onOpenChange(false);
       onSuccess();
+      toast.success("Benutzer aktualisiert");
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { error?: string } } };
-      setError(axiosErr.response?.data?.error || "Benutzer konnte nicht aktualisiert werden");
+      const msg = axiosErr.response?.data?.error || "Benutzer konnte nicht aktualisiert werden";
+      setError(msg);
+      toast.error(`Fehler: ${msg}`);
     } finally {
       setIsLoading(false);
     }

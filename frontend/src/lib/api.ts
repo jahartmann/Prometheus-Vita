@@ -569,3 +569,27 @@ export const brainApi = {
   delete: (id: string) => api.delete(`/brain/${id}`),
   search: (query: string) => api.get(`/brain/search?q=${encodeURIComponent(query)}`),
 };
+
+// Log API
+export const logApi = {
+  getLogs: (nodeId: string, file?: string, lines?: number) => {
+    const params = new URLSearchParams();
+    if (file) params.set("file", file);
+    if (lines) params.set("lines", String(lines));
+    return api.get(`/nodes/${nodeId}/logs?${params.toString()}`);
+  },
+};
+
+// Password Policy API
+export const passwordPolicyApi = {
+  get: () => api.get("/password-policy").then((r) => r.data),
+  update: (data: {
+    min_length?: number;
+    require_uppercase?: boolean;
+    require_lowercase?: boolean;
+    require_digit?: boolean;
+    require_special?: boolean;
+    max_length?: number;
+    disallow_username?: boolean;
+  }) => api.put("/password-policy", data).then((r) => r.data),
+};

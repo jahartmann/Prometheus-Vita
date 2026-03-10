@@ -13,6 +13,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { sshKeyApi, toArray } from "@/lib/api";
+import { toast } from "sonner";
 import type { SSHKey } from "@/types/api";
 
 interface KeyListProps {
@@ -44,8 +45,9 @@ export function KeyList({ nodeId, onGenerate }: KeyListProps) {
     try {
       await sshKeyApi.deploy(nodeId, keyId);
       fetchKeys();
+      toast.success("SSH-Schluessel deployed");
     } catch {
-      // Fehler
+      toast.error("Fehler beim Deployen des Schluessels");
     }
   };
 
@@ -53,8 +55,9 @@ export function KeyList({ nodeId, onGenerate }: KeyListProps) {
     try {
       await sshKeyApi.delete(nodeId, keyId);
       fetchKeys();
+      toast.success("SSH-Schluessel geloescht");
     } catch {
-      // Fehler
+      toast.error("Fehler beim Loeschen des Schluessels");
     }
   };
 
