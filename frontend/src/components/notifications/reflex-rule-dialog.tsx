@@ -12,6 +12,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { cn } from "@/lib/utils";
 import { reflexApi } from "@/lib/api";
 import type { ReflexRule, ReflexActionType, Node } from "@/types/api";
 
@@ -39,6 +41,10 @@ const actionTypes: { value: ReflexActionType; label: string }[] = [
   { value: "run_command", label: "Befehl ausfuehren" },
   { value: "start_vm", label: "VM starten" },
   { value: "stop_vm", label: "VM stoppen" },
+  { value: "scale_up", label: "Ressourcen hochskalieren" },
+  { value: "scale_down", label: "Ressourcen herunterskalieren" },
+  { value: "snapshot", label: "Snapshot erstellen" },
+  { value: "ai_analyze", label: "KI-Analyse starten" },
 ];
 
 const selectClass =
@@ -65,6 +71,17 @@ export function ReflexRuleDialog({
   const [command, setCommand] = useState("");
   const [vmid, setVmid] = useState("");
   const [vmType, setVmType] = useState("qemu");
+  // Time scheduling fields
+  const [scheduleType, setScheduleType] = useState("always");
+  const [timeStart, setTimeStart] = useState("08:00");
+  const [timeEnd, setTimeEnd] = useState("18:00");
+  const [timeDays, setTimeDays] = useState<number[]>([]);
+  const [cronExpr, setCronExpr] = useState("");
+  // AI and priority fields
+  const [aiEnabled, setAiEnabled] = useState(false);
+  const [priority, setPriority] = useState("0");
+  const [tags, setTags] = useState("");
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -83,6 +100,16 @@ export function ReflexRuleDialog({
       setCommand((config.command as string) || "");
       setVmid(config.vmid ? String(config.vmid) : "");
       setVmType((config.vm_type as string) || "qemu");
+      // Time scheduling
+      setScheduleType(rule.schedule_type || "always");
+      setTimeStart(rule.time_window_start || "08:00");
+      setTimeEnd(rule.time_window_end || "18:00");
+      setTimeDays(rule.time_window_days || []);
+      setCronExpr(rule.schedule_cron || "");
+      // AI and priority
+      setAiEnabled(rule.ai_enabled || false);
+      setPriority(String(rule.priority ?? 0));
+      setTags((rule.tags || []).join(", "));
     } else {
       setName("");
       setDescription("");
@@ -96,6 +123,14 @@ export function ReflexRuleDialog({
       setCommand("");
       setVmid("");
       setVmType("qemu");
+      setScheduleType("always");
+      setTimeStart("08:00");
+      setTimeEnd("18:00");
+      setTimeDays([]);
+      setCronExpr("");
+      setAiEnabled(false);
+      setPriority("0");
+      setTags("");
     }
     setError(null);
   }, [rule, open]);
@@ -108,10 +143,16 @@ export function ReflexRuleDialog({
         return { command };
       case "start_vm":
       case "stop_vm":
+      case "snapshot":
         return { vmid: parseInt(vmid) || 0, vm_type: vmType };
       default:
         return {};
     }
+  };
+
+  const parseTags = (): string[] => {
+    if (!tags.trim()) return [];
+    return tags.split(",").map((t) => t.trim()).filter(Boolean);
   };
 
   const handleSubmit = async () => {
@@ -119,30 +160,29 @@ export function ReflexRuleDialog({
     setError(null);
     try {
       const actionConfig = buildActionConfig();
+      const commonData = {
+        name,
+        description: description || undefined,
+        trigger_metric: triggerMetric,
+        operator,
+        threshold: parseFloat(threshold),
+        action_type: actionType,
+        action_config: actionConfig,
+        cooldown_seconds: parseInt(cooldownSeconds) || 300,
+        node_id: nodeId || undefined,
+        schedule_type: scheduleType,
+        schedule_cron: scheduleType === "cron" ? cronExpr : undefined,
+        time_window_start: scheduleType === "time_window" ? timeStart : undefined,
+        time_window_end: scheduleType === "time_window" ? timeEnd : undefined,
+        time_window_days: scheduleType === "time_window" ? timeDays : undefined,
+        ai_enabled: aiEnabled,
+        priority: parseInt(priority) || 0,
+        tags: parseTags(),
+      };
       if (isEdit && rule) {
-        await reflexApi.update(rule.id, {
-          name,
-          description: description || undefined,
-          trigger_metric: triggerMetric,
-          operator,
-          threshold: parseFloat(threshold),
-          action_type: actionType,
-          action_config: actionConfig,
-          cooldown_seconds: parseInt(cooldownSeconds) || 300,
-          node_id: nodeId || undefined,
-        });
+        await reflexApi.update(rule.id, commonData);
       } else {
-        await reflexApi.create({
-          name,
-          description: description || undefined,
-          trigger_metric: triggerMetric,
-          operator,
-          threshold: parseFloat(threshold),
-          action_type: actionType,
-          action_config: actionConfig,
-          cooldown_seconds: parseInt(cooldownSeconds) || 300,
-          node_id: nodeId || undefined,
-        });
+        await reflexApi.create(commonData);
       }
       onSuccess();
       onOpenChange(false);
@@ -247,7 +287,7 @@ export function ReflexRuleDialog({
             </div>
           )}
 
-          {(actionType === "start_vm" || actionType === "stop_vm") && (
+          {(actionType === "start_vm" || actionType === "stop_vm" || actionType === "snapshot") && (
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-2">
                 <Label>VMID</Label>
@@ -266,6 +306,79 @@ export function ReflexRuleDialog({
           <div className="space-y-2">
             <Label>Cooldown (Sekunden)</Label>
             <Input value={cooldownSeconds} onChange={(e) => setCooldownSeconds(e.target.value)} type="number" />
+          </div>
+
+          {/* Zeitplanung */}
+          <div className="space-y-2">
+            <Label>Zeitplanung</Label>
+            <select className={selectClass} value={scheduleType} onChange={(e) => setScheduleType(e.target.value)}>
+              <option value="always">Immer aktiv</option>
+              <option value="time_window">Zeitfenster</option>
+              <option value="cron">Cron-Ausdruck</option>
+            </select>
+          </div>
+
+          {scheduleType === "time_window" && (
+            <>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-2">
+                  <Label>Von</Label>
+                  <Input type="time" value={timeStart} onChange={(e) => setTimeStart(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Bis</Label>
+                  <Input type="time" value={timeEnd} onChange={(e) => setTimeEnd(e.target.value)} />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Wochentage</Label>
+                <div className="flex flex-wrap gap-2">
+                  {["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"].map((day, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => {
+                        setTimeDays(prev => prev.includes(i) ? prev.filter(d => d !== i) : [...prev, i]);
+                      }}
+                      className={cn(
+                        "rounded-md border px-3 py-1 text-sm transition-colors",
+                        timeDays.includes(i) ? "bg-primary text-primary-foreground" : "hover:bg-accent"
+                      )}
+                    >
+                      {day}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+
+          {scheduleType === "cron" && (
+            <div className="space-y-2">
+              <Label>Cron-Ausdruck</Label>
+              <Input value={cronExpr} onChange={(e) => setCronExpr(e.target.value)} placeholder="*/5 * * * *" />
+              <p className="text-xs text-muted-foreground">z.B. &ldquo;*/5 * * * *&rdquo; = alle 5 Minuten</p>
+            </div>
+          )}
+
+          {/* KI-Integration */}
+          <div className="flex items-center justify-between">
+            <div>
+              <Label>KI-Analyse</Label>
+              <p className="text-xs text-muted-foreground">KI bewertet Regel-Trigger intelligent</p>
+            </div>
+            <Switch checked={aiEnabled} onCheckedChange={setAiEnabled} />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Prioritaet</Label>
+            <Input value={priority} onChange={(e) => setPriority(e.target.value)} type="number" min="0" max="100" placeholder="0 = hoechste" />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Tags</Label>
+            <Input value={tags} onChange={(e) => setTags(e.target.value)} placeholder="production, critical, netzwerk" />
+            <p className="text-xs text-muted-foreground">Kommagetrennte Tags zur Kategorisierung</p>
           </div>
 
           {error && <p className="text-sm text-destructive">{error}</p>}

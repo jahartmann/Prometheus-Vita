@@ -44,8 +44,11 @@ func (r *pgAuditRepository) List(ctx context.Context, limit, offset int) ([]mode
 		limit = 50
 	}
 	rows, err := r.db.Query(ctx,
-		`SELECT id, user_id, api_token_id, method, path, status_code, COALESCE(ip_address, ''), COALESCE(user_agent, ''), request_body, duration_ms, created_at
-		 FROM api_audit_log ORDER BY created_at DESC LIMIT $1 OFFSET $2`, limit, offset)
+		`SELECT a.id, a.user_id, COALESCE(u.username, ''), a.api_token_id, a.method, a.path, a.status_code,
+		        COALESCE(a.ip_address, ''), COALESCE(a.user_agent, ''), a.request_body, a.duration_ms, a.created_at
+		 FROM api_audit_log a
+		 LEFT JOIN users u ON a.user_id = u.id
+		 ORDER BY a.created_at DESC LIMIT $1 OFFSET $2`, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("list audit log: %w", err)
 	}
@@ -54,7 +57,7 @@ func (r *pgAuditRepository) List(ctx context.Context, limit, offset int) ([]mode
 	var entries []model.AuditLogEntry
 	for rows.Next() {
 		var e model.AuditLogEntry
-		if err := rows.Scan(&e.ID, &e.UserID, &e.APITokenID, &e.Method, &e.Path,
+		if err := rows.Scan(&e.ID, &e.UserID, &e.Username, &e.APITokenID, &e.Method, &e.Path,
 			&e.StatusCode, &e.IPAddress, &e.UserAgent, &e.RequestBody, &e.DurationMS, &e.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan audit log: %w", err)
 		}
@@ -68,8 +71,11 @@ func (r *pgAuditRepository) ListByUser(ctx context.Context, userID uuid.UUID, li
 		limit = 50
 	}
 	rows, err := r.db.Query(ctx,
-		`SELECT id, user_id, api_token_id, method, path, status_code, COALESCE(ip_address, ''), COALESCE(user_agent, ''), request_body, duration_ms, created_at
-		 FROM api_audit_log WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2`, userID, limit)
+		`SELECT a.id, a.user_id, COALESCE(u.username, ''), a.api_token_id, a.method, a.path, a.status_code,
+		        COALESCE(a.ip_address, ''), COALESCE(a.user_agent, ''), a.request_body, a.duration_ms, a.created_at
+		 FROM api_audit_log a
+		 LEFT JOIN users u ON a.user_id = u.id
+		 WHERE a.user_id = $1 ORDER BY a.created_at DESC LIMIT $2`, userID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list audit log by user: %w", err)
 	}
@@ -78,7 +84,7 @@ func (r *pgAuditRepository) ListByUser(ctx context.Context, userID uuid.UUID, li
 	var entries []model.AuditLogEntry
 	for rows.Next() {
 		var e model.AuditLogEntry
-		if err := rows.Scan(&e.ID, &e.UserID, &e.APITokenID, &e.Method, &e.Path,
+		if err := rows.Scan(&e.ID, &e.UserID, &e.Username, &e.APITokenID, &e.Method, &e.Path,
 			&e.StatusCode, &e.IPAddress, &e.UserAgent, &e.RequestBody, &e.DurationMS, &e.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan audit log: %w", err)
 		}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { gatewayApi, toArray } from "@/lib/api";
 import type { AuditLogEntry } from "@/types/api";
 import {
@@ -50,11 +50,64 @@ function formatTimestamp(dateStr: string): string {
   });
 }
 
+function describeAction(method: string, path: string): string {
+  const clean = path.replace(/^\/api\/v1\//, "");
+
+  const patterns: [RegExp, Record<string, string>][] = [
+    [/^auth\/login$/, { POST: "Angemeldet" }],
+    [/^auth\/logout$/, { POST: "Abgemeldet" }],
+    [/^auth\/refresh$/, { POST: "Token erneuert" }],
+    [/^auth\/me$/, { GET: "Profil abgerufen" }],
+    [/^users$/, { GET: "Benutzerliste abgerufen", POST: "Benutzer erstellt" }],
+    [/^users\/[^/]+$/, { GET: "Benutzer angezeigt", PUT: "Benutzer bearbeitet", DELETE: "Benutzer geloescht" }],
+    [/^users\/[^/]+\/password$/, { POST: "Passwort geaendert" }],
+    [/^nodes$/, { GET: "Nodes abgerufen", POST: "Node hinzugefuegt" }],
+    [/^nodes\/[^/]+$/, { GET: "Node angezeigt", PUT: "Node bearbeitet", DELETE: "Node entfernt" }],
+    [/^nodes\/[^/]+\/status$/, { GET: "Node-Status abgerufen" }],
+    [/^nodes\/[^/]+\/vms$/, { GET: "VMs abgerufen" }],
+    [/^nodes\/[^/]+\/vms\/[^/]+\/(start|stop|restart|shutdown)$/, { POST: "VM-Aktion ausgefuehrt" }],
+    [/^nodes\/[^/]+\/backup$/, { POST: "Backup erstellt" }],
+    [/^nodes\/[^/]+\/backups$/, { GET: "Backups abgerufen" }],
+    [/^backups\/[^/]+\/restore$/, { POST: "Backup wiederhergestellt" }],
+    [/^nodes\/[^/]+\/metrics/, { GET: "Metriken abgerufen" }],
+    [/^nodes\/[^/]+\/network/, { GET: "Netzwerk abgerufen" }],
+    [/^nodes\/[^/]+\/storage/, { GET: "Storage abgerufen" }],
+    [/^chat$/, { POST: "Chat-Nachricht gesendet" }],
+    [/^chat\/conversations/, { GET: "Chat-Verlauf abgerufen", DELETE: "Chat geloescht" }],
+    [/^reflexes$/, { GET: "Reflex-Regeln abgerufen", POST: "Reflex-Regel erstellt" }],
+    [/^reflexes\/[^/]+$/, { GET: "Reflex-Regel angezeigt", PUT: "Reflex-Regel bearbeitet", DELETE: "Reflex-Regel geloescht" }],
+    [/^agent\/config$/, { GET: "KI-Einstellungen abgerufen", PUT: "KI-Einstellungen geaendert" }],
+    [/^notifications/, { GET: "Benachrichtigungen abgerufen", POST: "Benachrichtigung erstellt" }],
+    [/^security/, { GET: "Sicherheitsereignisse abgerufen" }],
+    [/^gateway\/tokens/, { GET: "API-Tokens abgerufen", POST: "API-Token erstellt", DELETE: "API-Token geloescht" }],
+    [/^gateway\/audit/, { GET: "Audit-Log abgerufen" }],
+    [/^drift/, { GET: "Drift-Check abgerufen", POST: "Drift-Check gestartet" }],
+    [/^briefing/, { GET: "Briefing abgerufen" }],
+    [/^predictions/, { GET: "Vorhersagen abgerufen" }],
+    [/^anomalies/, { GET: "Anomalien abgerufen" }],
+    [/^topology/, { GET: "Topologie abgerufen" }],
+    [/^ssh-keys/, { GET: "SSH-Keys abgerufen", POST: "SSH-Key erstellt", DELETE: "SSH-Key geloescht" }],
+    [/^environments/, { GET: "Environments abgerufen", POST: "Environment erstellt" }],
+    [/^tags/, { GET: "Tags abgerufen", POST: "Tag erstellt" }],
+    [/^password-policy/, { GET: "Passwort-Policy abgerufen", PUT: "Passwort-Policy geaendert" }],
+    [/^migrations/, { GET: "Migrationen abgerufen", POST: "Migration gestartet" }],
+  ];
+
+  for (const [pattern, methods] of patterns) {
+    if (pattern.test(clean)) {
+      return methods[method] || `${method} ${clean}`;
+    }
+  }
+
+  return `${method} ${clean}`;
+}
+
 export default function AuditLogPage() {
   const [entries, setEntries] = useState<AuditLogEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [offset, setOffset] = useState(0);
   const [methodFilter, setMethodFilter] = useState<string>("ALL");
+  const [userFilter, setUserFilter] = useState<string>("ALL");
   const [hasMore, setHasMore] = useState(true);
 
   const fetchEntries = useCallback(async () => {
@@ -80,10 +133,21 @@ export default function AuditLogPage() {
     fetchEntries();
   }, [fetchEntries]);
 
-  const filteredEntries =
-    methodFilter === "ALL"
-      ? entries
-      : entries.filter((e) => e.method === methodFilter);
+  const uniqueUsers = useMemo(() => {
+    const users = new Set<string>();
+    for (const e of entries) {
+      if (e.username) users.add(e.username);
+    }
+    return Array.from(users).sort();
+  }, [entries]);
+
+  const filteredEntries = useMemo(() => {
+    return entries.filter((e) => {
+      if (methodFilter !== "ALL" && e.method !== methodFilter) return false;
+      if (userFilter !== "ALL" && (e.username || "") !== userFilter) return false;
+      return true;
+    });
+  }, [entries, methodFilter, userFilter]);
 
   const page = Math.floor(offset / PAGE_SIZE) + 1;
 
@@ -112,6 +176,22 @@ export default function AuditLogPage() {
             </SelectContent>
           </Select>
         </div>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">Benutzer:</span>
+          <Select value={userFilter} onValueChange={setUserFilter}>
+            <SelectTrigger className="w-[160px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">Alle</SelectItem>
+              {uniqueUsers.map((u) => (
+                <SelectItem key={u} value={u}>
+                  {u}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <div className="rounded-md border">
@@ -119,10 +199,10 @@ export default function AuditLogPage() {
           <TableHeader>
             <TableRow>
               <TableHead>Zeitpunkt</TableHead>
-              <TableHead>Methode</TableHead>
+              <TableHead>Benutzer</TableHead>
+              <TableHead>Aktion</TableHead>
               <TableHead>Pfad</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead>IP-Adresse</TableHead>
               <TableHead className="text-right">Dauer</TableHead>
             </TableRow>
           </TableHeader>
@@ -145,15 +225,21 @@ export default function AuditLogPage() {
                   <TableCell className="text-muted-foreground whitespace-nowrap">
                     {formatTimestamp(entry.created_at)}
                   </TableCell>
-                  <TableCell>
-                    <Badge
-                      variant="secondary"
-                      className={methodColors[entry.method] || ""}
-                    >
-                      {entry.method}
-                    </Badge>
+                  <TableCell className="whitespace-nowrap">
+                    {entry.username || (entry.api_token_id ? "API-Token" : "-")}
                   </TableCell>
-                  <TableCell className="font-mono text-sm max-w-[300px] truncate">
+                  <TableCell>
+                    <span className="flex items-center gap-2">
+                      <Badge
+                        variant="secondary"
+                        className={methodColors[entry.method] || ""}
+                      >
+                        {entry.method}
+                      </Badge>
+                      <span className="text-sm">{describeAction(entry.method, entry.path)}</span>
+                    </span>
+                  </TableCell>
+                  <TableCell className="font-mono text-sm max-w-[300px] truncate text-muted-foreground">
                     {entry.path}
                   </TableCell>
                   <TableCell>
@@ -163,9 +249,6 @@ export default function AuditLogPage() {
                     >
                       {entry.status_code}
                     </Badge>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {entry.ip_address || "-"}
                   </TableCell>
                   <TableCell className="text-right text-muted-foreground">
                     {entry.duration_ms} ms

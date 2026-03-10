@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Zap, Plus, Pencil, Trash2, History, RefreshCw } from "lucide-react";
+import { Zap, Plus, Pencil, Trash2, History, RefreshCw, Clock, Sparkles } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,10 @@ const actionLabels: Record<string, string> = {
   run_command: "Befehl ausfuehren",
   start_vm: "VM starten",
   stop_vm: "VM stoppen",
+  scale_up: "Hochskalieren",
+  scale_down: "Herunterskalieren",
+  snapshot: "Snapshot",
+  ai_analyze: "KI-Analyse",
 };
 
 const metricLabels: Record<string, string> = {
@@ -139,6 +143,24 @@ export function ReflexList() {
                           {rule.node_id && (
                             <Badge variant="outline" className="text-xs">
                               {getNodeName(rule.node_id)}
+                            </Badge>
+                          )}
+                          {rule.schedule_type === "time_window" && (
+                            <Badge variant="outline" className="text-xs">
+                              <Clock className="mr-1 h-3 w-3" />
+                              {rule.time_window_start} - {rule.time_window_end}
+                            </Badge>
+                          )}
+                          {rule.schedule_type === "cron" && (
+                            <Badge variant="outline" className="text-xs">
+                              <Clock className="mr-1 h-3 w-3" />
+                              Cron
+                            </Badge>
+                          )}
+                          {rule.ai_enabled && (
+                            <Badge variant="outline" className="text-xs bg-purple-50 dark:bg-purple-900/20">
+                              <Sparkles className="mr-1 h-3 w-3" />
+                              KI
                             </Badge>
                           )}
                         </div>

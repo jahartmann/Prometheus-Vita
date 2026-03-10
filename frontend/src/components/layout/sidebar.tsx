@@ -56,7 +56,7 @@ interface NavSection {
 }
 
 const topNavItems: NavItem[] = [
-  { label: "Suche", href: "/chat", icon: Search, matchPrefix: "/chat" },
+  { label: "Suche", href: "/search", icon: Search, matchPrefix: "/search" },
   { label: "Benachrichtigungen", href: "/settings/notifications", icon: Bell, matchPrefix: "/settings/notifications" },
 ];
 

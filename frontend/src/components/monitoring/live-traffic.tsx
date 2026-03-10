@@ -28,18 +28,12 @@ export function LiveTraffic() {
   const [selectedNode, setSelectedNode] = useState<string>(nodes[0]?.id || "");
   const { metrics } = useNodeMetrics(selectedNode);
 
-  // Calculate bandwidth delta (network_in/out are cumulative counters from Proxmox)
-  const trafficData = metrics.map((m, i) => {
-    if (i === 0) return { time: formatTime(m.timestamp), inRate: 0, outRate: 0 };
-    const prev = metrics[i - 1];
-    const timeDiff = (new Date(m.timestamp).getTime() - new Date(prev.timestamp).getTime()) / 1000;
-    if (timeDiff <= 0) return { time: formatTime(m.timestamp), inRate: 0, outRate: 0 };
-    return {
-      time: formatTime(m.timestamp),
-      inRate: Math.max(0, (m.network_in - prev.network_in) / timeDiff),
-      outRate: Math.max(0, (m.network_out - prev.network_out) / timeDiff),
-    };
-  }).slice(1); // Remove first entry (no delta)
+  // network_in/out are already per-second rates from the backend
+  const trafficData = metrics.map((m) => ({
+    time: formatTime(m.timestamp),
+    inRate: m.network_in,
+    outRate: m.network_out,
+  }));
 
   const currentIn = trafficData.length > 0 ? trafficData[trafficData.length - 1].inRate : 0;
   const currentOut = trafficData.length > 0 ? trafficData[trafficData.length - 1].outRate : 0;

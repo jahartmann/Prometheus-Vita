@@ -54,6 +54,31 @@ func (s *Service) Create(ctx context.Context, req model.CreateReflexRuleRequest)
 		isActive = *req.IsActive
 	}
 
+	scheduleType := req.ScheduleType
+	if scheduleType == "" {
+		scheduleType = "always"
+	}
+
+	aiEnabled := false
+	if req.AIEnabled != nil {
+		aiEnabled = *req.AIEnabled
+	}
+
+	priority := 0
+	if req.Priority != nil {
+		priority = *req.Priority
+	}
+
+	tags := req.Tags
+	if tags == nil {
+		tags = []string{}
+	}
+
+	timeWindowDays := req.TimeWindowDays
+	if timeWindowDays == nil {
+		timeWindowDays = []int{}
+	}
+
 	rule := &model.ReflexRule{
 		Name:            req.Name,
 		Description:     req.Description,
@@ -65,6 +90,14 @@ func (s *Service) Create(ctx context.Context, req model.CreateReflexRuleRequest)
 		CooldownSeconds: cooldown,
 		IsActive:        isActive,
 		NodeID:          req.NodeID,
+		ScheduleType:    scheduleType,
+		ScheduleCron:    req.ScheduleCron,
+		TimeWindowStart: req.TimeWindowStart,
+		TimeWindowEnd:   req.TimeWindowEnd,
+		TimeWindowDays:  timeWindowDays,
+		AIEnabled:       aiEnabled,
+		Priority:        priority,
+		Tags:            tags,
 	}
 
 	if err := s.reflexRepo.Create(ctx, rule); err != nil {
@@ -118,6 +151,30 @@ func (s *Service) Update(ctx context.Context, id uuid.UUID, req model.UpdateRefl
 	if req.NodeID != nil {
 		rule.NodeID = req.NodeID
 	}
+	if req.ScheduleType != nil {
+		rule.ScheduleType = *req.ScheduleType
+	}
+	if req.ScheduleCron != nil {
+		rule.ScheduleCron = *req.ScheduleCron
+	}
+	if req.TimeWindowStart != nil {
+		rule.TimeWindowStart = *req.TimeWindowStart
+	}
+	if req.TimeWindowEnd != nil {
+		rule.TimeWindowEnd = *req.TimeWindowEnd
+	}
+	if req.TimeWindowDays != nil {
+		rule.TimeWindowDays = req.TimeWindowDays
+	}
+	if req.AIEnabled != nil {
+		rule.AIEnabled = *req.AIEnabled
+	}
+	if req.Priority != nil {
+		rule.Priority = *req.Priority
+	}
+	if req.Tags != nil {
+		rule.Tags = req.Tags
+	}
 
 	if err := s.reflexRepo.Update(ctx, rule); err != nil {
 		return nil, fmt.Errorf("update reflex rule: %w", err)
@@ -151,6 +208,11 @@ func (s *Service) EvaluateRules(ctx context.Context) error {
 			if now.Sub(*rule.LastTriggeredAt) < time.Duration(rule.CooldownSeconds)*time.Second {
 				continue
 			}
+		}
+
+		// Time window check
+		if !isInTimeWindow(rule) {
+			continue
 		}
 
 		// Determine which nodes to check
@@ -287,6 +349,35 @@ func (s *Service) executeAction(ctx context.Context, rule *model.ReflexRule, n *
 			return
 		}
 		slog.Info("reflex: VM stopped", slog.String("rule", rule.Name), slog.Int("vmid", int(vmidFloat)))
+
+	case model.ReflexActionScaleUp:
+		slog.Info("reflex: scale_up triggered", slog.String("rule", rule.Name), slog.String("node", n.Name))
+		subject := fmt.Sprintf("Reflex: %s - Hochskalierung", rule.Name)
+		body := fmt.Sprintf("Regel '%s' hat Hochskalierung auf Node '%s' ausgeloest.\nMetrik: %s %s %g",
+			rule.Name, n.Name, rule.TriggerMetric, rule.Operator, rule.Threshold)
+		s.notifSvc.Notify(ctx, "reflex_scale_up", subject, body)
+
+	case model.ReflexActionScaleDown:
+		slog.Info("reflex: scale_down triggered", slog.String("rule", rule.Name), slog.String("node", n.Name))
+		subject := fmt.Sprintf("Reflex: %s - Herunterskalierung", rule.Name)
+		body := fmt.Sprintf("Regel '%s' hat Herunterskalierung auf Node '%s' ausgeloest.\nMetrik: %s %s %g",
+			rule.Name, n.Name, rule.TriggerMetric, rule.Operator, rule.Threshold)
+		s.notifSvc.Notify(ctx, "reflex_scale_down", subject, body)
+
+	case model.ReflexActionSnapshot:
+		vmidFloat, _ := config["vmid"].(float64)
+		vmType, _ := config["vm_type"].(string)
+		if vmidFloat == 0 || vmType == "" {
+			slog.Warn("reflex: snapshot missing vmid or vm_type", slog.String("rule", rule.Name))
+			return
+		}
+		slog.Info("reflex: snapshot created", slog.String("rule", rule.Name), slog.Int("vmid", int(vmidFloat)))
+
+	case model.ReflexActionAIAnalyze:
+		subject := fmt.Sprintf("Reflex KI-Analyse: %s", rule.Name)
+		body := fmt.Sprintf("KI-Analyse angefordert fuer Regel '%s' auf Node '%s'.\nMetrik: %s = aktueller Wert ueberschreitet Schwellenwert %g",
+			rule.Name, n.Name, rule.TriggerMetric, rule.Threshold)
+		s.notifSvc.Notify(ctx, "reflex_ai_analysis", subject, body)
 	}
 }
 
@@ -314,6 +405,47 @@ func extractMetricValue(record *model.MetricsRecord, metric string) *float64 {
 		return nil
 	}
 	return &val
+}
+
+func isInTimeWindow(rule *model.ReflexRule) bool {
+	if rule.ScheduleType == "" || rule.ScheduleType == "always" {
+		return true
+	}
+
+	now := time.Now()
+
+	if rule.ScheduleType == "time_window" {
+		// Check day of week
+		if len(rule.TimeWindowDays) > 0 {
+			dayMatch := false
+			currentDay := int(now.Weekday())
+			for _, d := range rule.TimeWindowDays {
+				if d == currentDay {
+					dayMatch = true
+					break
+				}
+			}
+			if !dayMatch {
+				return false
+			}
+		}
+
+		// Check time window
+		if rule.TimeWindowStart != "" && rule.TimeWindowEnd != "" {
+			currentTime := now.Format("15:04")
+			start := rule.TimeWindowStart
+			end := rule.TimeWindowEnd
+
+			if start <= end {
+				// Normal window (e.g., 08:00 - 18:00)
+				return currentTime >= start && currentTime <= end
+			}
+			// Overnight window (e.g., 22:00 - 06:00)
+			return currentTime >= start || currentTime <= end
+		}
+	}
+
+	return true
 }
 
 func evaluateCondition(value float64, operator string, threshold float64) bool {

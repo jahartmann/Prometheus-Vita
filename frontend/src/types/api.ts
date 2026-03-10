@@ -822,7 +822,7 @@ export interface LiveNodeDetail {
 }
 
 // Reflex types
-export type ReflexActionType = 'restart_service' | 'clear_cache' | 'notify' | 'run_command' | 'start_vm' | 'stop_vm';
+export type ReflexActionType = 'restart_service' | 'clear_cache' | 'notify' | 'run_command' | 'start_vm' | 'stop_vm' | 'scale_up' | 'scale_down' | 'snapshot' | 'ai_analyze';
 
 export interface ReflexRule {
   id: string;
@@ -838,6 +838,19 @@ export interface ReflexRule {
   node_id?: string;
   last_triggered_at?: string;
   trigger_count: number;
+  // Time-based scheduling
+  schedule_type?: string;
+  schedule_cron?: string;
+  time_window_start?: string;
+  time_window_end?: string;
+  time_window_days?: number[];
+  // AI integration
+  ai_enabled?: boolean;
+  ai_severity?: string;
+  ai_recommendation?: string;
+  // Organization
+  priority?: number;
+  tags?: string[];
   created_at: string;
   updated_at: string;
 }
@@ -1024,6 +1037,7 @@ export interface CreateAPITokenResponse {
 export interface AuditLogEntry {
   id: string;
   user_id?: string;
+  username?: string;
   api_token_id?: string;
   method: string;
   path: string;

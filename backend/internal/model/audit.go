@@ -10,6 +10,7 @@ import (
 type AuditLogEntry struct {
 	ID          uuid.UUID       `json:"id"`
 	UserID      *uuid.UUID      `json:"user_id,omitempty"`
+	Username    string          `json:"username,omitempty"`
 	APITokenID  *uuid.UUID      `json:"api_token_id,omitempty"`
 	Method      string          `json:"method"`
 	Path        string          `json:"path"`

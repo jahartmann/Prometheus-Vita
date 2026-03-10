@@ -7,6 +7,9 @@ import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNodeStore } from "@/stores/node-store";
 import { NetworkInterfaces } from "@/components/nodes/network-interfaces";
+import { LiveBandwidthGauge } from "@/components/monitoring/live-bandwidth-gauge";
+import { NetworkTraffic } from "@/components/monitoring/network-traffic";
+import { useNodeMetrics } from "@/hooks/use-node-metrics";
 import { Skeleton } from "@/components/ui/skeleton";
 import { networkApi, toArray } from "@/lib/api";
 import type { NetworkInterface } from "@/types/api";
@@ -16,6 +19,7 @@ export default function NodeNetworkPage() {
   const nodeId = params.id;
   const { nodes, fetchNodes } = useNodeStore();
   const [interfaces, setInterfaces] = useState<NetworkInterface[]>([]);
+  const { latestMetrics } = useNodeMetrics(nodeId);
 
   useEffect(() => {
     if (nodes.length === 0) fetchNodes();
@@ -45,15 +49,28 @@ export default function NodeNetworkPage() {
         </Button>
         <h1 className="text-2xl font-bold">Netzwerk - {node.name}</h1>
       </div>
-      <NetworkInterfaces
-        nodeId={nodeId}
-        interfaces={interfaces}
-        onRefresh={() => {
-          networkApi.getInterfaces(nodeId).then((res) => {
-            setInterfaces(toArray<NetworkInterface>(res.data));
-          });
-        }}
-      />
+
+      {/* Live Bandwidth Gauge */}
+      <div className="grid gap-6 md:grid-cols-2">
+        <LiveBandwidthGauge
+          netIn={latestMetrics?.network_in ?? 0}
+          netOut={latestMetrics?.network_out ?? 0}
+        />
+        <div className="flex flex-col justify-center">
+          <NetworkInterfaces
+            nodeId={nodeId}
+            interfaces={interfaces}
+            onRefresh={() => {
+              networkApi.getInterfaces(nodeId).then((res) => {
+                setInterfaces(toArray<NetworkInterface>(res.data));
+              });
+            }}
+          />
+        </div>
+      </div>
+
+      {/* Historical Traffic */}
+      <NetworkTraffic nodeId={nodeId} />
     </div>
   );
 }

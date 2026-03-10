@@ -522,6 +522,14 @@ export const reflexApi = {
     cooldown_seconds?: number;
     is_active?: boolean;
     node_id?: string;
+    schedule_type?: string;
+    schedule_cron?: string;
+    time_window_start?: string;
+    time_window_end?: string;
+    time_window_days?: number[];
+    ai_enabled?: boolean;
+    priority?: number;
+    tags?: string[];
   }) => api.post("/reflexes", data),
   update: (id: string, data: {
     name?: string;
@@ -534,6 +542,14 @@ export const reflexApi = {
     cooldown_seconds?: number;
     is_active?: boolean;
     node_id?: string;
+    schedule_type?: string;
+    schedule_cron?: string;
+    time_window_start?: string;
+    time_window_end?: string;
+    time_window_days?: number[];
+    ai_enabled?: boolean;
+    priority?: number;
+    tags?: string[];
   }) => api.put(`/reflexes/${id}`, data),
   delete: (id: string) => api.delete(`/reflexes/${id}`),
 };
