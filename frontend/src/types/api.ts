@@ -1269,7 +1269,7 @@ export interface VMHealthScore {
   vm_name: string;
   vm_type: string;
   score: number;
-  status: "healthy" | "warning" | "critical";
+  status: "healthy" | "warning" | "critical" | "stopped";
   breakdown: VMHealthBreakdown;
   updated_at: string;
 }

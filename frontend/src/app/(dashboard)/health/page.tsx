@@ -55,7 +55,6 @@ export default function HealthPage() {
     try {
       const scores: VMHealthScore[] = [];
       for (const node of nodes) {
-        if (!node.is_online) continue;
         try {
           const res = await vmHealthApi.getAllHealth(node.id);
           const nodeScores = toArray<VMHealthScore>(res.data);
@@ -81,6 +80,9 @@ export default function HealthPage() {
   useEffect(() => {
     if (nodes.length > 0) {
       fetchAllHealth();
+      // Auto-refresh every 60 seconds
+      const interval = setInterval(fetchAllHealth, 60000);
+      return () => clearInterval(interval);
     }
   }, [nodes, fetchAllHealth]);
 

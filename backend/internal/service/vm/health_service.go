@@ -191,35 +191,58 @@ func (s *HealthService) CalculateHealthScore(ctx context.Context, nodeID uuid.UU
 	}, nil
 }
 
-// CalculateAllHealthScores computes health scores for all running VMs on a node.
+// CalculateAllHealthScores computes health scores for all VMs on a node.
+// Non-running VMs get a score based on their status (stopped=0).
 func (s *HealthService) CalculateAllHealthScores(ctx context.Context, nodeID uuid.UUID) ([]model.HealthScore, error) {
 	node, err := s.nodeRepo.GetByID(ctx, nodeID)
 	if err != nil {
-		return nil, fmt.Errorf("get node: %w", err)
+		return []model.HealthScore{}, nil // Return empty instead of error
 	}
 
 	client, err := s.clientFactory.CreateClient(node)
 	if err != nil {
-		return nil, fmt.Errorf("create proxmox client: %w", err)
+		return []model.HealthScore{}, nil
 	}
 
 	pveNodes, err := client.GetNodes(ctx)
 	if err != nil || len(pveNodes) == 0 {
-		return nil, fmt.Errorf("get pve nodes: %w", err)
+		return []model.HealthScore{}, nil
 	}
 
 	vms, err := client.GetVMs(ctx, pveNodes[0])
 	if err != nil {
-		return nil, fmt.Errorf("get vms: %w", err)
+		return []model.HealthScore{}, nil
 	}
 
 	var scores []model.HealthScore
 	for _, vm := range vms {
 		if vm.Status != "running" {
+			// Include stopped VMs with a basic score
+			scores = append(scores, model.HealthScore{
+				NodeID:    nodeID,
+				VMID:      vm.VMID,
+				VMName:    vm.Name,
+				VMType:    vm.Type,
+				Score:     0,
+				Status:    "stopped",
+				Breakdown: model.HealthBreakdown{},
+				UpdatedAt: time.Now(),
+			})
 			continue
 		}
 		score, err := s.CalculateHealthScore(ctx, nodeID, vm.VMID)
 		if err != nil {
+			// On error, still include the VM with a degraded score
+			scores = append(scores, model.HealthScore{
+				NodeID:    nodeID,
+				VMID:      vm.VMID,
+				VMName:    vm.Name,
+				VMType:    vm.Type,
+				Score:     50,
+				Status:    "warning",
+				Breakdown: model.HealthBreakdown{},
+				UpdatedAt: time.Now(),
+			})
 			continue
 		}
 		scores = append(scores, *score)

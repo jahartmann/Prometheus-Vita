@@ -1325,6 +1325,10 @@ func (s *Service) buildSSHConfig(node *model.Node) (ssh.SSHConfig, error) {
 }
 
 func (s *Service) ExecVMCommand(ctx context.Context, nodeID uuid.UUID, vmid int, vmType string, command []string) (*proxmox.ExecResult, error) {
+	if vmType == "lxc" {
+		return s.execLXCviaSSH(ctx, nodeID, vmid, command)
+	}
+	// QEMU: use Proxmox guest agent API
 	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
 	if err != nil {
 		return nil, err
@@ -1332,8 +1336,34 @@ func (s *Service) ExecVMCommand(ctx context.Context, nodeID uuid.UUID, vmid int,
 	return client.ExecCommand(ctx, pveNode, vmid, vmType, command)
 }
 
+// execLXCviaSSH runs a command inside an LXC container via SSH + pct exec.
+// Proxmox has no REST API for LXC exec, so we SSH to the node and use pct exec.
+func (s *Service) execLXCviaSSH(ctx context.Context, nodeID uuid.UUID, vmid int, command []string) (*proxmox.ExecResult, error) {
+	// Build the pct exec command: pct exec {vmid} -- {command...}
+	cmdStr := fmt.Sprintf("pct exec %d -- %s", vmid, strings.Join(command, " "))
+	sshResult, err := s.RunSSHCommand(ctx, nodeID, cmdStr)
+	if err != nil {
+		return nil, fmt.Errorf("exec lxc via ssh: %w", err)
+	}
+	return &proxmox.ExecResult{
+		ExitCode: sshResult.ExitCode,
+		OutData:  sshResult.Stdout,
+		ErrData:  sshResult.Stderr,
+	}, nil
+}
+
 // ReadVMFile reads a file from inside a VM/container.
 func (s *Service) ReadVMFile(ctx context.Context, nodeID uuid.UUID, vmid int, vmType string, path string) (string, error) {
+	if vmType == "lxc" {
+		result, err := s.execLXCviaSSH(ctx, nodeID, vmid, []string{"cat", path})
+		if err != nil {
+			return "", err
+		}
+		if result.ExitCode != 0 {
+			return "", fmt.Errorf("cat failed (exit %d): %s", result.ExitCode, result.ErrData)
+		}
+		return result.OutData, nil
+	}
 	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
 	if err != nil {
 		return "", err
@@ -1343,6 +1373,19 @@ func (s *Service) ReadVMFile(ctx context.Context, nodeID uuid.UUID, vmid int, vm
 
 // WriteVMFile writes content to a file inside a VM/container.
 func (s *Service) WriteVMFile(ctx context.Context, nodeID uuid.UUID, vmid int, vmType string, path string, content string) error {
+	if vmType == "lxc" {
+		// Use base64 encoding to avoid shell escaping issues
+		encoded := strings.ReplaceAll(content, "'", "'\\''")
+		cmd := fmt.Sprintf("echo '%s' | tee %s > /dev/null", encoded, path)
+		result, err := s.execLXCviaSSH(ctx, nodeID, vmid, []string{"sh", "-c", cmd})
+		if err != nil {
+			return err
+		}
+		if result.ExitCode != 0 {
+			return fmt.Errorf("write failed (exit %d): %s", result.ExitCode, result.ErrData)
+		}
+		return nil
+	}
 	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
 	if err != nil {
 		return err
@@ -1352,6 +1395,16 @@ func (s *Service) WriteVMFile(ctx context.Context, nodeID uuid.UUID, vmid int, v
 
 // ListVMDirectory lists a directory inside a VM/container.
 func (s *Service) ListVMDirectory(ctx context.Context, nodeID uuid.UUID, vmid int, vmType string, path string) ([]proxmox.FileEntry, error) {
+	if vmType == "lxc" {
+		result, err := s.execLXCviaSSH(ctx, nodeID, vmid, []string{"ls", "-la", "--time-style=long-iso", path})
+		if err != nil {
+			return nil, err
+		}
+		if result.ExitCode != 0 {
+			return nil, fmt.Errorf("ls failed (exit %d): %s", result.ExitCode, result.ErrData)
+		}
+		return proxmox.ParseDirectoryListing(result.OutData), nil
+	}
 	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
 	if err != nil {
 		return nil, err
@@ -1361,6 +1414,16 @@ func (s *Service) ListVMDirectory(ctx context.Context, nodeID uuid.UUID, vmid in
 
 // DeleteVMFile removes a file or directory inside a VM/container.
 func (s *Service) DeleteVMFile(ctx context.Context, nodeID uuid.UUID, vmid int, vmType string, path string) error {
+	if vmType == "lxc" {
+		result, err := s.execLXCviaSSH(ctx, nodeID, vmid, []string{"rm", "-rf", path})
+		if err != nil {
+			return err
+		}
+		if result.ExitCode != 0 {
+			return fmt.Errorf("delete failed (exit %d): %s", result.ExitCode, result.ErrData)
+		}
+		return nil
+	}
 	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
 	if err != nil {
 		return err
@@ -1370,6 +1433,16 @@ func (s *Service) DeleteVMFile(ctx context.Context, nodeID uuid.UUID, vmid int, 
 
 // MakeVMDirectory creates a directory inside a VM/container.
 func (s *Service) MakeVMDirectory(ctx context.Context, nodeID uuid.UUID, vmid int, vmType string, path string) error {
+	if vmType == "lxc" {
+		result, err := s.execLXCviaSSH(ctx, nodeID, vmid, []string{"mkdir", "-p", path})
+		if err != nil {
+			return err
+		}
+		if result.ExitCode != 0 {
+			return fmt.Errorf("mkdir failed (exit %d): %s", result.ExitCode, result.ErrData)
+		}
+		return nil
+	}
 	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
 	if err != nil {
 		return err

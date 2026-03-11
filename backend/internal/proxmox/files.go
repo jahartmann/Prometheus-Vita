@@ -118,7 +118,7 @@ func (c *Client) ListDirectory(ctx context.Context, node string, vmid int, vmTyp
 		return nil, fmt.Errorf("ls failed (exit %d): %s", result.ExitCode, result.ErrData)
 	}
 
-	return parseDirectoryListing(result.OutData), nil
+	return ParseDirectoryListing(result.OutData), nil
 }
 
 // DeleteFile removes a file or directory inside a VM/container.
@@ -146,7 +146,7 @@ func (c *Client) MakeDirectory(ctx context.Context, node string, vmid int, vmTyp
 }
 
 // parseDirectoryListing parses output from `ls -la --time-style=long-iso`.
-func parseDirectoryListing(output string) []FileEntry {
+func ParseDirectoryListing(output string) []FileEntry {
 	lines := strings.Split(strings.TrimSpace(output), "\n")
 	var entries []FileEntry
 
