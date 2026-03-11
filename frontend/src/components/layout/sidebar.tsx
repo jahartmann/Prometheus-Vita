@@ -97,12 +97,13 @@ const sections: NavSection[] = [
 ];
 
 const nodeSubItems = [
+  { label: "Uebersicht", path: "", icon: LayoutDashboard },
   { label: "VMs & Container", path: "vms", icon: Monitor },
-  { label: "Storage", path: "storage", icon: HardDrive },
-  { label: "Netzwerk", path: "network", icon: Network },
-  { label: "Backups", path: "backups", icon: FolderArchive },
-  { label: "ISOs & Templates", path: "iso-templates", icon: Disc },
   { label: "Monitoring", path: "monitoring", icon: BarChart3 },
+  { label: "Netzwerk", path: "network", icon: Network },
+  { label: "Storage", path: "storage", icon: HardDrive },
+  { label: "Backups", path: "backups", icon: FolderArchive },
+  { label: "ISOs & Vorlagen", path: "iso-templates", icon: Disc },
   { label: "Logs", path: "logs", icon: FileText },
 ];
 
@@ -229,11 +230,12 @@ export function Sidebar() {
                   <CollapsibleContent className="ml-3 space-y-0.5 border-l border-border pl-2">
                     {nodeSubItems.map((sub) => {
                       const SubIcon = sub.icon;
-                      const subActive = pathname === `/nodes/${node.id}/${sub.path}`;
+                      const subHref = sub.path ? `/nodes/${node.id}/${sub.path}` : `/nodes/${node.id}`;
+                      const subActive = pathname === subHref;
                       return (
                         <Link
-                          key={sub.path}
-                          href={`/nodes/${node.id}/${sub.path}`}
+                          key={sub.path || "overview"}
+                          href={subHref}
                           className={cn(
                             "flex items-center gap-2 rounded-lg px-2 py-1 text-xs transition-colors",
                             subActive

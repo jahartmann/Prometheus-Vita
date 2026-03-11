@@ -35,9 +35,8 @@ import { formatBandwidth, formatBytes, formatPercentage } from "@/lib/utils";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { KPICards } from "@/components/monitoring/kpi-cards";
 import { CPUDetailChart } from "@/components/monitoring/cpu-detail-chart";
-import { LiveBandwidthGauge } from "@/components/monitoring/live-bandwidth-gauge";
+import { RRDBandwidth } from "@/components/monitoring/rrd-bandwidth";
 import { VMMetricsTable } from "@/components/monitoring/vm-metrics-table";
-import { NetworkTraffic } from "@/components/monitoring/network-traffic";
 import { VMNetworkTraffic } from "@/components/monitoring/vm-network-traffic";
 import { AnomalyOverlay } from "@/components/monitoring/anomaly-overlay";
 import { useNodeMetrics } from "@/hooks/use-node-metrics";
@@ -761,61 +760,54 @@ export default function NodeMonitoringPage() {
         {/* ====== Tab 4: Netzwerk ====== */}
         <TabsContent value="network" className="space-y-6">
           <ErrorBoundary>
-            {/* Live Bandwidth Gauge */}
-            <div className="grid gap-4 lg:grid-cols-2">
-              <LiveBandwidthGauge
-                netIn={kpiData.netIn}
-                netOut={kpiData.netOut}
-              />
-              {/* Top-Talker VMs */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Top-Talker VMs</CardTitle>
-                </CardHeader>
-                <CardContent className="p-0">
-                  {topTalkerVMs.length === 0 ? (
-                    <div className="p-6 text-center text-sm text-muted-foreground">
-                      Keine laufenden VMs.
-                    </div>
-                  ) : (
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b text-muted-foreground">
-                          <th className="p-3 text-left font-medium">VM</th>
-                          <th className="p-3 text-right font-medium">In</th>
-                          <th className="p-3 text-right font-medium">Out</th>
-                          <th className="p-3 text-right font-medium">Gesamt</th>
+            {/* RRD-basierte Bandbreite - zuverlaessige Quelle */}
+            <RRDBandwidth nodeId={nodeId} />
+
+            {/* Top-Talker VMs */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Top-Talker VMs</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                {topTalkerVMs.length === 0 ? (
+                  <div className="p-6 text-center text-sm text-muted-foreground">
+                    Keine laufenden VMs.
+                  </div>
+                ) : (
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b text-muted-foreground">
+                        <th className="p-3 text-left font-medium">VM</th>
+                        <th className="p-3 text-right font-medium">In</th>
+                        <th className="p-3 text-right font-medium">Out</th>
+                        <th className="p-3 text-right font-medium">Gesamt</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {topTalkerVMs.map((vm) => (
+                        <tr key={vm.vmid} className="border-b last:border-0">
+                          <td className="p-3">
+                            <span className="font-medium">{vm.name || `VM ${vm.vmid}`}</span>
+                            <span className="ml-2 text-xs text-muted-foreground">#{vm.vmid}</span>
+                          </td>
+                          <td className="p-3 text-right text-blue-500">
+                            {formatBandwidth(vm.net_in)}
+                          </td>
+                          <td className="p-3 text-right text-green-500">
+                            {formatBandwidth(vm.net_out)}
+                          </td>
+                          <td className="p-3 text-right font-bold">
+                            {formatBandwidth(vm.net_in + vm.net_out)}
+                          </td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {topTalkerVMs.map((vm) => (
-                          <tr key={vm.vmid} className="border-b last:border-0">
-                            <td className="p-3">
-                              <span className="font-medium">{vm.name || `VM ${vm.vmid}`}</span>
-                              <span className="ml-2 text-xs text-muted-foreground">#{vm.vmid}</span>
-                            </td>
-                            <td className="p-3 text-right text-blue-500">
-                              {formatBandwidth(vm.net_in)}
-                            </td>
-                            <td className="p-3 text-right text-green-500">
-                              {formatBandwidth(vm.net_out)}
-                            </td>
-                            <td className="p-3 text-right font-bold">
-                              {formatBandwidth(vm.net_in + vm.net_out)}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </CardContent>
+            </Card>
 
-            {/* Existing Network Traffic component */}
-            <NetworkTraffic nodeId={nodeId} />
-
-            {/* Existing VM Network Traffic component */}
+            {/* VM Network Traffic */}
             <VMNetworkTraffic nodeId={nodeId} />
           </ErrorBoundary>
         </TabsContent>

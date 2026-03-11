@@ -180,9 +180,9 @@ export default function SecurityPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              <div className="flex items-start gap-3 rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-950">
+              <div className="flex items-start gap-3 rounded-lg border border-green-200 bg-green-50 p-3 text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
                 <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-green-500" />
-                <p className="text-sm">Keine Sicherheitswarnungen vorhanden.</p>
+                <p className="text-sm text-green-700 dark:text-green-300">Keine Sicherheitswarnungen vorhanden.</p>
               </div>
               <div className="flex items-start gap-3 rounded-lg border p-3">
                 <Shield className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />

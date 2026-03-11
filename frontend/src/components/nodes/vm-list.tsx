@@ -423,7 +423,7 @@ export function VmList({ vms, nodeId, onRefresh }: VmListProps) {
                 <TableCell>
                   <div className="flex flex-wrap gap-1 items-center">
                     {/* Proxmox native tags */}
-                    {(vm.tags || []).filter(t => t).map((tag) => (
+                    {(Array.isArray(vm.tags) ? vm.tags : typeof vm.tags === 'string' && vm.tags ? vm.tags.split(/[,;]/).map(t => t.trim()).filter(Boolean) : []).map((tag) => (
                       <Badge
                         key={`pve-${tag}`}
                         variant="outline"

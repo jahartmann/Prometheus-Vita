@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, AlertTriangle, Cpu, MemoryStick, HardDrive, Clock, Monitor, Disc, Network } from "lucide-react";
+import { ArrowLeft, AlertTriangle, Cpu, MemoryStick, HardDrive, Clock, Monitor, Disc, Network, FileText, ExternalLink, RefreshCw } from "lucide-react";
 import {
   LineChart,
   Line,
@@ -29,7 +29,7 @@ import { StorageOverview } from "@/components/nodes/storage-overview";
 import { DiskList } from "@/components/nodes/disk-list";
 import { PBSOverview } from "@/components/nodes/pbs-overview";
 import { TagAssignDialog } from "@/components/tags/tag-assign-dialog";
-import { metricsApi, networkApi, diskApi, tagApi, isoApi, nodeApi, toArray } from "@/lib/api";
+import { metricsApi, networkApi, diskApi, tagApi, isoApi, nodeApi, logApi, toArray } from "@/lib/api";
 import type { Node, MetricsRecord, NetworkInterface, DiskInfo, Tag, StorageContent } from "@/types/api";
 import {
   formatBytes,
@@ -90,6 +90,8 @@ export function NodeDetail({ node }: NodeDetailProps) {
   const [syncSelectedVolid, setSyncSelectedVolid] = useState("");
   const [syncTargetStorage, setSyncTargetStorage] = useState("local");
   const [syncLoading, setSyncLoading] = useState(false);
+  const [logContent, setLogContent] = useState("");
+  const [logLoading, setLogLoading] = useState(false);
 
   useEffect(() => {
     fetchBackups(node.id);
@@ -129,6 +131,14 @@ export function NodeDetail({ node }: NodeDetailProps) {
     nodeApi
       .list()
       .then((res) => setAllNodes(toArray(res.data)))
+      .catch(() => {});
+
+    logApi
+      .getLogs(node.id, "syslog", 100)
+      .then((res) => {
+        const data = res.data;
+        setLogContent(typeof data?.lines === "string" ? data.lines : "");
+      })
       .catch(() => {});
   }, [node.id, fetchBackups, fetchSchedules, fetchNodeVMs]);
 
@@ -290,11 +300,12 @@ export function NodeDetail({ node }: NodeDetailProps) {
         <TabsList>
           <TabsTrigger value="overview">Uebersicht</TabsTrigger>
           <TabsTrigger value="vms">VMs & Container</TabsTrigger>
-          <TabsTrigger value="backups">Backups</TabsTrigger>
           <TabsTrigger value="monitoring">Monitoring</TabsTrigger>
           <TabsTrigger value="network">Netzwerk</TabsTrigger>
           <TabsTrigger value="storage">Storage</TabsTrigger>
-          <TabsTrigger value="iso-templates">ISOs & Templates</TabsTrigger>
+          <TabsTrigger value="backups">Backups</TabsTrigger>
+          <TabsTrigger value="iso-templates">ISOs & Vorlagen</TabsTrigger>
+          <TabsTrigger value="logs">Logs</TabsTrigger>
           {node.type === "pbs" && <TabsTrigger value="pbs">PBS</TabsTrigger>}
         </TabsList>
 
@@ -418,10 +429,6 @@ export function NodeDetail({ node }: NodeDetailProps) {
           <VmList vms={vms} nodeId={node.id} onRefresh={() => fetchNodeVMs(node.id)} />
         </TabsContent>
 
-        <TabsContent value="backups">
-          <BackupList nodeId={node.id} />
-        </TabsContent>
-
         <TabsContent value="monitoring" className="space-y-6">
           <ErrorBoundary>
             <MetricsCharts metrics={metricsHistory} />
@@ -446,6 +453,10 @@ export function NodeDetail({ node }: NodeDetailProps) {
         <TabsContent value="storage">
           <StorageOverview nodeId={node.id} status={status} />
           <DiskList disks={disks} />
+        </TabsContent>
+
+        <TabsContent value="backups">
+          <BackupList nodeId={node.id} />
         </TabsContent>
 
         <TabsContent value="iso-templates" className="space-y-6">
@@ -550,6 +561,61 @@ export function NodeDetail({ node }: NodeDetailProps) {
                   )}
                 </tbody>
               </table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="logs" className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              System-Logs
+            </h2>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setLogLoading(true);
+                  logApi
+                    .getLogs(node.id, "syslog", 100)
+                    .then((res) => {
+                      const data = res.data;
+                      setLogContent(typeof data?.lines === "string" ? data.lines : "");
+                    })
+                    .catch(() => {})
+                    .finally(() => setLogLoading(false));
+                }}
+              >
+                <RefreshCw className={`mr-2 h-3 w-3 ${logLoading ? "animate-spin" : ""}`} />
+                Aktualisieren
+              </Button>
+              <Button variant="outline" size="sm" asChild>
+                <Link href={`/nodes/${node.id}/logs`}>
+                  <ExternalLink className="mr-2 h-3 w-3" />
+                  Erweiterte Ansicht
+                </Link>
+              </Button>
+            </div>
+          </div>
+          <Card>
+            <CardContent className="p-0">
+              <pre className="max-h-[500px] overflow-auto bg-zinc-950 p-4 font-mono text-xs leading-relaxed text-zinc-300">
+                {logContent ? (
+                  logContent.split("\n").map((line, idx) => (
+                    <div key={idx} className="flex">
+                      <span className="mr-4 inline-block w-10 select-none text-right text-zinc-600">
+                        {idx + 1}
+                      </span>
+                      <span className="flex-1 whitespace-pre-wrap break-all">{line}</span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="py-8 text-center text-zinc-500">
+                    Keine Logs verfuegbar.
+                  </div>
+                )}
+              </pre>
             </CardContent>
           </Card>
         </TabsContent>
