@@ -936,7 +936,7 @@ export function TopologyMap() {
                         className={`px-2.5 py-1 rounded-md text-xs transition-all ${
                           statusFilter === s
                             ? "bg-primary text-primary-foreground"
-                            : "bg-muted/50 text-muted-foreground hover:bg-muted"
+                            : "bg-muted/50 text-foreground/70 hover:bg-muted"
                         }`}
                       >
                         {s === "all" ? "Alle" : s === "running" ? "Aktiv" : "Gestoppt"}
@@ -955,7 +955,7 @@ export function TopologyMap() {
                         className={`px-2.5 py-1 rounded-md text-xs transition-all ${
                           typeFilter === t
                             ? "bg-primary text-primary-foreground"
-                            : "bg-muted/50 text-muted-foreground hover:bg-muted"
+                            : "bg-muted/50 text-foreground/70 hover:bg-muted"
                         }`}
                       >
                         {t === "all" ? "Alle" : t === "vm" ? "VM" : "CT"}

@@ -422,6 +422,17 @@ export function VmList({ vms, nodeId, onRefresh }: VmListProps) {
                 <TableCell className="font-medium">{vm.name}</TableCell>
                 <TableCell>
                   <div className="flex flex-wrap gap-1 items-center">
+                    {/* Proxmox native tags */}
+                    {(vm.tags || []).filter(t => t).map((tag) => (
+                      <Badge
+                        key={`pve-${tag}`}
+                        variant="outline"
+                        className="text-[10px] px-1.5 py-0 h-5"
+                      >
+                        {tag}
+                      </Badge>
+                    ))}
+                    {/* System tags */}
                     {(vmTagsMap[vm.vmid] || []).map((tag) => (
                       <Badge
                         key={tag.id}

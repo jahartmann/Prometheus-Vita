@@ -194,7 +194,7 @@ export function BackupList({ nodeId }: BackupListProps) {
                             </span>
                           </div>
                           {backup.notes && (
-                            <p className="text-xs text-muted-foreground bg-muted/50 rounded px-2 py-1 mt-1 inline-block">
+                            <p className="text-xs text-foreground/70 bg-muted/50 rounded px-2 py-1 mt-1 inline-block">
                               {backup.notes}
                             </p>
                           )}

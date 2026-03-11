@@ -13,8 +13,8 @@ const badgeVariants = cva(
         outline: "border text-foreground",
         success: "border border-green-200 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-500/10 dark:text-green-400",
         warning: "border border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-800 dark:bg-orange-500/10 dark:text-orange-400",
-        degraded: "border border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-500/10 dark:text-red-400",
-        maintenance: "border border-zinc-200 bg-zinc-100 text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400",
+        degraded: "border border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-500/15 dark:text-red-300",
+        maintenance: "border border-zinc-200 bg-zinc-100 text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200",
       },
     },
     defaultVariants: {

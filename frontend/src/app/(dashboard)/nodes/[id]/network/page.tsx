@@ -9,6 +9,7 @@ import { useNodeStore } from "@/stores/node-store";
 import { NetworkInterfaces } from "@/components/nodes/network-interfaces";
 import { LiveBandwidthGauge } from "@/components/monitoring/live-bandwidth-gauge";
 import { NetworkTraffic } from "@/components/monitoring/network-traffic";
+import { RRDBandwidth } from "@/components/monitoring/rrd-bandwidth";
 import { useNodeMetrics } from "@/hooks/use-node-metrics";
 import { Skeleton } from "@/components/ui/skeleton";
 import { networkApi, toArray } from "@/lib/api";
@@ -68,6 +69,9 @@ export default function NodeNetworkPage() {
           />
         </div>
       </div>
+
+      {/* RRD-basierte Bandbreite */}
+      <RRDBandwidth nodeId={nodeId} />
 
       {/* Historical Traffic */}
       <NetworkTraffic nodeId={nodeId} />

@@ -91,7 +91,7 @@ func (h *GatewayHandler) ListAuditLog(c echo.Context) error {
 	limit, _ := strconv.Atoi(c.QueryParam("limit"))
 	offset, _ := strconv.Atoi(c.QueryParam("offset"))
 
-	entries, err := h.auditRepo.List(c.Request().Context(), limit, offset)
+	entries, err := h.auditRepo.ListWithAgentActions(c.Request().Context(), limit, offset)
 	if err != nil {
 		return apiPkg.InternalError(c, "failed to list audit log")
 	}

@@ -41,7 +41,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
             ? "bg-primary text-primary-foreground rounded-br-md"
             : isAssistant
             ? "bg-muted text-foreground rounded-bl-md"
-            : "bg-muted/50 text-muted-foreground text-xs"
+            : "bg-muted/50 text-foreground/70 text-xs"
         )}
       >
         <div className="whitespace-pre-wrap break-words">

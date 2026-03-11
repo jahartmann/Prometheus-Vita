@@ -449,7 +449,7 @@ export default function SecurityPage() {
                         {/* Analyse / Description */}
                         {event.description && (
                           <div className="rounded bg-muted/50 p-3 text-sm">
-                            <p className="font-medium text-xs text-muted-foreground mb-1">
+                            <p className="text-xs text-foreground/70 font-semibold mb-1">
                               Analyse
                             </p>
                             <p>{event.description}</p>
@@ -460,7 +460,7 @@ export default function SecurityPage() {
                         <div className="grid gap-3 sm:grid-cols-2">
                           {event.impact && (
                             <div className="rounded bg-muted/50 p-3 text-sm">
-                              <p className="font-medium text-xs text-muted-foreground mb-1">
+                              <p className="text-xs text-foreground/70 font-semibold mb-1">
                                 Auswirkung
                               </p>
                               <p>{event.impact}</p>
@@ -468,7 +468,7 @@ export default function SecurityPage() {
                           )}
                           {event.recommendation && (
                             <div className="rounded bg-muted/50 p-3 text-sm">
-                              <p className="font-medium text-xs text-muted-foreground mb-1">
+                              <p className="text-xs text-foreground/70 font-semibold mb-1">
                                 Empfehlung
                               </p>
                               <p>{event.recommendation}</p>
@@ -480,7 +480,7 @@ export default function SecurityPage() {
                         {event.metrics &&
                           Object.keys(event.metrics).length > 0 && (
                             <div className="rounded bg-muted/50 p-3 text-sm">
-                              <p className="font-medium text-xs text-muted-foreground mb-1">
+                              <p className="text-xs text-foreground/70 font-semibold mb-1">
                                 Metrik-Kontext
                               </p>
                               <div className="flex flex-wrap gap-3">

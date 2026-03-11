@@ -342,7 +342,7 @@ function VMRecommendationCard({
         {contextReason && (
           <div className="flex items-start gap-2 rounded-md bg-muted/50 p-3 text-sm">
             <Info className="h-4 w-4 mt-0.5 text-blue-500 shrink-0" />
-            <span className="text-muted-foreground">{contextReason}</span>
+            <span className="text-foreground/70">{contextReason}</span>
           </div>
         )}
 

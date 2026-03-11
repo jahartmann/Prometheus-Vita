@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Bot } from "lucide-react";
 
 const PAGE_SIZE = 25;
 
@@ -30,6 +30,7 @@ const methodColors: Record<string, string> = {
   PUT: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300",
   DELETE: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300",
   PATCH: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300",
+  AGENT: "bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-300",
 };
 
 function statusColor(code: number): string {
@@ -51,6 +52,31 @@ function formatTimestamp(dateStr: string): string {
 }
 
 function describeAction(method: string, path: string): string {
+  if (method === "AGENT") {
+    const toolLabels: Record<string, string> = {
+      list_nodes: "KI: Nodes abgefragt",
+      node_status: "KI: Node-Status geprueft",
+      get_vms: "KI: VMs abgefragt",
+      get_metrics: "KI: Metriken abgefragt",
+      create_backup: "KI: Backup erstellt",
+      start_vm: "KI: VM gestartet",
+      stop_vm: "KI: VM gestoppt",
+      migrate_vm: "KI: VM migriert",
+      get_storage: "KI: Storage abgefragt",
+      get_network: "KI: Netzwerk abgefragt",
+      get_predictions: "KI: Vorhersagen abgefragt",
+      get_anomalies: "KI: Anomalien abgefragt",
+      get_briefing: "KI: Briefing abgefragt",
+      check_drift: "KI: Drift geprueft",
+      check_updates: "KI: Updates geprueft",
+      rightsizing: "KI: Rightsizing analysiert",
+      save_knowledge: "KI: Wissen gespeichert",
+      recall_knowledge: "KI: Wissen abgerufen",
+      run_ssh_command: "KI: SSH-Befehl ausgefuehrt",
+    };
+    return toolLabels[path] || `KI: ${path}`;
+  }
+
   const clean = path.replace(/^\/api\/v1\//, "");
 
   const patterns: [RegExp, Record<string, string>][] = [
@@ -156,7 +182,7 @@ export default function AuditLogPage() {
       <div>
         <h2 className="text-lg font-semibold">Audit-Log</h2>
         <p className="text-sm text-muted-foreground">
-          Protokoll aller API-Anfragen an das Gateway.
+          Protokoll aller API-Anfragen und KI-Agent-Aktionen.
         </p>
       </div>
 
@@ -173,6 +199,7 @@ export default function AuditLogPage() {
               <SelectItem value="POST">POST</SelectItem>
               <SelectItem value="PUT">PUT</SelectItem>
               <SelectItem value="DELETE">DELETE</SelectItem>
+              <SelectItem value="AGENT">KI-Agent</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -236,6 +263,7 @@ export default function AuditLogPage() {
                       >
                         {entry.method}
                       </Badge>
+                      {entry.method === "AGENT" && <Bot className="h-4 w-4 text-violet-500" />}
                       <span className="text-sm">{describeAction(entry.method, entry.path)}</span>
                     </span>
                   </TableCell>
