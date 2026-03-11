@@ -1323,3 +1323,56 @@ func (s *Service) buildSSHConfig(node *model.Node) (ssh.SSHConfig, error) {
 
 	return cfg, nil
 }
+
+func (s *Service) ExecVMCommand(ctx context.Context, nodeID uuid.UUID, vmid int, vmType string, command []string) (*proxmox.ExecResult, error) {
+	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
+	if err != nil {
+		return nil, err
+	}
+	return client.ExecCommand(ctx, pveNode, vmid, vmType, command)
+}
+
+// ReadVMFile reads a file from inside a VM/container.
+func (s *Service) ReadVMFile(ctx context.Context, nodeID uuid.UUID, vmid int, vmType string, path string) (string, error) {
+	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
+	if err != nil {
+		return "", err
+	}
+	return client.ReadFile(ctx, pveNode, vmid, vmType, path)
+}
+
+// WriteVMFile writes content to a file inside a VM/container.
+func (s *Service) WriteVMFile(ctx context.Context, nodeID uuid.UUID, vmid int, vmType string, path string, content string) error {
+	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
+	if err != nil {
+		return err
+	}
+	return client.WriteFile(ctx, pveNode, vmid, vmType, path, content)
+}
+
+// ListVMDirectory lists a directory inside a VM/container.
+func (s *Service) ListVMDirectory(ctx context.Context, nodeID uuid.UUID, vmid int, vmType string, path string) ([]proxmox.FileEntry, error) {
+	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
+	if err != nil {
+		return nil, err
+	}
+	return client.ListDirectory(ctx, pveNode, vmid, vmType, path)
+}
+
+// DeleteVMFile removes a file or directory inside a VM/container.
+func (s *Service) DeleteVMFile(ctx context.Context, nodeID uuid.UUID, vmid int, vmType string, path string) error {
+	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
+	if err != nil {
+		return err
+	}
+	return client.DeleteFile(ctx, pveNode, vmid, vmType, path)
+}
+
+// MakeVMDirectory creates a directory inside a VM/container.
+func (s *Service) MakeVMDirectory(ctx context.Context, nodeID uuid.UUID, vmid int, vmType string, path string) error {
+	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
+	if err != nil {
+		return err
+	}
+	return client.MakeDirectory(ctx, pveNode, vmid, vmType, path)
+}

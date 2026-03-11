@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, Server, Users, Key, Globe, Tag, Shield, Bot, Brain, Lock, ShieldCheck, ClipboardList } from "lucide-react";
+import { Bell, Server, Users, Key, Globe, Tag, Shield, Bot, Brain, Lock, ShieldCheck, ClipboardList, Monitor, FolderLock } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const settingsNav = [
@@ -20,6 +20,16 @@ const settingsNav = [
     label: "Benutzer",
     href: "/settings/users",
     icon: Users,
+  },
+  {
+    label: "VM-Berechtigungen",
+    href: "/settings/vm-permissions",
+    icon: FolderLock,
+  },
+  {
+    label: "VM-Gruppen",
+    href: "/settings/vm-groups",
+    icon: Monitor,
   },
   {
     label: "Benachrichtigungen",

@@ -40,6 +40,7 @@ import (
 	telegramService "github.com/antigravity/prometheus/internal/service/telegram"
 	"github.com/antigravity/prometheus/internal/service/updates"
 	userService "github.com/antigravity/prometheus/internal/service/user"
+	vmService "github.com/antigravity/prometheus/internal/service/vm"
 	"github.com/antigravity/prometheus/internal/ssh"
 	"github.com/labstack/echo/v4"
 )
@@ -145,6 +146,10 @@ func main() {
 	// Phase 8 Repositories
 	securityEventRepo := repository.NewSecurityEventRepository(dbPool)
 
+	// VM Permission & Group Repositories
+	vmPermRepo := repository.NewVMPermissionRepository(dbPool)
+	vmGroupRepo := repository.NewVMGroupRepository(dbPool)
+
 	// Phase 7 Repositories
 	brainRepo := repository.NewBrainRepository(dbPool)
 	reflexRepo := repository.NewReflexRuleRepository(dbPool)
@@ -236,6 +241,22 @@ func main() {
 	brainSvc := brain.NewService(brainRepo)
 	reflexSvc := reflex.NewService(reflexRepo, metricsRepo, nodeRepo, nodeSvc, notifSvc)
 
+	// VM Permission & Group Services
+	vmPermSvc := vmService.NewPermissionService(vmPermRepo, userRepo)
+	vmGroupSvc := vmService.NewGroupService(vmGroupRepo)
+
+	// Phase 4 VM Cockpit Services
+	snapshotPolicyRepo := repository.NewSnapshotPolicyRepository(dbPool)
+	scheduledActionRepo := repository.NewScheduledActionRepository(dbPool)
+	vmDependencyRepo := repository.NewVMDependencyRepository(dbPool)
+
+	vmHealthSvc := vmService.NewHealthService(nodeRepo, metricsRepo, clientFactory)
+	vmRightsizingSvc := vmService.NewRightsizingService(nodeRepo, clientFactory)
+	vmAnomalySvc := vmService.NewAnomalyService(nodeRepo, metricsRepo, clientFactory)
+	snapshotPolicySvc := vmService.NewSnapshotPolicyService(snapshotPolicyRepo, nodeRepo, clientFactory)
+	scheduledActionSvc := vmService.NewScheduledActionService(scheduledActionRepo)
+	vmDependencySvc := vmService.NewDependencyService(vmDependencyRepo, nodeRepo, clientFactory)
+
 	// Chat Repositories
 	chatConvRepo := repository.NewChatConversationRepository(dbPool)
 	chatMsgRepo := repository.NewChatMessageRepository(dbPool)
@@ -263,6 +284,16 @@ func main() {
 	agentToolRegistry.Register(agent.NewRightsizingTool(rightsizingSvc))
 	agentToolRegistry.Register(agent.NewSaveKnowledgeTool(brainSvc))
 	agentToolRegistry.Register(agent.NewRecallKnowledgeTool(brainSvc))
+
+	// VM Cockpit AI Tools (Phase 2)
+	agentToolRegistry.Register(agent.NewVMExecTool(nodeSvc))
+	agentToolRegistry.Register(agent.NewVMFileReadTool(nodeSvc))
+	agentToolRegistry.Register(agent.NewVMFileWriteTool(nodeSvc))
+	agentToolRegistry.Register(agent.NewVMProcessesTool(nodeSvc))
+	agentToolRegistry.Register(agent.NewVMServicesTool(nodeSvc))
+	agentToolRegistry.Register(agent.NewVMServiceActionTool(nodeSvc))
+	agentToolRegistry.Register(agent.NewVMDiskUsageTool(nodeSvc))
+	agentToolRegistry.Register(agent.NewVMNetworkInfoTool(nodeSvc))
 
 	// Agent Service
 	agentSvc := agent.NewService(llmRegistry, agentToolRegistry, chatConvRepo, chatMsgRepo, toolCallRepo, approvalRepo, userRepo, agentConfigRepo)
@@ -374,6 +405,10 @@ func main() {
 		SyncCenter:     handler.NewSyncCenterHandler(nodeSvc, nodeRepo, tagRepo),
 		Security:       handler.NewSecurityHandler(securityEventRepo, analysisSvc),
 		PasswordPolicy: handler.NewPasswordPolicyHandler(policyRepo),
+		VMCockpit:      handler.NewVMCockpitHandler(nodeSvc, vmPermSvc, jwtSvc, cfg.CORS.AllowOrigins),
+		VMPermission:   handler.NewVMPermissionHandler(vmPermSvc),
+		VMGroup:        handler.NewVMGroupHandler(vmGroupSvc),
+		VMHealth:       handler.NewVMHealthHandler(vmHealthSvc, vmRightsizingSvc, vmAnomalySvc, snapshotPolicySvc, scheduledActionSvc, vmDependencySvc),
 	}
 
 	// Setup routes

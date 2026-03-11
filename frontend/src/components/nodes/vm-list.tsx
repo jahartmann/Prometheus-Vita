@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useCallback, useEffect } from "react";
+import Link from "next/link";
 import {
   Search,
   ArrowUpDown,
@@ -55,9 +56,9 @@ import { VMTagAssignDialog } from "@/components/tags/vm-tag-assign-dialog";
 import { BulkTagDialog } from "@/components/tags/bulk-tag-dialog";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { useNodeStore } from "@/stores/node-store";
-import { vmApi, bulkVmApi, tagApi, toArray } from "@/lib/api";
+import { vmApi, bulkVmApi, tagApi, vmHealthApi, toArray } from "@/lib/api";
 import { toast } from "sonner";
-import type { VM, BulkVMResult, Tag as TagType } from "@/types/api";
+import type { VM, BulkVMResult, Tag as TagType, VMHealthScore } from "@/types/api";
 import { formatBytes, formatUptime, formatPercentage } from "@/lib/utils";
 
 interface VmListProps {
@@ -84,6 +85,7 @@ export function VmList({ vms, nodeId, onRefresh }: VmListProps) {
   const [tagDialogVm, setTagDialogVm] = useState<VM | null>(null);
   const [bulkTagOpen, setBulkTagOpen] = useState(false);
   const [vmTagsMap, setVmTagsMap] = useState<Record<number, TagType[]>>({});
+  const [healthScores, setHealthScores] = useState<Record<number, VMHealthScore>>({});
   const { nodes, nodeStatus } = useNodeStore();
   const currentNode = nodes.find((n) => n.id === nodeId);
 
@@ -110,6 +112,22 @@ export function VmList({ vms, nodeId, onRefresh }: VmListProps) {
       fetchAllVmTags();
     }
   }, [vms, fetchAllVmTags]);
+
+  // Fetch health scores for all VMs
+  useEffect(() => {
+    if (!nodeId || vms.length === 0) return;
+    (async () => {
+      try {
+        const res = await vmHealthApi.getAllHealth(nodeId);
+        const scores = toArray<VMHealthScore>(res.data);
+        const map: Record<number, VMHealthScore> = {};
+        for (const s of scores) map[s.vmid] = s;
+        setHealthScores(map);
+      } catch {
+        // ignore
+      }
+    })();
+  }, [nodeId, vms]);
 
   const toggleSort = (field: SortField) => {
     if (sortField === field) {
@@ -390,6 +408,7 @@ export function VmList({ vms, nodeId, onRefresh }: VmListProps) {
               <TableHead>
                 <SortButton field="status">Status</SortButton>
               </TableHead>
+              <TableHead>Gesundheit</TableHead>
               <TableHead>
                 <SortButton field="cpu_usage">CPU</SortButton>
               </TableHead>
@@ -419,7 +438,14 @@ export function VmList({ vms, nodeId, onRefresh }: VmListProps) {
                     <Container className="h-4 w-4 text-muted-foreground" />
                   )}
                 </TableCell>
-                <TableCell className="font-medium">{vm.name}</TableCell>
+                <TableCell className="font-medium">
+                  <Link
+                    href={`/nodes/${nodeId}/vms/${vm.vmid}`}
+                    className="hover:underline hover:text-primary transition-colors"
+                  >
+                    {vm.name}
+                  </Link>
+                </TableCell>
                 <TableCell>
                   <div className="flex flex-wrap gap-1 items-center">
                     {/* Proxmox native tags */}
@@ -454,6 +480,24 @@ export function VmList({ vms, nodeId, onRefresh }: VmListProps) {
                 </TableCell>
                 <TableCell>
                   <Badge variant={statusVariant(vm.status)}>{vm.status}</Badge>
+                </TableCell>
+                <TableCell>
+                  {healthScores[vm.vmid] ? (
+                    <span
+                      className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold text-white ${
+                        healthScores[vm.vmid].score > 80
+                          ? "bg-green-500"
+                          : healthScores[vm.vmid].score > 50
+                            ? "bg-yellow-500"
+                            : "bg-red-500"
+                      }`}
+                      title={`Gesundheit: ${healthScores[vm.vmid].score}/100`}
+                    >
+                      {healthScores[vm.vmid].score}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">--</span>
+                  )}
                 </TableCell>
                 <TableCell>{formatPercentage(vm.cpu_usage)}</TableCell>
                 <TableCell>

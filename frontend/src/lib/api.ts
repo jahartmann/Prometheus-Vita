@@ -596,6 +596,92 @@ export const logApi = {
   },
 };
 
+// VM Permission API
+export const vmPermissionApi = {
+  list: (params?: { user_id?: string; target_type?: string; target_id?: string; node_id?: string }) =>
+    api.get("/vm-permissions", { params }),
+  create: (data: { user_id: string; target_type: string; target_id: string; node_id: string; permissions: string[] }) =>
+    api.post("/vm-permissions", data),
+  upsert: (data: { user_id: string; target_type: string; target_id: string; node_id: string; permissions: string[] }) =>
+    api.put("/vm-permissions/upsert", data),
+  update: (id: string, data: { permissions: string[] }) =>
+    api.put(`/vm-permissions/${id}`, data),
+  delete: (id: string) => api.delete(`/vm-permissions/${id}`),
+  getEffective: (userId: string, nodeId: string, vmid: number) =>
+    api.get("/vm-permissions/effective", { params: { user_id: userId, node_id: nodeId, vmid } }),
+  listAllPermissions: () => api.get("/vm-permissions/all"),
+};
+
+// VM Group API
+export const vmGroupApi = {
+  list: () => api.get("/vm-groups"),
+  get: (id: string) => api.get(`/vm-groups/${id}`),
+  create: (data: { name: string; description?: string; tag_filter?: string }) =>
+    api.post("/vm-groups", data),
+  update: (id: string, data: { name?: string; description?: string; tag_filter?: string }) =>
+    api.put(`/vm-groups/${id}`, data),
+  delete: (id: string) => api.delete(`/vm-groups/${id}`),
+  listMembers: (id: string) => api.get(`/vm-groups/${id}/members`),
+  addMember: (id: string, data: { node_id: string; vmid: number }) =>
+    api.post(`/vm-groups/${id}/members`, data),
+  removeMember: (id: string, data: { node_id: string; vmid: number }) =>
+    api.delete(`/vm-groups/${id}/members`, { data }),
+};
+
+// VM Health API (Phase 4)
+export const vmHealthApi = {
+  getHealth: (nodeId: string, vmid: number) =>
+    api.get(`/nodes/${nodeId}/vms/${vmid}/health`),
+  getAllHealth: (nodeId: string) =>
+    api.get(`/nodes/${nodeId}/vm-health`),
+  getRightsizing: (nodeId: string, vmid: number) =>
+    api.get(`/nodes/${nodeId}/vms/${vmid}/rightsizing`),
+  getAnomalies: (nodeId: string, vmid: number) =>
+    api.get(`/nodes/${nodeId}/vms/${vmid}/anomalies`),
+};
+
+// Snapshot Policy API (Phase 4)
+export const snapshotPolicyApi = {
+  list: (nodeId: string, vmid: number) =>
+    api.get(`/nodes/${nodeId}/vms/${vmid}/snapshot-policies`),
+  create: (nodeId: string, vmid: number, data: {
+    node_id: string; vmid: number; vm_type: string; name: string;
+    keep_daily?: number; keep_weekly?: number; keep_monthly?: number;
+    schedule_cron?: string; is_active?: boolean;
+  }) => api.post(`/nodes/${nodeId}/vms/${vmid}/snapshot-policies`, data),
+  update: (nodeId: string, vmid: number, policyId: string, data: {
+    name?: string; keep_daily?: number; keep_weekly?: number;
+    keep_monthly?: number; schedule_cron?: string; is_active?: boolean;
+  }) => api.put(`/nodes/${nodeId}/vms/${vmid}/snapshot-policies/${policyId}`, data),
+  delete: (nodeId: string, vmid: number, policyId: string) =>
+    api.delete(`/nodes/${nodeId}/vms/${vmid}/snapshot-policies/${policyId}`),
+};
+
+// Scheduled Action API (Phase 4)
+export const scheduledActionApi = {
+  list: (nodeId: string, vmid: number) =>
+    api.get(`/nodes/${nodeId}/vms/${vmid}/scheduled-actions`),
+  create: (nodeId: string, vmid: number, data: {
+    node_id: string; vmid?: number; vm_type?: string; action: string;
+    schedule_cron: string; is_active?: boolean; description?: string;
+  }) => api.post(`/nodes/${nodeId}/vms/${vmid}/scheduled-actions`, data),
+  delete: (nodeId: string, vmid: number, actionId: string) =>
+    api.delete(`/nodes/${nodeId}/vms/${vmid}/scheduled-actions/${actionId}`),
+};
+
+// VM Dependency API (Phase 4)
+export const vmDependencyApi = {
+  listAll: () => api.get("/vm-dependencies"),
+  create: (data: {
+    source_node_id: string; source_vmid: number;
+    target_node_id: string; target_vmid: number;
+    dependency_type?: string; description?: string;
+  }) => api.post("/vm-dependencies", data),
+  delete: (id: string) => api.delete(`/vm-dependencies/${id}`),
+  listByVM: (nodeId: string, vmid: number) =>
+    api.get(`/nodes/${nodeId}/vms/${vmid}/dependencies`),
+};
+
 // Password Policy API
 export const passwordPolicyApi = {
   get: () => api.get("/password-policy").then((r) => r.data),

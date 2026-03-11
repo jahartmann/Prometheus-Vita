@@ -48,6 +48,10 @@ type Handlers struct {
 	SyncCenter     *handler.SyncCenterHandler
 	Security       *handler.SecurityHandler
 	PasswordPolicy *handler.PasswordPolicyHandler
+	VMCockpit      *handler.VMCockpitHandler
+	VMPermission   *handler.VMPermissionHandler
+	VMGroup        *handler.VMGroupHandler
+	VMHealth       *handler.VMHealthHandler
 }
 
 func SetupRouter(e *echo.Echo, cfg *config.Config, jwtSvc *auth.JWTService, h Handlers, gatewaySvc *gateway.Service, redisClient *redis.Client, auditRepo repository.AuditRepository) {
@@ -547,6 +551,89 @@ func SetupRouter(e *echo.Echo, cfg *config.Config, jwtSvc *auth.JWTService, h Ha
 
 	// Tag Sync from Proxmox
 	adminOp.POST("/:id/tags/sync", h.Node.SyncTags)
+
+	// VM Cockpit
+	if h.VMCockpit != nil {
+		vmCockpit := adminOp.Group("/:id/vms/:vmid/cockpit")
+		vmCockpit.POST("/exec", h.VMCockpit.ExecCommand)
+		vmCockpit.GET("/processes", h.VMCockpit.GetProcesses)
+		vmCockpit.GET("/services", h.VMCockpit.GetServices)
+		vmCockpit.GET("/ports", h.VMCockpit.GetPorts)
+		vmCockpit.GET("/disk", h.VMCockpit.GetDiskUsage)
+		vmCockpit.POST("/services/action", h.VMCockpit.ServiceAction)
+		vmCockpit.POST("/processes/kill", h.VMCockpit.KillProcess)
+		e.GET("/api/v1/nodes/:nodeId/vms/:vmid/cockpit/shell", h.VMCockpit.HandleShell)
+
+		// File operations (Phase 2)
+		vmCockpit.GET("/files", h.VMCockpit.ListFiles)
+		vmCockpit.GET("/files/read", h.VMCockpit.ReadFile)
+		vmCockpit.POST("/files/write", h.VMCockpit.WriteFile)
+		vmCockpit.POST("/files/upload", h.VMCockpit.UploadFile)
+		vmCockpit.DELETE("/files", h.VMCockpit.DeleteFile)
+		vmCockpit.POST("/files/mkdir", h.VMCockpit.MakeDir)
+	}
+
+	// VM Permissions (Admin only)
+	if h.VMPermission != nil {
+		vmPerms := protected.Group("/vm-permissions")
+		vmPerms.Use(middleware.RequireRole(model.RoleAdmin))
+		vmPerms.GET("", h.VMPermission.List)
+		vmPerms.POST("", h.VMPermission.Create)
+		vmPerms.PUT("/upsert", h.VMPermission.Upsert)
+		vmPerms.PUT("/:id", h.VMPermission.Update)
+		vmPerms.DELETE("/:id", h.VMPermission.Delete)
+		vmPerms.GET("/effective", h.VMPermission.GetEffective)
+		vmPerms.GET("/all", h.VMPermission.ListAllPermissions)
+	}
+
+	// VM Groups (Admin only)
+	if h.VMGroup != nil {
+		vmGroups := protected.Group("/vm-groups")
+		vmGroups.Use(middleware.RequireRole(model.RoleAdmin))
+		vmGroups.GET("", h.VMGroup.List)
+		vmGroups.GET("/:id", h.VMGroup.Get)
+		vmGroups.POST("", h.VMGroup.Create)
+		vmGroups.PUT("/:id", h.VMGroup.Update)
+		vmGroups.DELETE("/:id", h.VMGroup.Delete)
+		vmGroups.GET("/:id/members", h.VMGroup.ListMembers)
+		vmGroups.POST("/:id/members", h.VMGroup.AddMember)
+		vmGroups.DELETE("/:id/members", h.VMGroup.RemoveMember)
+	}
+
+	// VM Health, Rightsizing, Anomalies, Snapshot Policies, Dependencies (Phase 4)
+	if h.VMHealth != nil {
+		// Health scores
+		nodes.GET("/:id/vms/:vmid/health", h.VMHealth.GetVMHealth)
+		nodes.GET("/:id/vm-health", h.VMHealth.GetAllVMHealth)
+
+		// VM-level rightsizing
+		nodes.GET("/:id/vms/:vmid/rightsizing", h.VMHealth.GetVMRightsizing)
+
+		// VM-level anomalies
+		nodes.GET("/:id/vms/:vmid/anomalies", h.VMHealth.GetVMAnomalies)
+
+		// Snapshot policies
+		nodes.GET("/:id/vms/:vmid/snapshot-policies", h.VMHealth.ListSnapshotPolicies)
+		adminOp.POST("/:id/vms/:vmid/snapshot-policies", h.VMHealth.CreateSnapshotPolicy)
+		adminOp.PUT("/:id/vms/:vmid/snapshot-policies/:policyId", h.VMHealth.UpdateSnapshotPolicy)
+		adminOp.DELETE("/:id/vms/:vmid/snapshot-policies/:policyId", h.VMHealth.DeleteSnapshotPolicy)
+
+		// Scheduled actions
+		nodes.GET("/:id/vms/:vmid/scheduled-actions", h.VMHealth.ListScheduledActions)
+		adminOp.POST("/:id/vms/:vmid/scheduled-actions", h.VMHealth.CreateScheduledAction)
+		adminOp.DELETE("/:id/vms/:vmid/scheduled-actions/:actionId", h.VMHealth.DeleteScheduledAction)
+
+		// VM Dependencies (non-node-scoped)
+		vmDeps := protected.Group("/vm-dependencies")
+		vmDeps.GET("", h.VMHealth.ListAllDependencies)
+		vmDepsAdmin := vmDeps.Group("")
+		vmDepsAdmin.Use(middleware.RequireRole(model.RoleAdmin, model.RoleOperator))
+		vmDepsAdmin.POST("", h.VMHealth.CreateDependency)
+		vmDepsAdmin.DELETE("/:depId", h.VMHealth.DeleteDependency)
+
+		// VM Dependencies (node-scoped)
+		nodes.GET("/:id/vms/:vmid/dependencies", h.VMHealth.ListVMDependencies)
+	}
 
 	// WebSocket
 	e.GET("/api/v1/ws", h.WS.HandleWS)

@@ -1168,6 +1168,69 @@ export interface SecurityStats {
   by_category: Record<string, number>;
 }
 
+// VM Cockpit types
+export interface VMPermission {
+  id: string;
+  user_id: string;
+  target_type: "vm" | "group";
+  target_id: string;
+  node_id: string;
+  permissions: string[];
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface VMProcess {
+  user: string;
+  pid: number;
+  cpu: number;
+  mem: number;
+  vsz: string;
+  rss: string;
+  command: string;
+}
+
+export interface VMServiceInfo {
+  unit: string;
+  load_state: string;
+  active_state: string;
+  sub_state: string;
+  description: string;
+}
+
+export interface VMPort {
+  protocol: string;
+  address: string;
+  port: number;
+  process: string;
+}
+
+export interface VMDisk {
+  target: string;
+  size: string;
+  used: string;
+  avail: string;
+  percent: string;
+}
+
+export interface VMExecResult {
+  exitcode: number;
+  "out-data": string;
+  "err-data": string;
+}
+
+export interface VMFileEntry {
+  name: string;
+  type: "file" | "directory" | "symlink";
+  permissions: string;
+  owner: string;
+  group: string;
+  size: number;
+  modified: string;
+  link_target?: string;
+}
+
 // Tag sync-all response
 export interface TagSyncAllResult {
   total_imported: number;
@@ -1179,4 +1242,123 @@ export interface TagSyncNodeResult {
   node_name: string;
   imported: number;
   error?: string;
+}
+
+// VM Group types
+export interface VMGroup {
+  id: string;
+  name: string;
+  description: string;
+  tag_filter: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  member_count?: number;
+}
+
+export interface VMGroupMember {
+  group_id: string;
+  node_id: string;
+  vmid: number;
+}
+
+// VM Health Score types (Phase 4)
+export interface VMHealthScore {
+  node_id: string;
+  vmid: number;
+  vm_name: string;
+  vm_type: string;
+  score: number;
+  status: "healthy" | "warning" | "critical";
+  breakdown: VMHealthBreakdown;
+  updated_at: string;
+}
+
+export interface VMHealthBreakdown {
+  cpu_score: number;
+  cpu_avg: number;
+  ram_score: number;
+  ram_avg: number;
+  disk_score: number;
+  disk_usage: number;
+  stability_score: number;
+  uptime_days: number;
+  crash_count: number;
+}
+
+export interface VMRightsizingResult {
+  node_id: string;
+  vmid: number;
+  vm_name: string;
+  vm_type: string;
+  resources: VMResourceRec[];
+  analyzed_at: string;
+}
+
+export interface VMResourceRec {
+  resource: string;
+  current_value: string;
+  recommended_value: string;
+  avg_usage: number;
+  max_usage: number;
+  status: "optimal" | "reduce" | "increase";
+  reason: string;
+}
+
+export interface VMCockpitAnomaly {
+  node_id: string;
+  vmid: number;
+  vm_name: string;
+  metric: string;
+  value: number;
+  mean: number;
+  stddev: number;
+  z_score: number;
+  severity: "warning" | "critical";
+  message: string;
+  detected_at: string;
+}
+
+export interface SnapshotPolicy {
+  id: string;
+  node_id: string;
+  vmid: number;
+  vm_type: string;
+  name: string;
+  keep_daily: number;
+  keep_weekly: number;
+  keep_monthly: number;
+  schedule_cron: string;
+  is_active: boolean;
+  last_run?: string;
+  created_at: string;
+}
+
+export interface ScheduledAction {
+  id: string;
+  node_id: string;
+  vmid?: number;
+  vm_type?: string;
+  action: string;
+  schedule_cron: string;
+  is_active: boolean;
+  description?: string;
+  created_at: string;
+}
+
+export interface VMDependency {
+  id: string;
+  source_node_id: string;
+  source_vmid: number;
+  target_node_id: string;
+  target_vmid: number;
+  dependency_type: string;
+  description?: string;
+  created_at: string;
+  source_vm_name?: string;
+  target_vm_name?: string;
+  source_vm_type?: string;
+  target_vm_type?: string;
+  source_status?: string;
+  target_status?: string;
 }

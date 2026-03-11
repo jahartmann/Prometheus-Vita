@@ -35,6 +35,8 @@ import {
   Sun,
   LogOut,
   ChevronUp,
+  HeartPulse,
+  Link2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -82,12 +84,14 @@ const sections: NavSection[] = [
       { label: "Alerts", href: "/alerts", icon: AlertTriangle, matchPrefix: "/alerts" },
       { label: "Drift-Erkennung", href: "/drift", icon: GitCompare, matchPrefix: "/drift" },
       { label: "Empfehlungen", href: "/recommendations", icon: Lightbulb, matchPrefix: "/recommendations" },
+      { label: "VM-Gesundheit", href: "/health", icon: HeartPulse, matchPrefix: "/health" },
     ],
   },
   {
     label: "System",
     items: [
       { label: "Topologie", href: "/topology", icon: GitBranch, matchPrefix: "/topology" },
+      { label: "Abhaengigkeiten", href: "/dependencies", icon: Link2, matchPrefix: "/dependencies" },
       { label: "Reflex-Regeln", href: "/reflex", icon: Zap, matchPrefix: "/reflex" },
       { label: "Tags", href: "/tags", icon: Tag, matchPrefix: "/tags" },
       { label: "ISOs & Vorlagen", href: "/isos", icon: Disc, matchPrefix: "/isos" },
