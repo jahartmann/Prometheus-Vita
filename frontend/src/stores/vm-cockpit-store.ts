@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { toast } from "sonner";
 import { toArray } from "@/lib/api";
-import { vmCockpitApi } from "@/lib/vm-api";
+import { vmCockpitApi, extractCockpitError, type VMCockpitError } from "@/lib/vm-api";
 import type { VM, VMProcess, VMServiceInfo, VMPort, VMDisk, VMFileEntry } from "@/types/api";
 
 interface VMCockpitState {
@@ -24,6 +24,12 @@ interface VMCockpitState {
   openFileOriginal: string | null;
   isLoadingFile: boolean;
   isSavingFile: boolean;
+  processesError: VMCockpitError | null;
+  servicesError: VMCockpitError | null;
+  portsError: VMCockpitError | null;
+  diskError: VMCockpitError | null;
+  filesError: VMCockpitError | null;
+  fileError: VMCockpitError | null;
   bookmarks: string[];
   setVM: (vm: VM, nodeId: string) => void;
   fetchProcesses: () => Promise<void>;
@@ -64,6 +70,12 @@ export const useVMCockpitStore = create<VMCockpitState>()((set, get) => ({
   isLoadingFile: false,
   isSavingFile: false,
   bookmarks: ["/etc", "/var/log", "/home", "/root", "/tmp"],
+  processesError: null,
+  servicesError: null,
+  portsError: null,
+  diskError: null,
+  filesError: null,
+  fileError: null,
 
   setVM: (vm: VM, nodeId: string) => {
     set({ vm, nodeId });
@@ -72,52 +84,48 @@ export const useVMCockpitStore = create<VMCockpitState>()((set, get) => ({
   fetchProcesses: async () => {
     const { vm, nodeId } = get();
     if (!vm || !nodeId) return;
-    set({ isLoadingProcesses: true });
+    set({ isLoadingProcesses: true, processesError: null });
     try {
       const res = await vmCockpitApi.getProcesses(nodeId, vm.vmid, vm.type);
       set({ processes: toArray<VMProcess>(res.data), isLoadingProcesses: false });
-    } catch {
-      toast.error("Prozesse konnten nicht geladen werden");
-      set({ isLoadingProcesses: false });
+    } catch (error) {
+      set({ isLoadingProcesses: false, processesError: extractCockpitError(error) });
     }
   },
 
   fetchServices: async () => {
     const { vm, nodeId } = get();
     if (!vm || !nodeId) return;
-    set({ isLoadingServices: true });
+    set({ isLoadingServices: true, servicesError: null });
     try {
       const res = await vmCockpitApi.getServices(nodeId, vm.vmid, vm.type);
       set({ services: toArray<VMServiceInfo>(res.data), isLoadingServices: false });
-    } catch {
-      toast.error("Services konnten nicht geladen werden");
-      set({ isLoadingServices: false });
+    } catch (error) {
+      set({ isLoadingServices: false, servicesError: extractCockpitError(error) });
     }
   },
 
   fetchPorts: async () => {
     const { vm, nodeId } = get();
     if (!vm || !nodeId) return;
-    set({ isLoadingPorts: true });
+    set({ isLoadingPorts: true, portsError: null });
     try {
       const res = await vmCockpitApi.getPorts(nodeId, vm.vmid, vm.type);
       set({ ports: toArray<VMPort>(res.data), isLoadingPorts: false });
-    } catch {
-      toast.error("Ports konnten nicht geladen werden");
-      set({ isLoadingPorts: false });
+    } catch (error) {
+      set({ isLoadingPorts: false, portsError: extractCockpitError(error) });
     }
   },
 
   fetchDisk: async () => {
     const { vm, nodeId } = get();
     if (!vm || !nodeId) return;
-    set({ isLoadingDisk: true });
+    set({ isLoadingDisk: true, diskError: null });
     try {
       const res = await vmCockpitApi.getDisk(nodeId, vm.vmid, vm.type);
       set({ disks: toArray<VMDisk>(res.data), isLoadingDisk: false });
-    } catch {
-      toast.error("Speicherinformationen konnten nicht geladen werden");
-      set({ isLoadingDisk: false });
+    } catch (error) {
+      set({ isLoadingDisk: false, diskError: extractCockpitError(error) });
     }
   },
 
@@ -128,8 +136,9 @@ export const useVMCockpitStore = create<VMCockpitState>()((set, get) => ({
       await vmCockpitApi.killProcess(nodeId, vm.vmid, pid, signal, vm.type);
       toast.success(`Prozess ${pid} beendet`);
       get().fetchProcesses();
-    } catch {
-      toast.error(`Prozess ${pid} konnte nicht beendet werden`);
+    } catch (error) {
+      const err = extractCockpitError(error);
+      toast.error(err.message, { description: err.details });
     }
   },
 
@@ -140,35 +149,34 @@ export const useVMCockpitStore = create<VMCockpitState>()((set, get) => ({
       await vmCockpitApi.serviceAction(nodeId, vm.vmid, service, action, vm.type);
       toast.success(`Service ${service}: ${action} erfolgreich`);
       get().fetchServices();
-    } catch {
-      toast.error(`Service-Aktion fehlgeschlagen: ${service} ${action}`);
+    } catch (error) {
+      const err = extractCockpitError(error);
+      toast.error(err.message, { description: err.details });
     }
   },
 
   navigateTo: async (path: string) => {
     const { vm, nodeId } = get();
     if (!vm || !nodeId) return;
-    set({ isLoadingFiles: true, currentPath: path });
+    set({ isLoadingFiles: true, currentPath: path, filesError: null });
     try {
       const res = await vmCockpitApi.listDir(nodeId, vm.vmid, path, vm.type);
       set({ files: toArray<VMFileEntry>(res.data), isLoadingFiles: false });
-    } catch {
-      toast.error("Verzeichnis konnte nicht geladen werden");
-      set({ isLoadingFiles: false });
+    } catch (error) {
+      set({ isLoadingFiles: false, filesError: extractCockpitError(error) });
     }
   },
 
   openFile: async (path: string) => {
     const { vm, nodeId } = get();
     if (!vm || !nodeId) return;
-    set({ isLoadingFile: true, openFilePath: path });
+    set({ isLoadingFile: true, openFilePath: path, fileError: null });
     try {
       const res = await vmCockpitApi.readFile(nodeId, vm.vmid, path, vm.type);
       const content = (res.data as unknown as { content: string }).content ?? "";
       set({ openFileContent: content, openFileOriginal: content, isLoadingFile: false });
-    } catch {
-      toast.error("Datei konnte nicht geladen werden");
-      set({ isLoadingFile: false, openFilePath: null });
+    } catch (error) {
+      set({ isLoadingFile: false, openFilePath: null, fileError: extractCockpitError(error) });
     }
   },
 
@@ -184,8 +192,9 @@ export const useVMCockpitStore = create<VMCockpitState>()((set, get) => ({
       await vmCockpitApi.writeFile(nodeId, vm.vmid, path, content, vm.type);
       set({ openFileOriginal: content, isSavingFile: false });
       toast.success("Datei gespeichert");
-    } catch {
-      toast.error("Datei konnte nicht gespeichert werden");
+    } catch (error) {
+      const err = extractCockpitError(error);
+      toast.error(err.message, { description: err.details });
       set({ isSavingFile: false });
     }
   },
@@ -197,8 +206,9 @@ export const useVMCockpitStore = create<VMCockpitState>()((set, get) => ({
       await vmCockpitApi.deleteFile(nodeId, vm.vmid, path, vm.type);
       toast.success("Geloescht");
       get().navigateTo(get().currentPath);
-    } catch {
-      toast.error("Loeschen fehlgeschlagen");
+    } catch (error) {
+      const err = extractCockpitError(error);
+      toast.error(err.message, { description: err.details });
     }
   },
 
@@ -209,8 +219,9 @@ export const useVMCockpitStore = create<VMCockpitState>()((set, get) => ({
       await vmCockpitApi.mkdir(nodeId, vm.vmid, path, vm.type);
       toast.success("Verzeichnis erstellt");
       get().navigateTo(get().currentPath);
-    } catch {
-      toast.error("Verzeichnis konnte nicht erstellt werden");
+    } catch (error) {
+      const err = extractCockpitError(error);
+      toast.error(err.message, { description: err.details });
     }
   },
 
@@ -221,8 +232,9 @@ export const useVMCockpitStore = create<VMCockpitState>()((set, get) => ({
       await vmCockpitApi.writeFile(nodeId, vm.vmid, path, "", vm.type);
       toast.success("Datei erstellt");
       get().navigateTo(get().currentPath);
-    } catch {
-      toast.error("Datei konnte nicht erstellt werden");
+    } catch (error) {
+      const err = extractCockpitError(error);
+      toast.error(err.message, { description: err.details });
     }
   },
 
@@ -233,8 +245,9 @@ export const useVMCockpitStore = create<VMCockpitState>()((set, get) => ({
       await vmCockpitApi.uploadFile(nodeId, vm.vmid, path, content, vm.type);
       toast.success("Datei hochgeladen");
       get().navigateTo(get().currentPath);
-    } catch {
-      toast.error("Upload fehlgeschlagen");
+    } catch (error) {
+      const err = extractCockpitError(error);
+      toast.error(err.message, { description: err.details });
     }
   },
 }));
