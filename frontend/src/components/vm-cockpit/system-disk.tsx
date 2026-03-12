@@ -7,13 +7,18 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useVMCockpitStore } from "@/stores/vm-cockpit-store";
+import { CockpitError } from "./cockpit-error";
 
 export function SystemDisk() {
-  const { disks, isLoadingDisk, fetchDisk } = useVMCockpitStore();
+  const { disks, isLoadingDisk, fetchDisk, diskError } = useVMCockpitStore();
 
   useEffect(() => {
     fetchDisk();
   }, [fetchDisk]);
+
+  if (diskError) {
+    return <CockpitError {...diskError} onRetry={fetchDisk} />;
+  }
 
   if (isLoadingDisk && disks.length === 0) {
     return (
