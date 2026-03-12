@@ -130,7 +130,7 @@ func Load() (*Config, error) {
 			Key: getEnv("ENCRYPTION_KEY", ""),
 		},
 		CORS: CORSConfig{
-			AllowOrigins: strings.Split(getEnv("CORS_ALLOW_ORIGINS", "*"), ","),
+			AllowOrigins: parseCORSOrigins(getEnv("CORS_ALLOW_ORIGINS", "")),
 			AllowMethods: []string{"GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"},
 			AllowHeaders: []string{"Authorization", "Content-Type", "X-Request-ID", "X-API-Key"},
 		},
@@ -197,4 +197,19 @@ func getEnvInt(key string, fallback int) int {
 		}
 	}
 	return fallback
+}
+
+func parseCORSOrigins(val string) []string {
+	if val == "" {
+		return []string{}
+	}
+	origins := strings.Split(val, ",")
+	var result []string
+	for _, o := range origins {
+		o = strings.TrimSpace(o)
+		if o != "" {
+			result = append(result, o)
+		}
+	}
+	return result
 }
