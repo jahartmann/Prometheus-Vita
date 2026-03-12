@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/table";
 import { useVMCockpitStore } from "@/stores/vm-cockpit-store";
 import { FileEditor } from "./file-editor";
+import { CockpitError } from "./cockpit-error";
 import type { VMFileEntry } from "@/types/api";
 
 function formatFileSize(bytes: number): string {
@@ -44,6 +45,7 @@ export function FilesTab() {
     currentPath,
     files,
     isLoadingFiles,
+    filesError,
     openFilePath,
     openFileContent,
     openFileOriginal,
@@ -208,6 +210,10 @@ export function FilesTab() {
         onClose={closeFile}
       />
     );
+  }
+
+  if (filesError) {
+    return <CockpitError {...filesError} onRetry={() => navigateTo(currentPath)} />;
   }
 
   return (
