@@ -9,6 +9,7 @@ import { Plus, X, Wifi, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useVMShell } from "@/hooks/use-vm-shell";
+import { CockpitError } from "./cockpit-error";
 
 interface ShellSession {
   id: number;
@@ -31,7 +32,7 @@ export function ShellTab({ nodeId, vmid, vmType }: ShellTabProps) {
   const [activeSessionId, setActiveSessionId] = useState<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const nextIdRef = useRef(1);
-  const { connect, disconnect, send, setOnData, isConnected } = useVMShell({
+  const { connect, disconnect, send, setOnData, isConnected, shellError, clearShellError } = useVMShell({
     nodeId,
     vmid,
     vmType,
@@ -227,6 +228,17 @@ export function ShellTab({ nodeId, vmid, vmType }: ShellTabProps) {
           </Badge>
         </div>
       </div>
+
+      {/* Error display */}
+      {shellError && !isConnected && (
+        <CockpitError
+          {...shellError}
+          onRetry={() => {
+            clearShellError();
+            connect();
+          }}
+        />
+      )}
 
       {/* Terminal container */}
       <div ref={containerRef} className="flex-1 p-1" />
