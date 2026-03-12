@@ -141,13 +141,19 @@ func (h *VMCockpitHandler) ExecCommand(c echo.Context) error {
 	}
 
 	var req struct {
-		Command string `json:"command"`
+		Command []string `json:"command"`
 	}
-	if err := c.Bind(&req); err != nil || req.Command == "" {
-		return apiPkg.BadRequest(c, "command is required")
+	if err := c.Bind(&req); err != nil || len(req.Command) == 0 {
+		return apiPkg.BadRequest(c, "command is required (array of strings)")
 	}
 
-	result, err := h.nodeSvc.ExecVMCommand(c.Request().Context(), nodeID, vmid, vmType, []string{"sh", "-c", req.Command})
+	for i, arg := range req.Command {
+		if arg == "" {
+			return apiPkg.BadRequest(c, fmt.Sprintf("command element %d is empty", i))
+		}
+	}
+
+	result, err := h.nodeSvc.ExecVMCommand(c.Request().Context(), nodeID, vmid, vmType, req.Command)
 	if err != nil {
 		return handleNodeError(c, err, "failed to execute command")
 	}
