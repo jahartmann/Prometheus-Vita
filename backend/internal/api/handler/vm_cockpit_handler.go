@@ -11,6 +11,7 @@ import (
 
 	"github.com/antigravity/prometheus/internal/api/middleware"
 	apiPkg "github.com/antigravity/prometheus/internal/api/response"
+	"github.com/antigravity/prometheus/internal/apierror"
 	"github.com/antigravity/prometheus/internal/model"
 	nodeService "github.com/antigravity/prometheus/internal/service/node"
 	"github.com/antigravity/prometheus/internal/service/auth"
@@ -602,9 +603,13 @@ func (h *VMCockpitHandler) ListFiles(c echo.Context) error {
 	if !allowed {
 		return apiPkg.Forbidden(c, "Keine Berechtigung fuer Dateizugriff")
 	}
-	path := c.QueryParam("path")
-	if path == "" {
-		path = "/"
+	rawPath := c.QueryParam("path")
+	if rawPath == "" {
+		rawPath = "/"
+	}
+	path, pathErr := apierror.ValidatePath(rawPath)
+	if pathErr != nil {
+		return apiPkg.FromAPIError(c, pathErr.(*apierror.APIError))
 	}
 	entries, err := h.nodeSvc.ListVMDirectory(c.Request().Context(), nodeID, vmid, vmType, path)
 	if err != nil {
@@ -626,9 +631,13 @@ func (h *VMCockpitHandler) ReadFile(c echo.Context) error {
 	if !allowed {
 		return apiPkg.Forbidden(c, "Keine Berechtigung fuer Dateizugriff")
 	}
-	path := c.QueryParam("path")
-	if path == "" {
+	rawPath := c.QueryParam("path")
+	if rawPath == "" {
 		return apiPkg.BadRequest(c, "path is required")
+	}
+	path, pathErr := apierror.ValidatePath(rawPath)
+	if pathErr != nil {
+		return apiPkg.FromAPIError(c, pathErr.(*apierror.APIError))
 	}
 	content, err := h.nodeSvc.ReadVMFile(c.Request().Context(), nodeID, vmid, vmType, path)
 	if err != nil {
@@ -657,6 +666,11 @@ func (h *VMCockpitHandler) WriteFile(c echo.Context) error {
 	if err := c.Bind(&req); err != nil || req.Path == "" {
 		return apiPkg.BadRequest(c, "path and content are required")
 	}
+	validPath, pathErr := apierror.ValidatePath(req.Path)
+	if pathErr != nil {
+		return apiPkg.FromAPIError(c, pathErr.(*apierror.APIError))
+	}
+	req.Path = validPath
 	if err := h.nodeSvc.WriteVMFile(c.Request().Context(), nodeID, vmid, vmType, req.Path, req.Content); err != nil {
 		return handleNodeError(c, err, "Datei konnte nicht geschrieben werden")
 	}
@@ -683,6 +697,11 @@ func (h *VMCockpitHandler) UploadFile(c echo.Context) error {
 	if err := c.Bind(&req); err != nil || req.Path == "" {
 		return apiPkg.BadRequest(c, "path and content are required")
 	}
+	validPath, pathErr := apierror.ValidatePath(req.Path)
+	if pathErr != nil {
+		return apiPkg.FromAPIError(c, pathErr.(*apierror.APIError))
+	}
+	req.Path = validPath
 	if err := h.nodeSvc.WriteVMFile(c.Request().Context(), nodeID, vmid, vmType, req.Path, req.Content); err != nil {
 		return handleNodeError(c, err, "Datei konnte nicht hochgeladen werden")
 	}
@@ -702,9 +721,13 @@ func (h *VMCockpitHandler) DeleteFile(c echo.Context) error {
 	if !allowed {
 		return apiPkg.Forbidden(c, "Keine Schreibberechtigung fuer Dateien")
 	}
-	path := c.QueryParam("path")
-	if path == "" {
+	rawPath := c.QueryParam("path")
+	if rawPath == "" {
 		return apiPkg.BadRequest(c, "path is required")
+	}
+	path, pathErr := apierror.ValidatePath(rawPath)
+	if pathErr != nil {
+		return apiPkg.FromAPIError(c, pathErr.(*apierror.APIError))
 	}
 	if err := h.nodeSvc.DeleteVMFile(c.Request().Context(), nodeID, vmid, vmType, path); err != nil {
 		return handleNodeError(c, err, "Datei konnte nicht geloescht werden")
@@ -731,6 +754,11 @@ func (h *VMCockpitHandler) MakeDir(c echo.Context) error {
 	if err := c.Bind(&req); err != nil || req.Path == "" {
 		return apiPkg.BadRequest(c, "path is required")
 	}
+	validPath, pathErr := apierror.ValidatePath(req.Path)
+	if pathErr != nil {
+		return apiPkg.FromAPIError(c, pathErr.(*apierror.APIError))
+	}
+	req.Path = validPath
 	if err := h.nodeSvc.MakeVMDirectory(c.Request().Context(), nodeID, vmid, vmType, req.Path); err != nil {
 		return handleNodeError(c, err, "Verzeichnis konnte nicht erstellt werden")
 	}
