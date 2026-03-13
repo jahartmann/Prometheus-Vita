@@ -80,13 +80,20 @@ func (h *TelegramHandler) GetTelegramStatus(c echo.Context) error {
 		return apiPkg.Unauthorized(c, "user not found in context")
 	}
 
+	// Always try to resolve bot username for deep links
+	botUsername := ""
+	if h.botSvc != nil {
+		botUsername, _ = h.botSvc.GetBotUsername(c.Request().Context())
+	}
+
 	link, err := h.linkRepo.GetByUserID(c.Request().Context(), userID)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
 			return apiPkg.Success(c, map[string]interface{}{
-				"linked":     false,
-				"is_verified": false,
-				"bot_enabled": h.botEnabled,
+				"linked":       false,
+				"is_verified":  false,
+				"bot_enabled":  h.botEnabled,
+				"bot_username": botUsername,
 			})
 		}
 		return apiPkg.InternalError(c, "failed to get telegram link status")
@@ -98,6 +105,7 @@ func (h *TelegramHandler) GetTelegramStatus(c echo.Context) error {
 		"telegram_username": link.TelegramUsername,
 		"verification_code": link.VerificationCode,
 		"bot_enabled":       h.botEnabled,
+		"bot_username":      botUsername,
 	})
 }
 

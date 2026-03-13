@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/antigravity/prometheus/internal/apierror"
 	apiPkg "github.com/antigravity/prometheus/internal/api/response"
 	nodeService "github.com/antigravity/prometheus/internal/service/node"
 	"github.com/google/uuid"
@@ -18,7 +19,8 @@ func NewLogHandler(nodeSvc *nodeService.Service) *LogHandler {
 	return &LogHandler{nodeSvc: nodeSvc}
 }
 
-// GetLogs returns the last N lines of a system log file
+// GetLogs returns the last N lines of a system log file.
+// Tries Proxmox API first (syslog endpoint), falls back to SSH.
 func (h *LogHandler) GetLogs(c echo.Context) error {
 	nodeID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -32,13 +34,13 @@ func (h *LogHandler) GetLogs(c echo.Context) error {
 
 	// Whitelist allowed log files for security
 	allowedLogs := map[string]string{
-		"syslog":        "/var/log/syslog",
-		"auth":          "/var/log/auth.log",
-		"pveproxy":      "/var/log/pveproxy/access.log",
-		"pvedaemon":     "/var/log/pvedaemon.log",
-		"pve-firewall":  "/var/log/pve-firewall.log",
-		"corosync":      "/var/log/corosync/corosync.log",
-		"tasks":         "/var/log/pve/tasks/active",
+		"syslog":       "/var/log/syslog",
+		"auth":         "/var/log/auth.log",
+		"pveproxy":     "/var/log/pveproxy/access.log",
+		"pvedaemon":    "/var/log/pvedaemon.log",
+		"pve-firewall": "/var/log/pve-firewall.log",
+		"corosync":     "/var/log/corosync/corosync.log",
+		"tasks":        "/var/log/pve/tasks/active",
 	}
 
 	logPath, ok := allowedLogs[logFile]
@@ -57,11 +59,29 @@ func (h *LogHandler) GetLogs(c echo.Context) error {
 		}
 	}
 
+	// Try Proxmox API first for syslog
+	if logFile == "syslog" {
+		logLines, apiErr := h.nodeSvc.GetNodeSyslog(c.Request().Context(), nodeID, lines)
+		if apiErr == nil {
+			return apiPkg.Success(c, map[string]interface{}{
+				"file":  logFile,
+				"path":  logPath,
+				"lines": logLines,
+			})
+		}
+		slog.Warn("proxmox api syslog failed, trying ssh",
+			slog.String("node_id", nodeID.String()), slog.Any("error", apiErr))
+	}
+
+	// Fallback: SSH
 	cmd := fmt.Sprintf("tail -n %d %s 2>/dev/null || echo 'Log file not available'", lines, logPath)
 	result, err := h.nodeSvc.RunSSHCommand(c.Request().Context(), nodeID, cmd)
 	if err != nil {
-		slog.Error("failed to read logs", slog.String("node_id", nodeID.String()), slog.Any("error", err))
-		return apiPkg.InternalError(c, "failed to read logs")
+		slog.Error("failed to read logs via ssh",
+			slog.String("node_id", nodeID.String()),
+			slog.String("log_file", logFile),
+			slog.Any("error", err))
+		return apiPkg.FromAPIError(c, apierror.NodeSSHFailed(err))
 	}
 
 	return apiPkg.Success(c, map[string]interface{}{

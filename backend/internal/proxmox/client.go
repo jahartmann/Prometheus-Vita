@@ -156,6 +156,27 @@ func (c *Client) GetNodeStatus(ctx context.Context, node string) (*NodeStatus, e
 	}, nil
 }
 
+// GetNodeSyslog retrieves syslog entries from the Proxmox API.
+func (c *Client) GetNodeSyslog(ctx context.Context, node string, limit int) (string, error) {
+	path := fmt.Sprintf("/nodes/%s/syslog?limit=%d", node, limit)
+	data, err := c.doRequest(ctx, http.MethodGet, path)
+	if err != nil {
+		return "", fmt.Errorf("get node syslog: %w", err)
+	}
+	var entries []struct {
+		N int    `json:"n"`
+		T string `json:"t"`
+	}
+	if err := json.Unmarshal(data, &entries); err != nil {
+		return "", fmt.Errorf("parse syslog: %w", err)
+	}
+	var lines string
+	for _, e := range entries {
+		lines += e.T + "\n"
+	}
+	return lines, nil
+}
+
 func (c *Client) GetNodes(ctx context.Context) ([]string, error) {
 	data, err := c.doRequest(ctx, http.MethodGet, "/nodes")
 	if err != nil {
