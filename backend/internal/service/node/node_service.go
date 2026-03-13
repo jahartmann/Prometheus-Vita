@@ -1029,15 +1029,21 @@ func (s *Service) GetGuestOSFamily(ctx context.Context, nodeID uuid.UUID, vmid i
 	}
 	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
 	if err != nil {
+		slog.Warn("could not get client for OS detection",
+			slog.Int("vmid", vmid), slog.Any("error", err))
 		return "unknown"
 	}
 	info, err := client.GetGuestOSInfo(ctx, pveNode, vmid)
 	if err != nil {
-		slog.Debug("could not detect guest OS, assuming linux",
+		slog.Warn("guest agent OS detection failed",
 			slog.Int("vmid", vmid), slog.Any("error", err))
 		return "unknown"
 	}
-	return info.OSFamily()
+	family := info.OSFamily()
+	slog.Info("detected guest OS",
+		slog.Int("vmid", vmid), slog.String("os_id", info.ID),
+		slog.String("os_family", family), slog.String("pretty_name", info.PrettyName))
+	return family
 }
 
 func (s *Service) GetTermProxy(ctx context.Context, nodeID uuid.UUID, vmid int, vmType string) (*proxmox.VNCProxyResponse, error) {
