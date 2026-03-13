@@ -324,9 +324,11 @@ func (h *NodeHandler) GetPorts(c echo.Context) error {
 
 // buildPortScanScript creates a bash script that runs on the Proxmox node
 // and collects port data for the node itself, all LXC containers (via pct exec),
-// and all QEMU VMs (via IP scan from the node's ARP table).
+// and all QEMU VMs (via nmap/nc scan from the node using the ARP table).
 func (h *NodeHandler) buildPortScanScript(nodeName string, vms []proxmox.VMInfo) string {
 	var sb strings.Builder
+	portList := joinInts(commonScanPorts)
+	portListComma := strings.ReplaceAll(portList, " ", ",")
 
 	// Node ports
 	sb.WriteString("echo '###NODE:0###'\n")
@@ -341,19 +343,22 @@ func (h *NodeHandler) buildPortScanScript(nodeName string, vms []proxmox.VMInfo)
 			fmt.Fprintf(&sb, "echo '###LXC:%d###'\n", vm.VMID)
 			fmt.Fprintf(&sb, "timeout 5 pct exec %d -- sh -c 'ss -tunap 2>/dev/null || netstat -tunap 2>/dev/null' 2>/dev/null\n", vm.VMID)
 		} else {
-			// QEMU: find VM IP via MAC address in ARP table, then scan common ports
+			// QEMU: find VM IP via MAC in ARP table, scan with nmap or nc
 			fmt.Fprintf(&sb, "echo '###QEMU:%d###'\n", vm.VMID)
-			// Extract MAC from VM config, find IP in ARP table, scan ports
 			fmt.Fprintf(&sb, `_mac=$(qm config %d 2>/dev/null | grep -oP '([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}' | head -1 | tr '[:upper:]' '[:lower:]')
 if [ -n "$_mac" ]; then
   _ip=$(ip neigh 2>/dev/null | tr '[:upper:]' '[:lower:]' | grep "$_mac" | awk '$NF!="FAILED"{print $1}' | head -1)
   if [ -n "$_ip" ]; then
-    for _p in %s; do
-      (echo >/dev/tcp/"$_ip"/"$_p") 2>/dev/null && echo "tcp LISTEN 0 0 $_ip:$_p 0.0.0.0:*"
-    done
+    if command -v nmap >/dev/null 2>&1; then
+      timeout 10 nmap -sT -T4 -p %s --open "$_ip" 2>/dev/null | awk -v ip="$_ip" '/^[0-9]+\/tcp.*open/{split($1,a,"/"); print "tcp LISTEN 0 0 " ip ":" a[1] " 0.0.0.0:*"}'
+    elif command -v nc >/dev/null 2>&1; then
+      for _p in %s; do
+        nc -z -w1 "$_ip" "$_p" 2>/dev/null && echo "tcp LISTEN 0 0 $_ip:$_p 0.0.0.0:*"
+      done
+    fi
   fi
 fi
-`, vm.VMID, joinInts(commonScanPorts))
+`, vm.VMID, portListComma, portList)
 		}
 	}
 
