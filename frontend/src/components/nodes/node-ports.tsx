@@ -1,7 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { RefreshCw, ArrowDownToLine, ArrowUpFromLine, Radio } from "lucide-react";
+import {
+  RefreshCw,
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  Radio,
+  Server,
+  Monitor,
+  ChevronDown,
+  ChevronRight,
+  Box,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -13,15 +23,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { networkApi, toArray } from "@/lib/api";
-import type { NodePort, NodePortsData } from "@/types/api";
+import { networkApi } from "@/lib/api";
+import type { NodePort, NodePortsData, VMPortGroup } from "@/types/api";
 
 interface NodePortsProps {
   nodeId: string;
@@ -58,61 +63,147 @@ function PortLabel({ port }: { port: number }) {
   );
 }
 
-function PortTable({ ports, showPeer }: { ports: NodePort[]; showPeer?: boolean }) {
-  if (ports.length === 0) {
-    return (
-      <div className="py-8 text-center text-sm text-muted-foreground">
-        Keine Ports gefunden.
-      </div>
-    );
+function GroupIcon({ type }: { type: string }) {
+  switch (type) {
+    case "node":
+      return <Server className="h-4 w-4 text-blue-500" />;
+    case "qemu":
+      return <Monitor className="h-4 w-4 text-green-500" />;
+    case "lxc":
+      return <Box className="h-4 w-4 text-orange-500" />;
+    default:
+      return <Server className="h-4 w-4" />;
   }
+}
+
+function PortGroup({
+  group,
+  filter,
+}: {
+  group: VMPortGroup;
+  filter: string;
+}) {
+  const [expanded, setExpanded] = useState(group.type === "node");
+
+  const filteredPorts = group.ports.filter((p) => {
+    if (!filter) return true;
+    const lower = filter.toLowerCase();
+    return (
+      String(p.local_port).includes(lower) ||
+      p.protocol.toLowerCase().includes(lower) ||
+      (p.process || "").toLowerCase().includes(lower) ||
+      p.local_address.includes(lower) ||
+      (knownPorts[p.local_port] || "").toLowerCase().includes(lower)
+    );
+  });
+
+  const listeningCount = filteredPorts.filter(
+    (p) => p.state === "LISTEN" || p.state === "LISTENING"
+  ).length;
+  const estabCount = filteredPorts.filter(
+    (p) => p.state === "ESTAB" || p.state === "ESTABLISHED"
+  ).length;
+
+  if (filter && filteredPorts.length === 0) return null;
 
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead className="w-[80px]">Protokoll</TableHead>
-          <TableHead>Lokale Adresse</TableHead>
-          <TableHead className="w-[100px]">Port</TableHead>
-          {showPeer && <TableHead>Ziel-Adresse</TableHead>}
-          {showPeer && <TableHead className="w-[100px]">Ziel-Port</TableHead>}
-          <TableHead>Prozess</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {ports.map((port, idx) => (
-          <TableRow key={`${port.protocol}-${port.local_port}-${port.peer_port}-${idx}`}>
-            <TableCell>
-              <Badge
-                variant={port.protocol === "tcp" ? "default" : "secondary"}
-                className="text-[10px]"
-              >
-                {port.protocol.toUpperCase()}
-              </Badge>
-            </TableCell>
-            <TableCell className="font-mono text-sm">{port.local_address || "*"}</TableCell>
-            <TableCell className="font-mono font-bold">
-              {port.local_port}
-              <PortLabel port={port.local_port} />
-            </TableCell>
-            {showPeer && (
-              <TableCell className="font-mono text-sm">
-                {port.peer_address || "*"}
-              </TableCell>
-            )}
-            {showPeer && (
-              <TableCell className="font-mono text-sm">
-                {port.peer_port || "-"}
-                {port.peer_port ? <PortLabel port={port.peer_port} /> : null}
-              </TableCell>
-            )}
-            <TableCell className="text-sm text-muted-foreground">
-              {port.process || "-"}
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+    <div className="rounded-lg border">
+      <button
+        className="flex w-full items-center gap-3 p-3 hover:bg-muted/50 transition-colors"
+        onClick={() => setExpanded(!expanded)}
+      >
+        {expanded ? (
+          <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+        ) : (
+          <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+        )}
+        <GroupIcon type={group.type} />
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="font-medium text-sm truncate">{group.name}</span>
+          {group.type !== "node" && (
+            <Badge variant="outline" className="text-[10px] shrink-0">
+              {group.type === "qemu" ? "QEMU" : "LXC"} {group.vmid}
+            </Badge>
+          )}
+          {group.type === "node" && (
+            <Badge variant="secondary" className="text-[10px] shrink-0">
+              Node
+            </Badge>
+          )}
+        </div>
+        <div className="ml-auto flex items-center gap-2 shrink-0 text-xs text-muted-foreground">
+          <span className="text-green-600">{listeningCount} lauschend</span>
+          <span className="text-blue-600">{estabCount} verbunden</span>
+          <span>{filteredPorts.length} gesamt</span>
+        </div>
+      </button>
+
+      {expanded && filteredPorts.length > 0 && (
+        <div className="border-t">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[80px]">Protokoll</TableHead>
+                <TableHead className="w-[90px]">Status</TableHead>
+                <TableHead>Lokale Adresse</TableHead>
+                <TableHead className="w-[100px]">Port</TableHead>
+                <TableHead>Ziel</TableHead>
+                <TableHead>Prozess</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredPorts.map((port, idx) => (
+                <TableRow key={`${port.protocol}-${port.local_port}-${port.peer_port}-${idx}`}>
+                  <TableCell>
+                    <Badge
+                      variant={port.protocol === "tcp" ? "default" : "secondary"}
+                      className="text-[10px]"
+                    >
+                      {port.protocol.toUpperCase()}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      variant={
+                        port.state === "LISTEN" || port.state === "LISTENING"
+                          ? "success"
+                          : port.state === "ESTAB" || port.state === "ESTABLISHED"
+                            ? "default"
+                            : "outline"
+                      }
+                      className="text-[10px]"
+                    >
+                      {port.state}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="font-mono text-sm">
+                    {port.local_address || "*"}
+                  </TableCell>
+                  <TableCell className="font-mono font-bold">
+                    {port.local_port}
+                    <PortLabel port={port.local_port} />
+                  </TableCell>
+                  <TableCell className="font-mono text-sm text-muted-foreground">
+                    {port.peer_address && port.peer_port
+                      ? `${port.peer_address}:${port.peer_port}`
+                      : "-"}
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {port.process || "-"}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+
+      {expanded && filteredPorts.length === 0 && (
+        <div className="border-t py-4 text-center text-sm text-muted-foreground">
+          Keine Ports gefunden.
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -120,6 +211,7 @@ export function NodePorts({ nodeId }: NodePortsProps) {
   const [portsData, setPortsData] = useState<NodePortsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState("");
 
   const fetchPorts = async () => {
     setLoading(true);
@@ -172,10 +264,10 @@ export function NodePorts({ nodeId }: NodePortsProps) {
     );
   }
 
+  const groups = portsData?.groups || [];
   const listening = portsData?.listening || [];
   const established = portsData?.established || [];
-  const other = portsData?.other || [];
-  const total = listening.length + established.length + other.length;
+  const totalPorts = groups.reduce((sum, g) => sum + g.ports.length, 0);
 
   return (
     <Card>
@@ -190,7 +282,7 @@ export function NodePorts({ nodeId }: NodePortsProps) {
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Summary */}
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-4">
           <div className="flex items-center gap-3 rounded-lg border p-3">
             <ArrowDownToLine className="h-5 w-5 text-green-500" />
             <div>
@@ -209,47 +301,36 @@ export function NodePorts({ nodeId }: NodePortsProps) {
             <Radio className="h-5 w-5 text-zinc-500" />
             <div>
               <p className="text-sm text-muted-foreground">Gesamt</p>
-              <p className="text-lg font-bold">{total}</p>
+              <p className="text-lg font-bold">{totalPorts}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 rounded-lg border p-3">
+            <Server className="h-5 w-5 text-purple-500" />
+            <div>
+              <p className="text-sm text-muted-foreground">Quellen</p>
+              <p className="text-lg font-bold">{groups.length}</p>
             </div>
           </div>
         </div>
 
-        {/* Port tabs */}
-        <Tabs defaultValue="listening">
-          <TabsList>
-            <TabsTrigger value="listening">
-              Lauschend ({listening.length})
-            </TabsTrigger>
-            <TabsTrigger value="established">
-              Verbunden ({established.length})
-            </TabsTrigger>
-            {other.length > 0 && (
-              <TabsTrigger value="other">
-                Sonstige ({other.length})
-              </TabsTrigger>
-            )}
-          </TabsList>
+        {/* Filter */}
+        <Input
+          placeholder="Port, Protokoll, Prozess oder Service filtern..."
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          className="max-w-sm"
+        />
 
-          <TabsContent value="listening" className="mt-3">
-            <div className="rounded-lg border">
-              <PortTable ports={listening} />
-            </div>
-          </TabsContent>
-
-          <TabsContent value="established" className="mt-3">
-            <div className="rounded-lg border">
-              <PortTable ports={established} showPeer />
-            </div>
-          </TabsContent>
-
-          {other.length > 0 && (
-            <TabsContent value="other" className="mt-3">
-              <div className="rounded-lg border">
-                <PortTable ports={other} showPeer />
-              </div>
-            </TabsContent>
-          )}
-        </Tabs>
+        {/* Groups */}
+        <div className="space-y-3">
+          {groups.map((group) => (
+            <PortGroup
+              key={`${group.type}-${group.vmid}`}
+              group={group}
+              filter={filter}
+            />
+          ))}
+        </div>
       </CardContent>
     </Card>
   );

@@ -1021,6 +1021,25 @@ func (s *Service) GetVNCProxy(ctx context.Context, nodeID uuid.UUID, vmid int, v
 	return client.GetVNCProxy(ctx, pveNode, vmid, vmType)
 }
 
+// GetGuestOSFamily detects the OS family of a VM. Returns "windows", "linux", or "unknown".
+// For LXC containers, always returns "linux".
+func (s *Service) GetGuestOSFamily(ctx context.Context, nodeID uuid.UUID, vmid int, vmType string) string {
+	if vmType == "lxc" {
+		return "linux"
+	}
+	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
+	if err != nil {
+		return "unknown"
+	}
+	info, err := client.GetGuestOSInfo(ctx, pveNode, vmid)
+	if err != nil {
+		slog.Debug("could not detect guest OS, assuming linux",
+			slog.Int("vmid", vmid), slog.Any("error", err))
+		return "unknown"
+	}
+	return info.OSFamily()
+}
+
 func (s *Service) GetTermProxy(ctx context.Context, nodeID uuid.UUID, vmid int, vmType string) (*proxmox.VNCProxyResponse, error) {
 	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
 	if err != nil {

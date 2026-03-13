@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -13,6 +14,7 @@ import (
 	"github.com/antigravity/prometheus/internal/proxmox"
 	"github.com/antigravity/prometheus/internal/repository"
 	nodeService "github.com/antigravity/prometheus/internal/service/node"
+	"github.com/antigravity/prometheus/internal/ssh"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 )
@@ -253,44 +255,116 @@ type NodePort struct {
 	Process   string `json:"process,omitempty"`
 }
 
+// VMPortGroup contains ports for a single VM or the node itself.
+type VMPortGroup struct {
+	VMID   int        `json:"vmid"`
+	Name   string     `json:"name"`
+	Type   string     `json:"type"` // "node", "qemu", "lxc"
+	Status string     `json:"status,omitempty"`
+	Ports  []NodePort `json:"ports"`
+}
+
 func (h *NodeHandler) GetPorts(c echo.Context) error {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		return apiPkg.BadRequest(c, "invalid node id")
 	}
 
-	// Run ss on the node via SSH to get comprehensive port info
-	// -t = TCP, -u = UDP, -l = listening, -n = numeric, -p = show process, -a = all states
-	result, err := h.service.RunSSHCommand(c.Request().Context(), id, "ss -tunap 2>/dev/null || ss -tuna 2>/dev/null")
+	ctx := c.Request().Context()
+
+	// Get node info for the name
+	node, err := h.service.GetByID(ctx, id)
 	if err != nil {
-		return handleNodeError(c, err, "failed to get ports")
+		return handleNodeError(c, err, "failed to get node")
 	}
 
-	ports := parseNodePorts(result.Stdout)
-	return apiPkg.Success(c, ports)
-}
+	// Fetch node ports via SSH
+	nodeResult, nodeErr := h.service.RunSSHCommand(ctx, id, "ss -tunap 2>/dev/null || ss -tuna 2>/dev/null")
+	nodePorts := parseNodePortsFlat(nodeResult, nodeErr)
 
-// parseNodePorts parses `ss -tunap` output into structured port data.
-func parseNodePorts(output string) map[string][]NodePort {
-	listening := []NodePort{}
-	established := []NodePort{}
-	other := []NodePort{}
+	// Build grouped response
+	groups := []VMPortGroup{{
+		VMID:  0,
+		Name:  node.Name,
+		Type:  "node",
+		Ports: nodePorts,
+	}}
 
-	lines := strings.Split(strings.TrimSpace(output), "\n")
-	if len(lines) < 2 {
-		return map[string][]NodePort{
-			"listening":   listening,
-			"established": established,
-			"other":       other,
+	// Fetch running VMs and get their ports
+	vms, err := h.service.GetVMs(ctx, id)
+	if err == nil {
+		for _, vm := range vms {
+			if vm.Status != "running" {
+				continue
+			}
+			vmPorts := h.fetchVMPorts(ctx, id, vm.VMID, vm.Type)
+			groups = append(groups, VMPortGroup{
+				VMID:   vm.VMID,
+				Name:   vm.Name,
+				Type:   vm.Type,
+				Status: vm.Status,
+				Ports:  vmPorts,
+			})
 		}
 	}
 
-	for _, line := range lines[1:] { // skip header
+	// Also compute the flat summary for the overview cards
+	allListening := []NodePort{}
+	allEstablished := []NodePort{}
+	for _, g := range groups {
+		for _, p := range g.Ports {
+			switch strings.ToUpper(p.State) {
+			case "LISTEN", "LISTENING":
+				allListening = append(allListening, p)
+			case "ESTAB", "ESTABLISHED":
+				allEstablished = append(allEstablished, p)
+			}
+		}
+	}
+
+	return apiPkg.Success(c, map[string]interface{}{
+		"groups":      groups,
+		"listening":   allListening,
+		"established": allEstablished,
+	})
+}
+
+// fetchVMPorts gets ports from a single VM via exec.
+func (h *NodeHandler) fetchVMPorts(ctx context.Context, nodeID uuid.UUID, vmid int, vmType string) []NodePort {
+	osFamily := h.service.GetGuestOSFamily(ctx, nodeID, vmid, vmType)
+	var cmd []string
+	if osFamily == "windows" {
+		cmd = []string{"netstat", "-ano"}
+	} else {
+		cmd = []string{"ss", "-tunap"}
+	}
+
+	result, err := h.service.ExecVMCommand(ctx, nodeID, vmid, vmType, cmd)
+	if err != nil {
+		return nil
+	}
+
+	if osFamily == "windows" {
+		return parseWindowsNetstatToNodePorts(result.OutData)
+	}
+	return parseSSOutputToNodePorts(result.OutData)
+}
+
+// parseNodePortsFlat parses ss output into a flat list of NodePort.
+func parseNodePortsFlat(result *ssh.CommandResult, err error) []NodePort {
+	if err != nil || result == nil {
+		return nil
+	}
+	var ports []NodePort
+	lines := strings.Split(strings.TrimSpace(result.Stdout), "\n")
+	if len(lines) < 2 {
+		return ports
+	}
+	for _, line := range lines[1:] {
 		fields := strings.Fields(line)
 		if len(fields) < 5 {
 			continue
 		}
-
 		proto := fields[0]
 		state := fields[1]
 		localAddr := fields[4]
@@ -302,11 +376,12 @@ func parseNodePorts(output string) map[string][]NodePort {
 		if len(fields) >= 7 {
 			process = fields[6]
 		}
-
 		lAddr, lPort := splitAddrPort(localAddr)
 		pAddr, pPort := splitAddrPort(peerAddr)
-
-		port := NodePort{
+		if state == "UNCONN" && lPort == 0 {
+			continue
+		}
+		ports = append(ports, NodePort{
 			Protocol:  proto,
 			State:     state,
 			LocalAddr: lAddr,
@@ -314,27 +389,89 @@ func parseNodePorts(output string) map[string][]NodePort {
 			PeerAddr:  pAddr,
 			PeerPort:  pPort,
 			Process:   cleanProcessName(process),
-		}
-
-		switch strings.ToUpper(state) {
-		case "LISTEN":
-			listening = append(listening, port)
-		case "ESTAB":
-			established = append(established, port)
-		default:
-			if state != "UNCONN" || lPort > 0 {
-				other = append(other, port)
-			}
-		}
+		})
 	}
-
-	return map[string][]NodePort{
-		"listening":   listening,
-		"established": established,
-		"other":       other,
-	}
+	return ports
 }
 
+// parseSSOutputToNodePorts parses VM ss output to NodePort slice.
+func parseSSOutputToNodePorts(output string) []NodePort {
+	var ports []NodePort
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	if len(lines) < 2 {
+		return ports
+	}
+	for _, line := range lines[1:] {
+		fields := strings.Fields(line)
+		if len(fields) < 5 {
+			continue
+		}
+		proto := fields[0]
+		state := fields[1]
+		localAddr := fields[4]
+		peerAddr := ""
+		if len(fields) >= 6 {
+			peerAddr = fields[5]
+		}
+		process := ""
+		if len(fields) >= 7 {
+			process = fields[6]
+		}
+		lAddr, lPort := splitAddrPort(localAddr)
+		pAddr, pPort := splitAddrPort(peerAddr)
+		if state == "UNCONN" && lPort == 0 {
+			continue
+		}
+		ports = append(ports, NodePort{
+			Protocol:  proto,
+			State:     state,
+			LocalAddr: lAddr,
+			LocalPort: lPort,
+			PeerAddr:  pAddr,
+			PeerPort:  pPort,
+			Process:   cleanProcessName(process),
+		})
+	}
+	return ports
+}
+
+// parseWindowsNetstatToNodePorts parses Windows netstat -ano to NodePort.
+func parseWindowsNetstatToNodePorts(output string) []NodePort {
+	var ports []NodePort
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "Active") || strings.HasPrefix(line, "Proto") {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 4 {
+			continue
+		}
+		proto := strings.ToLower(fields[0])
+		localAddr := fields[1]
+		state := ""
+		pid := ""
+		if proto == "tcp" && len(fields) >= 5 {
+			state = fields[3]
+			pid = fields[4]
+		} else if proto == "udp" && len(fields) >= 4 {
+			state = "LISTEN"
+			pid = fields[3]
+		}
+		lAddr, lPort := splitAddrPort(localAddr)
+		ports = append(ports, NodePort{
+			Protocol:  proto,
+			State:     state,
+			LocalAddr: lAddr,
+			LocalPort: lPort,
+			Process:   pid,
+		})
+	}
+	return ports
+}
+
+// parseNodePorts parses `ss -tunap` output into structured port data.
 func splitAddrPort(addr string) (string, int) {
 	if addr == "" || addr == "*:*" {
 		return "*", 0

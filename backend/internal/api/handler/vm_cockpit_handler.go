@@ -169,6 +169,28 @@ func (h *VMCockpitHandler) ExecCommand(c echo.Context) error {
 	return apiPkg.Success(c, result)
 }
 
+// GetOSInfo returns the detected OS family of a VM.
+func (h *VMCockpitHandler) GetOSInfo(c echo.Context) error {
+	nodeID, vmid, vmType, userID, err := parseCockpitParams(c)
+	if err != nil {
+		return apiPkg.BadRequest(c, err.Error())
+	}
+	allowed, err := h.permSvc.CheckPermission(c.Request().Context(), userID, nodeID, strconv.Itoa(vmid), model.PermVMSystemView)
+	if err != nil {
+		return apiPkg.InternalError(c, "failed to check permission")
+	}
+	if !allowed {
+		return apiPkg.Forbidden(c, "insufficient VM permissions")
+	}
+	osFamily := h.nodeSvc.GetGuestOSFamily(c.Request().Context(), nodeID, vmid, vmType)
+	return apiPkg.Success(c, map[string]string{"os_family": osFamily})
+}
+
+// detectOS is a helper that detects the OS for the current VM.
+func (h *VMCockpitHandler) detectOS(c echo.Context, nodeID uuid.UUID, vmid int, vmType string) string {
+	return h.nodeSvc.GetGuestOSFamily(c.Request().Context(), nodeID, vmid, vmType)
+}
+
 func (h *VMCockpitHandler) GetProcesses(c echo.Context) error {
 	nodeID, vmid, vmType, userID, err := parseCockpitParams(c)
 	if err != nil {
@@ -183,20 +205,32 @@ func (h *VMCockpitHandler) GetProcesses(c echo.Context) error {
 		return apiPkg.Forbidden(c, "insufficient VM permissions")
 	}
 
-	result, err := h.nodeSvc.ExecVMCommand(c.Request().Context(), nodeID, vmid, vmType, []string{"ps", "aux", "--sort=-pcpu"})
+	osFamily := h.detectOS(c, nodeID, vmid, vmType)
+	var cmd []string
+	if osFamily == "windows" {
+		cmd = []string{"powershell", "-Command", "Get-Process | Sort-Object CPU -Descending | Select-Object -First 50 Id,ProcessName,CPU,@{N='Mem';E={[math]::Round($_.WorkingSet64/1MB,1)}} | Format-Table -AutoSize | Out-String -Width 200"}
+	} else {
+		cmd = []string{"ps", "aux", "--sort=-pcpu"}
+	}
+
+	result, err := h.nodeSvc.ExecVMCommand(c.Request().Context(), nodeID, vmid, vmType, cmd)
 	if err != nil {
 		return handleNodeError(c, err, "failed to get processes")
 	}
 
-	processes := parseProcesses(result.OutData)
+	var response interface{}
+	if osFamily == "windows" {
+		response = parseWindowsProcesses(result.OutData)
+	} else {
+		response = parseProcesses(result.OutData)
+	}
 	slog.Info("vm cockpit operation",
 		slog.String("op", "get_processes"),
 		slog.String("node_id", nodeID.String()),
 		slog.Int("vmid", vmid),
-		slog.String("vm_type", vmType),
-		slog.String("user_id", userID.String()),
+		slog.String("os_family", osFamily),
 	)
-	return apiPkg.Success(c, processes)
+	return apiPkg.Success(c, response)
 }
 
 func (h *VMCockpitHandler) GetServices(c echo.Context) error {
@@ -213,21 +247,32 @@ func (h *VMCockpitHandler) GetServices(c echo.Context) error {
 		return apiPkg.Forbidden(c, "insufficient VM permissions")
 	}
 
-	result, err := h.nodeSvc.ExecVMCommand(c.Request().Context(), nodeID, vmid, vmType,
-		[]string{"systemctl", "list-units", "--type=service", "--all", "--no-pager", "--plain"})
+	osFamily := h.detectOS(c, nodeID, vmid, vmType)
+	var cmd []string
+	if osFamily == "windows" {
+		cmd = []string{"powershell", "-Command", "Get-Service | Select-Object Name,Status,DisplayName | Format-Table -AutoSize | Out-String -Width 300"}
+	} else {
+		cmd = []string{"systemctl", "list-units", "--type=service", "--all", "--no-pager", "--plain"}
+	}
+
+	result, err := h.nodeSvc.ExecVMCommand(c.Request().Context(), nodeID, vmid, vmType, cmd)
 	if err != nil {
 		return handleNodeError(c, err, "failed to get services")
 	}
 
-	services := parseServices(result.OutData)
+	var response interface{}
+	if osFamily == "windows" {
+		response = parseWindowsServices(result.OutData)
+	} else {
+		response = parseServices(result.OutData)
+	}
 	slog.Info("vm cockpit operation",
 		slog.String("op", "get_services"),
 		slog.String("node_id", nodeID.String()),
 		slog.Int("vmid", vmid),
-		slog.String("vm_type", vmType),
-		slog.String("user_id", userID.String()),
+		slog.String("os_family", osFamily),
 	)
-	return apiPkg.Success(c, services)
+	return apiPkg.Success(c, response)
 }
 
 func (h *VMCockpitHandler) GetPorts(c echo.Context) error {
@@ -244,20 +289,32 @@ func (h *VMCockpitHandler) GetPorts(c echo.Context) error {
 		return apiPkg.Forbidden(c, "insufficient VM permissions")
 	}
 
-	result, err := h.nodeSvc.ExecVMCommand(c.Request().Context(), nodeID, vmid, vmType, []string{"ss", "-tlnp"})
+	osFamily := h.detectOS(c, nodeID, vmid, vmType)
+	var cmd []string
+	if osFamily == "windows" {
+		cmd = []string{"netstat", "-ano"}
+	} else {
+		cmd = []string{"ss", "-tlnp"}
+	}
+
+	result, err := h.nodeSvc.ExecVMCommand(c.Request().Context(), nodeID, vmid, vmType, cmd)
 	if err != nil {
 		return handleNodeError(c, err, "failed to get ports")
 	}
 
-	ports := parsePorts(result.OutData)
+	var response interface{}
+	if osFamily == "windows" {
+		response = parseWindowsPorts(result.OutData)
+	} else {
+		response = parsePorts(result.OutData)
+	}
 	slog.Info("vm cockpit operation",
 		slog.String("op", "get_ports"),
 		slog.String("node_id", nodeID.String()),
 		slog.Int("vmid", vmid),
-		slog.String("vm_type", vmType),
-		slog.String("user_id", userID.String()),
+		slog.String("os_family", osFamily),
 	)
-	return apiPkg.Success(c, ports)
+	return apiPkg.Success(c, response)
 }
 
 func (h *VMCockpitHandler) GetDiskUsage(c echo.Context) error {
@@ -274,21 +331,32 @@ func (h *VMCockpitHandler) GetDiskUsage(c echo.Context) error {
 		return apiPkg.Forbidden(c, "insufficient VM permissions")
 	}
 
-	result, err := h.nodeSvc.ExecVMCommand(c.Request().Context(), nodeID, vmid, vmType,
-		[]string{"df", "-h", "--output=target,size,used,avail,pcent"})
+	osFamily := h.detectOS(c, nodeID, vmid, vmType)
+	var cmd []string
+	if osFamily == "windows" {
+		cmd = []string{"powershell", "-Command", "Get-PSDrive -PSProvider FileSystem | Select-Object Name,@{N='Size';E={[math]::Round($_.Used/1GB+$_.Free/1GB,1)}},@{N='Used';E={[math]::Round($_.Used/1GB,1)}},@{N='Free';E={[math]::Round($_.Free/1GB,1)}},@{N='Pct';E={if(($_.Used+$_.Free) -gt 0){[math]::Round($_.Used/($_.Used+$_.Free)*100)}else{0}}} | Format-Table -AutoSize | Out-String -Width 200"}
+	} else {
+		cmd = []string{"df", "-h", "--output=target,size,used,avail,pcent"}
+	}
+
+	result, err := h.nodeSvc.ExecVMCommand(c.Request().Context(), nodeID, vmid, vmType, cmd)
 	if err != nil {
 		return handleNodeError(c, err, "failed to get disk usage")
 	}
 
-	disks := parseDisk(result.OutData)
+	var response interface{}
+	if osFamily == "windows" {
+		response = parseWindowsDisk(result.OutData)
+	} else {
+		response = parseDisk(result.OutData)
+	}
 	slog.Info("vm cockpit operation",
 		slog.String("op", "get_disk_usage"),
 		slog.String("node_id", nodeID.String()),
 		slog.Int("vmid", vmid),
-		slog.String("vm_type", vmType),
-		slog.String("user_id", userID.String()),
+		slog.String("os_family", osFamily),
 	)
-	return apiPkg.Success(c, disks)
+	return apiPkg.Success(c, response)
 }
 
 func (h *VMCockpitHandler) ServiceAction(c echo.Context) error {
@@ -321,8 +389,25 @@ func (h *VMCockpitHandler) ServiceAction(c echo.Context) error {
 		return apiPkg.BadRequest(c, "action must be start, stop, restart, enable, or disable")
 	}
 
-	result, err := h.nodeSvc.ExecVMCommand(c.Request().Context(), nodeID, vmid, vmType,
-		[]string{"systemctl", req.Action, req.Service})
+	osFamily := h.detectOS(c, nodeID, vmid, vmType)
+	var cmd []string
+	if osFamily == "windows" {
+		// Windows: use sc or net command
+		switch req.Action {
+		case "start":
+			cmd = []string{"net", "start", req.Service}
+		case "stop":
+			cmd = []string{"net", "stop", req.Service}
+		case "restart":
+			cmd = []string{"powershell", "-Command", fmt.Sprintf("Restart-Service -Name '%s' -Force", req.Service)}
+		default:
+			return apiPkg.BadRequest(c, "enable/disable not supported on Windows via this interface")
+		}
+	} else {
+		cmd = []string{"systemctl", req.Action, req.Service}
+	}
+
+	result, err := h.nodeSvc.ExecVMCommand(c.Request().Context(), nodeID, vmid, vmType, cmd)
 	if err != nil {
 		return handleNodeError(c, err, "failed to execute service action")
 	}
@@ -368,8 +453,19 @@ func (h *VMCockpitHandler) KillProcess(c echo.Context) error {
 		return apiPkg.BadRequest(c, "signal must be TERM or KILL")
 	}
 
-	result, err := h.nodeSvc.ExecVMCommand(c.Request().Context(), nodeID, vmid, vmType,
-		[]string{"kill", fmt.Sprintf("-%s", req.Signal), strconv.Itoa(req.PID)})
+	osFamily := h.detectOS(c, nodeID, vmid, vmType)
+	var killCmd []string
+	if osFamily == "windows" {
+		if req.Signal == "KILL" {
+			killCmd = []string{"taskkill", "/PID", strconv.Itoa(req.PID), "/F"}
+		} else {
+			killCmd = []string{"taskkill", "/PID", strconv.Itoa(req.PID)}
+		}
+	} else {
+		killCmd = []string{"kill", fmt.Sprintf("-%s", req.Signal), strconv.Itoa(req.PID)}
+	}
+
+	result, err := h.nodeSvc.ExecVMCommand(c.Request().Context(), nodeID, vmid, vmType, killCmd)
 	if err != nil {
 		return handleNodeError(c, err, "failed to kill process")
 	}
@@ -637,6 +733,182 @@ func parseDisk(output string) []VMDisk {
 			Used:    fields[2],
 			Avail:   fields[3],
 			Percent: fields[4],
+		})
+	}
+	return disks
+}
+
+// --- Windows Parsers ---
+
+// parseWindowsProcesses parses PowerShell Get-Process output.
+func parseWindowsProcesses(output string) []VMProcess {
+	var processes []VMProcess
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "Id") || strings.HasPrefix(line, "--") {
+			continue
+		}
+
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+
+		pid, _ := strconv.Atoi(fields[0])
+		name := fields[1]
+		var cpu float64
+		if len(fields) >= 3 {
+			// CPU might have comma as decimal separator
+			cpuStr := strings.ReplaceAll(fields[2], ",", ".")
+			fmt.Sscanf(cpuStr, "%f", &cpu)
+		}
+		var mem float64
+		if len(fields) >= 4 {
+			memStr := strings.ReplaceAll(fields[3], ",", ".")
+			fmt.Sscanf(memStr, "%f", &mem)
+		}
+
+		processes = append(processes, VMProcess{
+			User:    "-",
+			PID:     pid,
+			CPU:     cpu,
+			Mem:     mem,
+			Command: name,
+		})
+	}
+	return processes
+}
+
+// parseWindowsServices parses PowerShell Get-Service output.
+func parseWindowsServices(output string) []VMServiceInfo {
+	var services []VMServiceInfo
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "Name") || strings.HasPrefix(line, "----") {
+			continue
+		}
+
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+
+		name := fields[0]
+		status := fields[1]
+		displayName := ""
+		if len(fields) > 2 {
+			displayName = strings.Join(fields[2:], " ")
+		}
+
+		activeState := "inactive"
+		subState := "dead"
+		if strings.ToLower(status) == "running" {
+			activeState = "active"
+			subState = "running"
+		} else if strings.ToLower(status) == "stopped" {
+			activeState = "inactive"
+			subState = "dead"
+		}
+
+		services = append(services, VMServiceInfo{
+			Unit:        name,
+			LoadState:   "loaded",
+			ActiveState: activeState,
+			SubState:    subState,
+			Description: displayName,
+		})
+	}
+	return services
+}
+
+// parseWindowsPorts parses `netstat -ano` output.
+func parseWindowsPorts(output string) []VMPort {
+	var ports []VMPort
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "Active") || strings.HasPrefix(line, "Proto") {
+			continue
+		}
+
+		fields := strings.Fields(line)
+		if len(fields) < 4 {
+			continue
+		}
+
+		proto := strings.ToLower(fields[0])
+		localAddr := fields[1]
+		state := ""
+		pid := ""
+
+		if proto == "tcp" && len(fields) >= 5 {
+			state = fields[3]
+			pid = fields[4]
+		} else if proto == "udp" && len(fields) >= 4 {
+			state = "LISTEN"
+			pid = fields[3]
+		}
+
+		// Only show LISTENING and ESTABLISHED
+		if state != "LISTENING" && state != "ESTABLISHED" && state != "LISTEN" {
+			continue
+		}
+
+		addr, portNum := splitNetstatAddr(localAddr)
+
+		ports = append(ports, VMPort{
+			Protocol: proto,
+			Address:  addr,
+			Port:     portNum,
+			Process:  pid,
+		})
+	}
+	return ports
+}
+
+func splitNetstatAddr(addr string) (string, int) {
+	lastColon := strings.LastIndex(addr, ":")
+	if lastColon < 0 {
+		return addr, 0
+	}
+	host := addr[:lastColon]
+	port, _ := strconv.Atoi(addr[lastColon+1:])
+	return host, port
+}
+
+// parseWindowsDisk parses PowerShell Get-PSDrive output.
+func parseWindowsDisk(output string) []VMDisk {
+	var disks []VMDisk
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "Name") || strings.HasPrefix(line, "----") {
+			continue
+		}
+
+		fields := strings.Fields(line)
+		if len(fields) < 5 {
+			continue
+		}
+
+		name := fields[0] + ":\\"
+		sizeStr := strings.ReplaceAll(fields[1], ",", ".")
+		usedStr := strings.ReplaceAll(fields[2], ",", ".")
+		freeStr := strings.ReplaceAll(fields[3], ",", ".")
+		pctStr := strings.ReplaceAll(fields[4], ",", ".")
+
+		disks = append(disks, VMDisk{
+			Target:  name,
+			Size:    sizeStr + "G",
+			Used:    usedStr + "G",
+			Avail:   freeStr + "G",
+			Percent: pctStr + "%",
 		})
 	}
 	return disks

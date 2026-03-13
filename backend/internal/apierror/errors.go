@@ -46,7 +46,7 @@ func GuestAgentUnavailable(cause error) *APIError {
 		Code:       ErrVMGuestAgentUnavailable,
 		Message:    "Guest Agent ist nicht verfuegbar",
 		Details:    "Der QEMU Guest Agent muss in der VM installiert und gestartet sein.",
-		Hint:       "apt install qemu-guest-agent && systemctl enable --now qemu-guest-agent",
+		Hint:       "Linux: apt install qemu-guest-agent && systemctl enable --now qemu-guest-agent\nWindows: QEMU Guest Agent ueber die Proxmox-Konsole oder virtio-Treiber installieren",
 		HTTPStatus: http.StatusPreconditionFailed,
 		Cause:      cause,
 	}

@@ -322,10 +322,18 @@ export interface NodePort {
   process?: string;
 }
 
+export interface VMPortGroup {
+  vmid: number;
+  name: string;
+  type: "node" | "qemu" | "lxc";
+  status?: string;
+  ports: NodePort[];
+}
+
 export interface NodePortsData {
+  groups: VMPortGroup[];
   listening: NodePort[];
   established: NodePort[];
-  other: NodePort[];
 }
 
 // Disk types
