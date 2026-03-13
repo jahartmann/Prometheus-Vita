@@ -53,11 +53,12 @@ func (c *Client) readFileQEMU(ctx context.Context, node string, vmid int, path s
 	if err != nil {
 		return "", fmt.Errorf("read file via qemu agent: %w", err)
 	}
+	inner := unwrapAgentResult(data)
 	var resp struct {
 		Content  string `json:"content"`
 		Encoding string `json:"encoding"`
 	}
-	if err := json.Unmarshal(data, &resp); err != nil {
+	if err := json.Unmarshal(inner, &resp); err != nil {
 		return "", fmt.Errorf("parse file-read response: %w", err)
 	}
 	if resp.Encoding == "base64" {
