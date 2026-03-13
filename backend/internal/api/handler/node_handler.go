@@ -295,7 +295,7 @@ func (h *NodeHandler) GetPorts(c echo.Context) error {
 	// Fetch running VMs and get their ports in parallel with a timeout
 	vms, err := h.service.GetVMs(ctx, id)
 	if err == nil {
-		var runningVMs []proxmox.VM
+		var runningVMs []proxmox.VMInfo
 		for _, vm := range vms {
 			if vm.Status == "running" {
 				runningVMs = append(runningVMs, vm)
@@ -311,7 +311,7 @@ func (h *NodeHandler) GetPorts(c echo.Context) error {
 
 			for i, vm := range runningVMs {
 				wg.Add(1)
-				go func(idx int, v proxmox.VM) {
+				go func(idx int, v proxmox.VMInfo) {
 					defer wg.Done()
 					vmPorts := h.fetchVMPorts(vmCtx, id, v.VMID, v.Type)
 					vmGroups[idx] = VMPortGroup{
