@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	apiPkg "github.com/antigravity/prometheus/internal/api/response"
 	"github.com/antigravity/prometheus/internal/apierror"
@@ -290,21 +292,39 @@ func (h *NodeHandler) GetPorts(c echo.Context) error {
 		Ports: nodePorts,
 	}}
 
-	// Fetch running VMs and get their ports
+	// Fetch running VMs and get their ports in parallel with a timeout
 	vms, err := h.service.GetVMs(ctx, id)
 	if err == nil {
+		var runningVMs []proxmox.VM
 		for _, vm := range vms {
-			if vm.Status != "running" {
-				continue
+			if vm.Status == "running" {
+				runningVMs = append(runningVMs, vm)
 			}
-			vmPorts := h.fetchVMPorts(ctx, id, vm.VMID, vm.Type)
-			groups = append(groups, VMPortGroup{
-				VMID:   vm.VMID,
-				Name:   vm.Name,
-				Type:   vm.Type,
-				Status: vm.Status,
-				Ports:  vmPorts,
-			})
+		}
+
+		if len(runningVMs) > 0 {
+			vmGroups := make([]VMPortGroup, len(runningVMs))
+			var wg sync.WaitGroup
+			// Per-VM timeout so one stuck VM doesn't block everything
+			vmCtx, vmCancel := context.WithTimeout(ctx, 10*time.Second)
+			defer vmCancel()
+
+			for i, vm := range runningVMs {
+				wg.Add(1)
+				go func(idx int, v proxmox.VM) {
+					defer wg.Done()
+					vmPorts := h.fetchVMPorts(vmCtx, id, v.VMID, v.Type)
+					vmGroups[idx] = VMPortGroup{
+						VMID:   v.VMID,
+						Name:   v.Name,
+						Type:   v.Type,
+						Status: v.Status,
+						Ports:  vmPorts,
+					}
+				}(i, vm)
+			}
+			wg.Wait()
+			groups = append(groups, vmGroups...)
 		}
 	}
 
@@ -336,11 +356,15 @@ func (h *NodeHandler) fetchVMPorts(ctx context.Context, nodeID uuid.UUID, vmid i
 	if osFamily == "windows" {
 		cmd = []string{"netstat", "-ano"}
 	} else {
-		cmd = []string{"ss", "-tunap"}
+		// Default to Linux commands for both "linux" and "unknown"
+		cmd = []string{"sh", "-c", "ss -tunap 2>/dev/null || netstat -tunap 2>/dev/null"}
 	}
 
 	result, err := h.service.ExecVMCommand(ctx, nodeID, vmid, vmType, cmd)
 	if err != nil {
+		slog.Debug("could not fetch VM ports",
+			slog.Int("vmid", vmid), slog.String("type", vmType),
+			slog.Any("error", err))
 		return nil
 	}
 
