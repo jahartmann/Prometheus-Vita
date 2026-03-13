@@ -1,8 +1,42 @@
 import api from "@/lib/api";
 import type { VMProcess, VMServiceInfo, VMPort, VMDisk, VMExecResult, VMPermission, VMFileEntry } from "@/types/api";
+import { AxiosError } from "axios";
+
+export interface VMCockpitError {
+  errorCode: string;
+  message: string;
+  details?: string;
+  hint?: string;
+}
+
+export function extractCockpitError(error: unknown): VMCockpitError {
+  if (error instanceof AxiosError && error.response?.data) {
+    const data = error.response.data;
+    if (data.code) {
+      return {
+        errorCode: data.code,
+        message: data.error || "Unbekannter Fehler",
+        details: data.details,
+        hint: data.hint,
+      };
+    }
+    if (data.error) {
+      return {
+        errorCode: "UNKNOWN",
+        message: data.error,
+      };
+    }
+  }
+  return {
+    errorCode: "NETWORK_ERROR",
+    message: "Verbindung zum Server fehlgeschlagen",
+    details: "Der Server ist nicht erreichbar oder die Anfrage wurde abgebrochen.",
+    hint: "Pruefen Sie Ihre Netzwerkverbindung und versuchen Sie es erneut.",
+  };
+}
 
 export const vmCockpitApi = {
-  exec: (nodeId: string, vmid: number, command: string, type = "lxc") =>
+  exec: (nodeId: string, vmid: number, command: string[], type = "lxc") =>
     api.post<{ data: VMExecResult }>(`/nodes/${nodeId}/vms/${vmid}/cockpit/exec?type=${type}`, { command }),
 
   getProcesses: (nodeId: string, vmid: number, type = "lxc") =>

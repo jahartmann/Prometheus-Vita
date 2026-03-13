@@ -4,15 +4,18 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/antigravity/prometheus/internal/apierror"
 	"github.com/antigravity/prometheus/internal/model"
 	"github.com/antigravity/prometheus/internal/proxmox"
 	"github.com/antigravity/prometheus/internal/repository"
@@ -1325,25 +1328,41 @@ func (s *Service) buildSSHConfig(node *model.Node) (ssh.SSHConfig, error) {
 }
 
 func (s *Service) ExecVMCommand(ctx context.Context, nodeID uuid.UUID, vmid int, vmType string, command []string) (*proxmox.ExecResult, error) {
-	if vmType == "lxc" {
-		return s.execLXCviaSSH(ctx, nodeID, vmid, command)
-	}
-	// QEMU: use Proxmox guest agent API
 	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
 	if err != nil {
-		return nil, err
+		return nil, apierror.NodeUnreachable(err)
 	}
-	return client.ExecCommand(ctx, pveNode, vmid, vmType, command)
+
+	result, err := client.ExecCommand(ctx, pveNode, vmid, vmType, command)
+	if err != nil {
+		if vmType == "lxc" {
+			slog.Warn("proxmox api exec failed for lxc, trying ssh fallback",
+				slog.Int("vmid", vmid),
+				slog.Any("error", err))
+			return s.execLXCviaSSH(ctx, nodeID, vmid, command)
+		}
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "agent") || strings.Contains(errMsg, "QEMU guest agent") {
+			return nil, apierror.GuestAgentUnavailable(err)
+		}
+		if strings.Contains(errMsg, "timeout") {
+			return nil, apierror.VMCommandTimeout(err)
+		}
+		return nil, apierror.VMExecFailed(err)
+	}
+	return result, nil
 }
 
 // execLXCviaSSH runs a command inside an LXC container via SSH + pct exec.
-// Proxmox has no REST API for LXC exec, so we SSH to the node and use pct exec.
 func (s *Service) execLXCviaSSH(ctx context.Context, nodeID uuid.UUID, vmid int, command []string) (*proxmox.ExecResult, error) {
-	// Build the pct exec command: pct exec {vmid} -- {command...}
-	cmdStr := fmt.Sprintf("pct exec %d -- %s", vmid, strings.Join(command, " "))
+	args := make([]string, 0, len(command)+4)
+	args = append(args, "pct", "exec", strconv.Itoa(vmid), "--")
+	args = append(args, command...)
+	cmdStr := strings.Join(args, " ")
+
 	sshResult, err := s.RunSSHCommand(ctx, nodeID, cmdStr)
 	if err != nil {
-		return nil, fmt.Errorf("exec lxc via ssh: %w", err)
+		return nil, apierror.NodeSSHFailed(err)
 	}
 	return &proxmox.ExecResult{
 		ExitCode: sshResult.ExitCode,
@@ -1354,98 +1373,112 @@ func (s *Service) execLXCviaSSH(ctx context.Context, nodeID uuid.UUID, vmid int,
 
 // ReadVMFile reads a file from inside a VM/container.
 func (s *Service) ReadVMFile(ctx context.Context, nodeID uuid.UUID, vmid int, vmType string, path string) (string, error) {
-	if vmType == "lxc" {
-		result, err := s.execLXCviaSSH(ctx, nodeID, vmid, []string{"cat", path})
-		if err != nil {
-			return "", err
+	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
+	if err != nil {
+		return "", apierror.NodeUnreachable(err)
+	}
+	content, err := client.ReadFile(ctx, pveNode, vmid, vmType, path)
+	if err != nil && vmType == "lxc" {
+		slog.Warn("proxmox api read failed for lxc, trying ssh fallback",
+			slog.Int("vmid", vmid), slog.Any("error", err))
+		result, sshErr := s.execLXCviaSSH(ctx, nodeID, vmid, []string{"cat", path})
+		if sshErr != nil {
+			return "", sshErr
 		}
 		if result.ExitCode != 0 {
-			return "", fmt.Errorf("cat failed (exit %d): %s", result.ExitCode, result.ErrData)
+			return "", apierror.VMCommandFailed(result.ExitCode, result.ErrData)
 		}
 		return result.OutData, nil
 	}
-	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
-	if err != nil {
-		return "", err
-	}
-	return client.ReadFile(ctx, pveNode, vmid, vmType, path)
+	return content, err
 }
 
 // WriteVMFile writes content to a file inside a VM/container.
 func (s *Service) WriteVMFile(ctx context.Context, nodeID uuid.UUID, vmid int, vmType string, path string, content string) error {
-	if vmType == "lxc" {
-		// Use base64 encoding to avoid shell escaping issues
-		encoded := strings.ReplaceAll(content, "'", "'\\''")
-		cmd := fmt.Sprintf("echo '%s' | tee %s > /dev/null", encoded, path)
-		result, err := s.execLXCviaSSH(ctx, nodeID, vmid, []string{"sh", "-c", cmd})
-		if err != nil {
-			return err
+	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
+	if err != nil {
+		return apierror.NodeUnreachable(err)
+	}
+	err = client.WriteFile(ctx, pveNode, vmid, vmType, path, content)
+	if err != nil && vmType == "lxc" {
+		slog.Warn("proxmox api write failed for lxc, trying ssh fallback",
+			slog.Int("vmid", vmid), slog.Any("error", err))
+		encoded := base64.StdEncoding.EncodeToString([]byte(content))
+		cmd := fmt.Sprintf("echo '%s' | base64 -d > %s", encoded, path)
+		result, sshErr := s.execLXCviaSSH(ctx, nodeID, vmid, []string{"sh", "-c", cmd})
+		if sshErr != nil {
+			return sshErr
 		}
 		if result.ExitCode != 0 {
-			return fmt.Errorf("write failed (exit %d): %s", result.ExitCode, result.ErrData)
+			return apierror.VMCommandFailed(result.ExitCode, result.ErrData)
 		}
 		return nil
 	}
-	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
-	if err != nil {
-		return err
-	}
-	return client.WriteFile(ctx, pveNode, vmid, vmType, path, content)
+	return err
 }
 
 // ListVMDirectory lists a directory inside a VM/container.
 func (s *Service) ListVMDirectory(ctx context.Context, nodeID uuid.UUID, vmid int, vmType string, path string) ([]proxmox.FileEntry, error) {
-	if vmType == "lxc" {
-		result, err := s.execLXCviaSSH(ctx, nodeID, vmid, []string{"ls", "-la", "--time-style=long-iso", path})
-		if err != nil {
-			return nil, err
+	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
+	if err != nil {
+		return nil, apierror.NodeUnreachable(err)
+	}
+	entries, err := client.ListDirectory(ctx, pveNode, vmid, vmType, path)
+	if err != nil && vmType == "lxc" {
+		slog.Warn("proxmox api listdir failed for lxc, trying ssh fallback",
+			slog.Int("vmid", vmid), slog.Any("error", err))
+		result, sshErr := s.execLXCviaSSH(ctx, nodeID, vmid, []string{"ls", "-la", "--time-style=long-iso", path})
+		if sshErr != nil {
+			return nil, sshErr
 		}
 		if result.ExitCode != 0 {
-			return nil, fmt.Errorf("ls failed (exit %d): %s", result.ExitCode, result.ErrData)
+			return nil, apierror.VMCommandFailed(result.ExitCode, result.ErrData)
 		}
 		return proxmox.ParseDirectoryListing(result.OutData), nil
 	}
-	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
-	if err != nil {
-		return nil, err
-	}
-	return client.ListDirectory(ctx, pveNode, vmid, vmType, path)
+	return entries, err
 }
 
 // DeleteVMFile removes a file or directory inside a VM/container.
 func (s *Service) DeleteVMFile(ctx context.Context, nodeID uuid.UUID, vmid int, vmType string, path string) error {
-	if vmType == "lxc" {
-		result, err := s.execLXCviaSSH(ctx, nodeID, vmid, []string{"rm", "-rf", path})
-		if err != nil {
-			return err
+	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
+	if err != nil {
+		return apierror.NodeUnreachable(err)
+	}
+	err = client.DeleteFile(ctx, pveNode, vmid, vmType, path)
+	if err != nil && vmType == "lxc" {
+		slog.Warn("proxmox api delete failed for lxc, trying ssh fallback",
+			slog.Int("vmid", vmid), slog.Any("error", err))
+		result, sshErr := s.execLXCviaSSH(ctx, nodeID, vmid, []string{"rm", "-rf", path})
+		if sshErr != nil {
+			return sshErr
 		}
 		if result.ExitCode != 0 {
-			return fmt.Errorf("delete failed (exit %d): %s", result.ExitCode, result.ErrData)
+			return apierror.VMCommandFailed(result.ExitCode, result.ErrData)
 		}
 		return nil
 	}
-	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
-	if err != nil {
-		return err
-	}
-	return client.DeleteFile(ctx, pveNode, vmid, vmType, path)
+	return err
 }
 
 // MakeVMDirectory creates a directory inside a VM/container.
 func (s *Service) MakeVMDirectory(ctx context.Context, nodeID uuid.UUID, vmid int, vmType string, path string) error {
-	if vmType == "lxc" {
-		result, err := s.execLXCviaSSH(ctx, nodeID, vmid, []string{"mkdir", "-p", path})
-		if err != nil {
-			return err
+	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
+	if err != nil {
+		return apierror.NodeUnreachable(err)
+	}
+	err = client.MakeDirectory(ctx, pveNode, vmid, vmType, path)
+	if err != nil && vmType == "lxc" {
+		slog.Warn("proxmox api mkdir failed for lxc, trying ssh fallback",
+			slog.Int("vmid", vmid), slog.Any("error", err))
+		result, sshErr := s.execLXCviaSSH(ctx, nodeID, vmid, []string{"mkdir", "-p", path})
+		if sshErr != nil {
+			return sshErr
 		}
 		if result.ExitCode != 0 {
-			return fmt.Errorf("mkdir failed (exit %d): %s", result.ExitCode, result.ErrData)
+			return apierror.VMCommandFailed(result.ExitCode, result.ErrData)
 		}
 		return nil
 	}
-	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
-	if err != nil {
-		return err
-	}
-	return client.MakeDirectory(ctx, pveNode, vmid, vmType, path)
+	return err
 }

@@ -11,6 +11,7 @@ import (
 
 	"github.com/antigravity/prometheus/internal/api/middleware"
 	apiPkg "github.com/antigravity/prometheus/internal/api/response"
+	"github.com/antigravity/prometheus/internal/apierror"
 	"github.com/antigravity/prometheus/internal/model"
 	nodeService "github.com/antigravity/prometheus/internal/service/node"
 	"github.com/antigravity/prometheus/internal/service/auth"
@@ -141,17 +142,30 @@ func (h *VMCockpitHandler) ExecCommand(c echo.Context) error {
 	}
 
 	var req struct {
-		Command string `json:"command"`
+		Command []string `json:"command"`
 	}
-	if err := c.Bind(&req); err != nil || req.Command == "" {
-		return apiPkg.BadRequest(c, "command is required")
+	if err := c.Bind(&req); err != nil || len(req.Command) == 0 {
+		return apiPkg.BadRequest(c, "command is required (array of strings)")
 	}
 
-	result, err := h.nodeSvc.ExecVMCommand(c.Request().Context(), nodeID, vmid, vmType, []string{"sh", "-c", req.Command})
+	for i, arg := range req.Command {
+		if arg == "" {
+			return apiPkg.BadRequest(c, fmt.Sprintf("command element %d is empty", i))
+		}
+	}
+
+	result, err := h.nodeSvc.ExecVMCommand(c.Request().Context(), nodeID, vmid, vmType, req.Command)
 	if err != nil {
 		return handleNodeError(c, err, "failed to execute command")
 	}
 
+	slog.Info("vm cockpit operation",
+		slog.String("op", "exec_command"),
+		slog.String("node_id", nodeID.String()),
+		slog.Int("vmid", vmid),
+		slog.String("vm_type", vmType),
+		slog.String("user_id", userID.String()),
+	)
 	return apiPkg.Success(c, result)
 }
 
@@ -175,6 +189,13 @@ func (h *VMCockpitHandler) GetProcesses(c echo.Context) error {
 	}
 
 	processes := parseProcesses(result.OutData)
+	slog.Info("vm cockpit operation",
+		slog.String("op", "get_processes"),
+		slog.String("node_id", nodeID.String()),
+		slog.Int("vmid", vmid),
+		slog.String("vm_type", vmType),
+		slog.String("user_id", userID.String()),
+	)
 	return apiPkg.Success(c, processes)
 }
 
@@ -199,6 +220,13 @@ func (h *VMCockpitHandler) GetServices(c echo.Context) error {
 	}
 
 	services := parseServices(result.OutData)
+	slog.Info("vm cockpit operation",
+		slog.String("op", "get_services"),
+		slog.String("node_id", nodeID.String()),
+		slog.Int("vmid", vmid),
+		slog.String("vm_type", vmType),
+		slog.String("user_id", userID.String()),
+	)
 	return apiPkg.Success(c, services)
 }
 
@@ -222,6 +250,13 @@ func (h *VMCockpitHandler) GetPorts(c echo.Context) error {
 	}
 
 	ports := parsePorts(result.OutData)
+	slog.Info("vm cockpit operation",
+		slog.String("op", "get_ports"),
+		slog.String("node_id", nodeID.String()),
+		slog.Int("vmid", vmid),
+		slog.String("vm_type", vmType),
+		slog.String("user_id", userID.String()),
+	)
 	return apiPkg.Success(c, ports)
 }
 
@@ -246,6 +281,13 @@ func (h *VMCockpitHandler) GetDiskUsage(c echo.Context) error {
 	}
 
 	disks := parseDisk(result.OutData)
+	slog.Info("vm cockpit operation",
+		slog.String("op", "get_disk_usage"),
+		slog.String("node_id", nodeID.String()),
+		slog.Int("vmid", vmid),
+		slog.String("vm_type", vmType),
+		slog.String("user_id", userID.String()),
+	)
 	return apiPkg.Success(c, disks)
 }
 
@@ -285,6 +327,13 @@ func (h *VMCockpitHandler) ServiceAction(c echo.Context) error {
 		return handleNodeError(c, err, "failed to execute service action")
 	}
 
+	slog.Info("vm cockpit operation",
+		slog.String("op", "service_action"),
+		slog.String("node_id", nodeID.String()),
+		slog.Int("vmid", vmid),
+		slog.String("vm_type", vmType),
+		slog.String("user_id", userID.String()),
+	)
 	return apiPkg.Success(c, result)
 }
 
@@ -325,6 +374,13 @@ func (h *VMCockpitHandler) KillProcess(c echo.Context) error {
 		return handleNodeError(c, err, "failed to kill process")
 	}
 
+	slog.Info("vm cockpit operation",
+		slog.String("op", "kill_process"),
+		slog.String("node_id", nodeID.String()),
+		slog.Int("vmid", vmid),
+		slog.String("vm_type", vmType),
+		slog.String("user_id", userID.String()),
+	)
 	return apiPkg.Success(c, result)
 }
 
@@ -596,14 +652,25 @@ func (h *VMCockpitHandler) ListFiles(c echo.Context) error {
 	if !allowed {
 		return apiPkg.Forbidden(c, "Keine Berechtigung fuer Dateizugriff")
 	}
-	path := c.QueryParam("path")
-	if path == "" {
-		path = "/"
+	rawPath := c.QueryParam("path")
+	if rawPath == "" {
+		rawPath = "/"
+	}
+	path, pathErr := apierror.ValidatePath(rawPath)
+	if pathErr != nil {
+		return apiPkg.FromAPIError(c, pathErr.(*apierror.APIError))
 	}
 	entries, err := h.nodeSvc.ListVMDirectory(c.Request().Context(), nodeID, vmid, vmType, path)
 	if err != nil {
 		return handleNodeError(c, err, "Verzeichnis konnte nicht gelesen werden")
 	}
+	slog.Info("vm cockpit operation",
+		slog.String("op", "list_files"),
+		slog.String("node_id", nodeID.String()),
+		slog.Int("vmid", vmid),
+		slog.String("vm_type", vmType),
+		slog.String("user_id", userID.String()),
+	)
 	return apiPkg.Success(c, entries)
 }
 
@@ -620,14 +687,25 @@ func (h *VMCockpitHandler) ReadFile(c echo.Context) error {
 	if !allowed {
 		return apiPkg.Forbidden(c, "Keine Berechtigung fuer Dateizugriff")
 	}
-	path := c.QueryParam("path")
-	if path == "" {
+	rawPath := c.QueryParam("path")
+	if rawPath == "" {
 		return apiPkg.BadRequest(c, "path is required")
+	}
+	path, pathErr := apierror.ValidatePath(rawPath)
+	if pathErr != nil {
+		return apiPkg.FromAPIError(c, pathErr.(*apierror.APIError))
 	}
 	content, err := h.nodeSvc.ReadVMFile(c.Request().Context(), nodeID, vmid, vmType, path)
 	if err != nil {
 		return handleNodeError(c, err, "Datei konnte nicht gelesen werden")
 	}
+	slog.Info("vm cockpit operation",
+		slog.String("op", "read_file"),
+		slog.String("node_id", nodeID.String()),
+		slog.Int("vmid", vmid),
+		slog.String("vm_type", vmType),
+		slog.String("user_id", userID.String()),
+	)
 	return apiPkg.Success(c, map[string]string{"path": path, "content": content})
 }
 
@@ -651,9 +729,21 @@ func (h *VMCockpitHandler) WriteFile(c echo.Context) error {
 	if err := c.Bind(&req); err != nil || req.Path == "" {
 		return apiPkg.BadRequest(c, "path and content are required")
 	}
+	validPath, pathErr := apierror.ValidatePath(req.Path)
+	if pathErr != nil {
+		return apiPkg.FromAPIError(c, pathErr.(*apierror.APIError))
+	}
+	req.Path = validPath
 	if err := h.nodeSvc.WriteVMFile(c.Request().Context(), nodeID, vmid, vmType, req.Path, req.Content); err != nil {
 		return handleNodeError(c, err, "Datei konnte nicht geschrieben werden")
 	}
+	slog.Info("vm cockpit operation",
+		slog.String("op", "write_file"),
+		slog.String("node_id", nodeID.String()),
+		slog.Int("vmid", vmid),
+		slog.String("vm_type", vmType),
+		slog.String("user_id", userID.String()),
+	)
 	return apiPkg.Success(c, map[string]string{"path": req.Path, "message": "Datei erfolgreich gespeichert"})
 }
 
@@ -677,9 +767,21 @@ func (h *VMCockpitHandler) UploadFile(c echo.Context) error {
 	if err := c.Bind(&req); err != nil || req.Path == "" {
 		return apiPkg.BadRequest(c, "path and content are required")
 	}
+	validPath, pathErr := apierror.ValidatePath(req.Path)
+	if pathErr != nil {
+		return apiPkg.FromAPIError(c, pathErr.(*apierror.APIError))
+	}
+	req.Path = validPath
 	if err := h.nodeSvc.WriteVMFile(c.Request().Context(), nodeID, vmid, vmType, req.Path, req.Content); err != nil {
 		return handleNodeError(c, err, "Datei konnte nicht hochgeladen werden")
 	}
+	slog.Info("vm cockpit operation",
+		slog.String("op", "upload_file"),
+		slog.String("node_id", nodeID.String()),
+		slog.Int("vmid", vmid),
+		slog.String("vm_type", vmType),
+		slog.String("user_id", userID.String()),
+	)
 	return apiPkg.Success(c, map[string]string{"path": req.Path, "message": "Datei erfolgreich hochgeladen"})
 }
 
@@ -696,13 +798,24 @@ func (h *VMCockpitHandler) DeleteFile(c echo.Context) error {
 	if !allowed {
 		return apiPkg.Forbidden(c, "Keine Schreibberechtigung fuer Dateien")
 	}
-	path := c.QueryParam("path")
-	if path == "" {
+	rawPath := c.QueryParam("path")
+	if rawPath == "" {
 		return apiPkg.BadRequest(c, "path is required")
+	}
+	path, pathErr := apierror.ValidatePath(rawPath)
+	if pathErr != nil {
+		return apiPkg.FromAPIError(c, pathErr.(*apierror.APIError))
 	}
 	if err := h.nodeSvc.DeleteVMFile(c.Request().Context(), nodeID, vmid, vmType, path); err != nil {
 		return handleNodeError(c, err, "Datei konnte nicht geloescht werden")
 	}
+	slog.Info("vm cockpit operation",
+		slog.String("op", "delete_file"),
+		slog.String("node_id", nodeID.String()),
+		slog.Int("vmid", vmid),
+		slog.String("vm_type", vmType),
+		slog.String("user_id", userID.String()),
+	)
 	return apiPkg.Success(c, map[string]string{"path": path, "message": "Datei erfolgreich geloescht"})
 }
 
@@ -725,8 +838,20 @@ func (h *VMCockpitHandler) MakeDir(c echo.Context) error {
 	if err := c.Bind(&req); err != nil || req.Path == "" {
 		return apiPkg.BadRequest(c, "path is required")
 	}
+	validPath, pathErr := apierror.ValidatePath(req.Path)
+	if pathErr != nil {
+		return apiPkg.FromAPIError(c, pathErr.(*apierror.APIError))
+	}
+	req.Path = validPath
 	if err := h.nodeSvc.MakeVMDirectory(c.Request().Context(), nodeID, vmid, vmType, req.Path); err != nil {
 		return handleNodeError(c, err, "Verzeichnis konnte nicht erstellt werden")
 	}
+	slog.Info("vm cockpit operation",
+		slog.String("op", "make_dir"),
+		slog.String("node_id", nodeID.String()),
+		slog.Int("vmid", vmid),
+		slog.String("vm_type", vmType),
+		slog.String("user_id", userID.String()),
+	)
 	return apiPkg.Success(c, map[string]string{"path": req.Path, "message": "Verzeichnis erfolgreich erstellt"})
 }

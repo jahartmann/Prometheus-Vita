@@ -147,7 +147,7 @@ export function AITab({ vm, nodeId }: AITabProps) {
       if (executingCommands.has(command)) return;
       setExecutingCommands((prev) => new Set(prev).add(command));
       try {
-        const result = await vmCockpitApi.exec(nodeId, vm.vmid, command, vm.type);
+        const result = await vmCockpitApi.exec(nodeId, vm.vmid, command.split(/\s+/), vm.type);
         const data = result.data as unknown as { exitcode: number; "out-data": string; "err-data": string };
         const output = data["out-data"] || data["err-data"] || "";
         toast.success(`Befehl ausgefuehrt (Exit: ${data.exitcode})`);

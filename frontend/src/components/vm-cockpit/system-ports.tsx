@@ -14,13 +14,18 @@ import {
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useVMCockpitStore } from "@/stores/vm-cockpit-store";
+import { CockpitError } from "./cockpit-error";
 
 export function SystemPorts() {
-  const { ports, isLoadingPorts, fetchPorts } = useVMCockpitStore();
+  const { ports, isLoadingPorts, fetchPorts, portsError } = useVMCockpitStore();
 
   useEffect(() => {
     fetchPorts();
   }, [fetchPorts]);
+
+  if (portsError) {
+    return <CockpitError {...portsError} onRetry={fetchPorts} />;
+  }
 
   if (isLoadingPorts && ports.length === 0) {
     return (

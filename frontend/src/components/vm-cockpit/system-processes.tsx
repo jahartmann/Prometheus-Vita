@@ -15,9 +15,10 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useVMCockpitStore } from "@/stores/vm-cockpit-store";
+import { CockpitError } from "./cockpit-error";
 
 export function SystemProcesses() {
-  const { processes, isLoadingProcesses, fetchProcesses, killProcess } =
+  const { processes, isLoadingProcesses, fetchProcesses, killProcess, processesError } =
     useVMCockpitStore();
   const [filter, setFilter] = useState("");
   const [killPid, setKillPid] = useState<number | null>(null);
@@ -25,6 +26,10 @@ export function SystemProcesses() {
   useEffect(() => {
     fetchProcesses();
   }, [fetchProcesses]);
+
+  if (processesError) {
+    return <CockpitError {...processesError} onRetry={fetchProcesses} />;
+  }
 
   const filtered = processes.filter((p) => {
     if (!filter) return true;

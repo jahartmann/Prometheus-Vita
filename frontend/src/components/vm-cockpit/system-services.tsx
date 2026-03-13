@@ -15,15 +15,20 @@ import {
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useVMCockpitStore } from "@/stores/vm-cockpit-store";
+import { CockpitError } from "./cockpit-error";
 
 export function SystemServices() {
-  const { services, isLoadingServices, fetchServices, serviceAction } =
+  const { services, isLoadingServices, fetchServices, serviceAction, servicesError } =
     useVMCockpitStore();
   const [filter, setFilter] = useState("");
 
   useEffect(() => {
     fetchServices();
   }, [fetchServices]);
+
+  if (servicesError) {
+    return <CockpitError {...servicesError} onRetry={fetchServices} />;
+  }
 
   const filtered = services.filter((s) => {
     if (!filter) return true;

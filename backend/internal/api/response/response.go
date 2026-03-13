@@ -3,6 +3,7 @@ package response
 import (
 	"net/http"
 
+	"github.com/antigravity/prometheus/internal/apierror"
 	"github.com/labstack/echo/v4"
 )
 
@@ -16,6 +17,8 @@ type APIError struct {
 	Success bool   `json:"success"`
 	Error   string `json:"error"`
 	Code    string `json:"code,omitempty"`
+	Details string `json:"details,omitempty"`
+	Hint    string `json:"hint,omitempty"`
 }
 
 type PaginatedResponse[T any] struct {
@@ -61,6 +64,16 @@ func ErrorWithCode(c echo.Context, status int, message, code string) error {
 		Success: false,
 		Error:   message,
 		Code:    code,
+	})
+}
+
+func FromAPIError(c echo.Context, apiErr *apierror.APIError) error {
+	return c.JSON(apiErr.HTTPStatus, APIError{
+		Success: false,
+		Error:   apiErr.Message,
+		Code:    string(apiErr.Code),
+		Details: apiErr.Details,
+		Hint:    apiErr.Hint,
 	})
 }
 

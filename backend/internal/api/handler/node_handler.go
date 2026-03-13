@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
+	"strings"
 
 	apiPkg "github.com/antigravity/prometheus/internal/api/response"
+	"github.com/antigravity/prometheus/internal/apierror"
 	"github.com/antigravity/prometheus/internal/model"
 	"github.com/antigravity/prometheus/internal/proxmox"
 	"github.com/antigravity/prometheus/internal/repository"
@@ -17,6 +19,17 @@ import (
 
 // handleNodeError maps service-layer errors to the appropriate HTTP response.
 func handleNodeError(c echo.Context, err error, fallbackMsg string) error {
+	// Check for structured APIError first
+	var apiErr *apierror.APIError
+	if errors.As(err, &apiErr) {
+		slog.Warn("vm cockpit error",
+			slog.String("path", c.Path()),
+			slog.String("error_code", string(apiErr.Code)),
+			slog.String("error", apiErr.Error()),
+		)
+		return apiPkg.FromAPIError(c, apiErr)
+	}
+
 	if errors.Is(err, repository.ErrNotFound) {
 		return apiPkg.NotFound(c, "node not found")
 	}
@@ -26,10 +39,23 @@ func handleNodeError(c echo.Context, err error, fallbackMsg string) error {
 			slog.String("path", c.Path()),
 			slog.String("node_id", nodeID),
 			slog.String("error_detail", err.Error()))
-		return apiPkg.ServiceUnavailable(c, err.Error())
+		return apiPkg.FromAPIError(c, apierror.NodeUnreachable(err))
 	}
+
+	// Detect common error patterns from unstructured errors
+	errMsg := err.Error()
+	if strings.Contains(errMsg, "timeout") {
+		return apiPkg.FromAPIError(c, apierror.VMCommandTimeout(err))
+	}
+	if strings.Contains(errMsg, "agent") || strings.Contains(errMsg, "QEMU guest agent") {
+		return apiPkg.FromAPIError(c, apierror.GuestAgentUnavailable(err))
+	}
+	if strings.Contains(errMsg, "ssh") || strings.Contains(errMsg, "SSH") {
+		return apiPkg.FromAPIError(c, apierror.NodeSSHFailed(err))
+	}
+
 	slog.Error("node handler error", slog.String("path", c.Path()), slog.Any("error", err))
-	return apiPkg.InternalError(c, fmt.Sprintf("%s: %v", fallbackMsg, err))
+	return apiPkg.FromAPIError(c, apierror.VMExecFailed(err))
 }
 
 type NodeHandler struct {
