@@ -428,10 +428,10 @@ func (h *VMCockpitHandler) HandleShell(c echo.Context) error {
 		return c.JSON(http.StatusForbidden, map[string]string{"error": "insufficient VM permissions"})
 	}
 
-	// Get VNC proxy ticket from Proxmox
-	vncProxy, err := h.nodeSvc.GetVNCProxy(c.Request().Context(), nodeID, vmid, vmType)
+	// Get terminal proxy ticket from Proxmox (text-based terminal, not VNC)
+	termProxy, err := h.nodeSvc.GetTermProxy(c.Request().Context(), nodeID, vmid, vmType)
 	if err != nil {
-		slog.Error("failed to get VNC proxy", slog.Any("error", err))
+		slog.Error("failed to get terminal proxy", slog.Any("error", err))
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to create terminal session"})
 	}
 
@@ -441,10 +441,10 @@ func (h *VMCockpitHandler) HandleShell(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to get node"})
 	}
 
-	// Construct Proxmox VNC WebSocket URL
+	// Construct Proxmox terminal WebSocket URL (uses vncwebsocket endpoint)
 	pveWSURL := fmt.Sprintf("wss://%s:%d/api2/json/nodes/%s/%s/%d/vncwebsocket?port=%s&vncticket=%s",
 		node.Hostname, node.Port, node.Name, vmType, vmid,
-		url.QueryEscape(vncProxy.Port), url.QueryEscape(vncProxy.Ticket))
+		url.QueryEscape(termProxy.Port), url.QueryEscape(termProxy.Ticket))
 
 	// Upgrade browser connection
 	browserConn, err := h.upgrader.Upgrade(c.Response(), c.Request(), nil)
@@ -454,48 +454,53 @@ func (h *VMCockpitHandler) HandleShell(c echo.Context) error {
 	}
 	defer browserConn.Close()
 
-	// Connect to Proxmox VNC WebSocket
+	// Connect to Proxmox terminal WebSocket
 	dialer := websocket.Dialer{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
 	pveHeaders := http.Header{}
-	pveHeaders.Set("Cookie", fmt.Sprintf("PVEAuthCookie=%s", vncProxy.Ticket))
+	pveHeaders.Set("Cookie", fmt.Sprintf("PVEAuthCookie=%s", termProxy.Ticket))
 
 	pveConn, _, err := dialer.Dial(pveWSURL, pveHeaders)
 	if err != nil {
-		slog.Error("failed to connect to Proxmox VNC WebSocket", slog.Any("error", err))
+		slog.Error("failed to connect to Proxmox terminal WebSocket", slog.Any("error", err))
 		browserConn.WriteMessage(websocket.CloseMessage,
 			websocket.FormatCloseMessage(websocket.CloseInternalServerErr, "failed to connect to terminal"))
 		return nil
 	}
 	defer pveConn.Close()
 
-	// Bidirectional proxy
+	// Bidirectional proxy with Proxmox terminal protocol translation.
+	// Proxmox termproxy protocol:
+	//   Browser → PVE: "0:<length>:<data>" for stdin, "1:<cols>:<rows>:" for resize
+	//   PVE → Browser: raw terminal output text
 	done := make(chan struct{})
 
-	// Browser -> Proxmox
+	// Browser -> Proxmox: wrap xterm.js input in Proxmox framing
 	go func() {
 		defer func() { done <- struct{}{} }()
 		for {
-			msgType, msg, err := browserConn.ReadMessage()
+			_, msg, err := browserConn.ReadMessage()
 			if err != nil {
 				return
 			}
-			if err := pveConn.WriteMessage(msgType, msg); err != nil {
+			// Frame as Proxmox stdin: "0:<length>:<data>"
+			framed := fmt.Sprintf("0:%d:%s", len(msg), string(msg))
+			if err := pveConn.WriteMessage(websocket.TextMessage, []byte(framed)); err != nil {
 				return
 			}
 		}
 	}()
 
-	// Proxmox -> Browser
+	// Proxmox -> Browser: forward terminal output directly
 	go func() {
 		defer func() { done <- struct{}{} }()
 		for {
-			msgType, msg, err := pveConn.ReadMessage()
+			_, msg, err := pveConn.ReadMessage()
 			if err != nil {
 				return
 			}
-			if err := browserConn.WriteMessage(msgType, msg); err != nil {
+			if err := browserConn.WriteMessage(websocket.TextMessage, msg); err != nil {
 				return
 			}
 		}

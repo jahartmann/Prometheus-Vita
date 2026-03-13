@@ -81,10 +81,10 @@ func (c *Client) WriteFile(ctx context.Context, node string, vmid int, vmType st
 }
 
 func (c *Client) writeFileLXC(ctx context.Context, node string, vmid int, path string, content string) error {
-	// Use printf + redirect via sh -c to write file content
-	// Encode content as base64 to avoid shell escaping issues
+	// Use base64 encoding to avoid shell escaping issues.
+	// mkdir -p ensures the parent directory exists.
 	encoded := base64.StdEncoding.EncodeToString([]byte(content))
-	cmd := fmt.Sprintf("echo '%s' | base64 -d > %s", encoded, path)
+	cmd := fmt.Sprintf("mkdir -p $(dirname %s) && echo %s | base64 -d > %s", path, encoded, path)
 	result, err := c.ExecCommand(ctx, node, vmid, "lxc", []string{"sh", "-c", cmd})
 	if err != nil {
 		return fmt.Errorf("write file via lxc exec: %w", err)

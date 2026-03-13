@@ -242,6 +242,126 @@ func (h *NodeHandler) GetNetworkInterfaces(c echo.Context) error {
 	return apiPkg.Success(c, ifaces)
 }
 
+// NodePort represents a port on the node (listening, established, etc.)
+type NodePort struct {
+	Protocol  string `json:"protocol"`
+	State     string `json:"state"`
+	LocalAddr string `json:"local_address"`
+	LocalPort int    `json:"local_port"`
+	PeerAddr  string `json:"peer_address,omitempty"`
+	PeerPort  int    `json:"peer_port,omitempty"`
+	Process   string `json:"process,omitempty"`
+}
+
+func (h *NodeHandler) GetPorts(c echo.Context) error {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return apiPkg.BadRequest(c, "invalid node id")
+	}
+
+	// Run ss on the node via SSH to get comprehensive port info
+	// -t = TCP, -u = UDP, -l = listening, -n = numeric, -p = show process, -a = all states
+	result, err := h.service.RunSSHCommand(c.Request().Context(), id, "ss -tunap 2>/dev/null || ss -tuna 2>/dev/null")
+	if err != nil {
+		return handleNodeError(c, err, "failed to get ports")
+	}
+
+	ports := parseNodePorts(result.Stdout)
+	return apiPkg.Success(c, ports)
+}
+
+// parseNodePorts parses `ss -tunap` output into structured port data.
+func parseNodePorts(output string) map[string][]NodePort {
+	listening := []NodePort{}
+	established := []NodePort{}
+	other := []NodePort{}
+
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	if len(lines) < 2 {
+		return map[string][]NodePort{
+			"listening":   listening,
+			"established": established,
+			"other":       other,
+		}
+	}
+
+	for _, line := range lines[1:] { // skip header
+		fields := strings.Fields(line)
+		if len(fields) < 5 {
+			continue
+		}
+
+		proto := fields[0]
+		state := fields[1]
+		localAddr := fields[4]
+		peerAddr := ""
+		if len(fields) >= 6 {
+			peerAddr = fields[5]
+		}
+		process := ""
+		if len(fields) >= 7 {
+			process = fields[6]
+		}
+
+		lAddr, lPort := splitAddrPort(localAddr)
+		pAddr, pPort := splitAddrPort(peerAddr)
+
+		port := NodePort{
+			Protocol:  proto,
+			State:     state,
+			LocalAddr: lAddr,
+			LocalPort: lPort,
+			PeerAddr:  pAddr,
+			PeerPort:  pPort,
+			Process:   cleanProcessName(process),
+		}
+
+		switch strings.ToUpper(state) {
+		case "LISTEN":
+			listening = append(listening, port)
+		case "ESTAB":
+			established = append(established, port)
+		default:
+			if state != "UNCONN" || lPort > 0 {
+				other = append(other, port)
+			}
+		}
+	}
+
+	return map[string][]NodePort{
+		"listening":   listening,
+		"established": established,
+		"other":       other,
+	}
+}
+
+func splitAddrPort(addr string) (string, int) {
+	if addr == "" || addr == "*:*" {
+		return "*", 0
+	}
+	lastColon := strings.LastIndex(addr, ":")
+	if lastColon < 0 {
+		return addr, 0
+	}
+	host := addr[:lastColon]
+	portNum, _ := strconv.Atoi(addr[lastColon+1:])
+	return host, portNum
+}
+
+func cleanProcessName(raw string) string {
+	// ss outputs: users:(("sshd",pid=1234,fd=3))
+	if raw == "" {
+		return ""
+	}
+	raw = strings.TrimPrefix(raw, "users:((")
+	raw = strings.TrimSuffix(raw, "))")
+	parts := strings.Split(raw, ",")
+	if len(parts) > 0 {
+		return strings.Trim(parts[0], "\"")
+	}
+	return raw
+}
+
 func (h *NodeHandler) SetNetworkAlias(c echo.Context) error {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
