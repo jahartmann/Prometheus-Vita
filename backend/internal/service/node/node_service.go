@@ -1021,6 +1021,15 @@ func (s *Service) GetVNCProxy(ctx context.Context, nodeID uuid.UUID, vmid int, v
 	return client.GetVNCProxy(ctx, pveNode, vmid, vmType)
 }
 
+func (s *Service) GetTermProxy(ctx context.Context, nodeID uuid.UUID, vmid int, vmType string) (*proxmox.VNCProxyResponse, error) {
+	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
+	if err != nil {
+		return nil, err
+	}
+
+	return client.GetTermProxy(ctx, pveNode, vmid, vmType)
+}
+
 func (s *Service) CreateVzdump(ctx context.Context, nodeID uuid.UUID, vmid int, opts proxmox.VzdumpOptions) (string, error) {
 	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
 	if err != nil {
@@ -1364,10 +1373,20 @@ func (s *Service) ExecVMCommand(ctx context.Context, nodeID uuid.UUID, vmid int,
 
 // execLXCviaSSH runs a command inside an LXC container via SSH + pct exec.
 func (s *Service) execLXCviaSSH(ctx context.Context, nodeID uuid.UUID, vmid int, command []string) (*proxmox.ExecResult, error) {
-	args := make([]string, 0, len(command)+4)
-	args = append(args, "pct", "exec", strconv.Itoa(vmid), "--")
-	args = append(args, command...)
-	cmdStr := strings.Join(args, " ")
+	var cmdStr string
+	if len(command) >= 3 && command[0] == "sh" && command[1] == "-c" {
+		// Shell command with pipe/redirect - must quote the argument for sh -c
+		// so that pipes and redirections are interpreted inside the container,
+		// not on the Proxmox host.
+		shellCmd := strings.Join(command[2:], " ")
+		escaped := strings.ReplaceAll(shellCmd, "'", "'\\''")
+		cmdStr = fmt.Sprintf("pct exec %d -- sh -c '%s'", vmid, escaped)
+	} else {
+		args := make([]string, 0, len(command)+4)
+		args = append(args, "pct", "exec", strconv.Itoa(vmid), "--")
+		args = append(args, command...)
+		cmdStr = strings.Join(args, " ")
+	}
 
 	sshResult, err := s.RunSSHCommand(ctx, nodeID, cmdStr)
 	if err != nil {
@@ -1413,7 +1432,7 @@ func (s *Service) WriteVMFile(ctx context.Context, nodeID uuid.UUID, vmid int, v
 		slog.Warn("proxmox api write failed for lxc, trying ssh fallback",
 			slog.Int("vmid", vmid), slog.Any("error", err))
 		encoded := base64.StdEncoding.EncodeToString([]byte(content))
-		cmd := fmt.Sprintf("echo '%s' | base64 -d > %s", encoded, path)
+		cmd := fmt.Sprintf("mkdir -p $(dirname %s) && echo %s | base64 -d > %s", path, encoded, path)
 		result, sshErr := s.execLXCviaSSH(ctx, nodeID, vmid, []string{"sh", "-c", cmd})
 		if sshErr != nil {
 			return sshErr

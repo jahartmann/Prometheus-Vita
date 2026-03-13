@@ -856,6 +856,21 @@ func (c *Client) GetVNCProxy(ctx context.Context, node string, vmid int, vmType 
 	return &resp, nil
 }
 
+// GetTermProxy creates a terminal proxy connection for a VM/CT (text-based, for xterm.js).
+func (c *Client) GetTermProxy(ctx context.Context, node string, vmid int, vmType string) (*VNCProxyResponse, error) {
+	path := fmt.Sprintf("/nodes/%s/%s/%d/termproxy", node, vmType, vmid)
+	params := url.Values{}
+	data, err := c.doRequestWithBody(ctx, http.MethodPost, path, params)
+	if err != nil {
+		return nil, fmt.Errorf("get term proxy for vm %d: %w", vmid, err)
+	}
+	var resp VNCProxyResponse
+	if err := json.Unmarshal(data, &resp); err != nil {
+		return nil, fmt.Errorf("unmarshal term proxy response: %w", err)
+	}
+	return &resp, nil
+}
+
 // RestoreVM restores a VM from a vzdump archive. Returns the task UPID.
 func (c *Client) RestoreVM(ctx context.Context, node string, archive string, storage string, vmid int) (string, error) {
 	params := url.Values{}

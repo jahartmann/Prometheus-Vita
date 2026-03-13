@@ -311,6 +311,23 @@ export interface NetworkInterface {
   color?: string;
 }
 
+// Node port types
+export interface NodePort {
+  protocol: string;
+  state: string;
+  local_address: string;
+  local_port: number;
+  peer_address?: string;
+  peer_port?: number;
+  process?: string;
+}
+
+export interface NodePortsData {
+  listening: NodePort[];
+  established: NodePort[];
+  other: NodePort[];
+}
+
 // Disk types
 export interface DiskInfo {
   devpath: string;

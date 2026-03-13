@@ -25,6 +25,7 @@ import { MetricsCharts } from "@/components/monitoring/metrics-charts";
 import { NetworkTraffic } from "@/components/monitoring/network-traffic";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { NetworkInterfaces } from "@/components/nodes/network-interfaces";
+import { NodePorts } from "@/components/nodes/node-ports";
 import { StorageOverview } from "@/components/nodes/storage-overview";
 import { DiskList } from "@/components/nodes/disk-list";
 import { PBSOverview } from "@/components/nodes/pbs-overview";
@@ -438,7 +439,7 @@ export function NodeDetail({ node }: NodeDetailProps) {
           </ErrorBoundary>
         </TabsContent>
 
-        <TabsContent value="network">
+        <TabsContent value="network" className="space-y-6">
           <NetworkInterfaces
             nodeId={node.id}
             interfaces={networkIfaces}
@@ -448,6 +449,7 @@ export function NodeDetail({ node }: NodeDetailProps) {
                 .then((res) => setNetworkIfaces(toArray(res.data)));
             }}
           />
+          <NodePorts nodeId={node.id} />
         </TabsContent>
 
         <TabsContent value="storage">

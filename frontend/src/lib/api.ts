@@ -190,6 +190,8 @@ export const metricsApi = {
 export const networkApi = {
   getInterfaces: (nodeId: string) =>
     api.get(`/nodes/${nodeId}/network`),
+  getPorts: (nodeId: string) =>
+    api.get(`/nodes/${nodeId}/ports`),
   setAlias: (nodeId: string, iface: string, data: { display_name: string; description?: string; color?: string }) =>
     api.put(`/nodes/${nodeId}/network/${iface}/alias`, data),
 };
