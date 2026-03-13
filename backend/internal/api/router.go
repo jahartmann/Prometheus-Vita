@@ -556,6 +556,7 @@ func SetupRouter(e *echo.Echo, cfg *config.Config, jwtSvc *auth.JWTService, h Ha
 	// VM Cockpit
 	if h.VMCockpit != nil {
 		vmCockpit := adminOp.Group("/:id/vms/:vmid/cockpit")
+		vmCockpit.GET("/osinfo", h.VMCockpit.GetOSInfo)
 		vmCockpit.POST("/exec", h.VMCockpit.ExecCommand)
 		vmCockpit.GET("/processes", h.VMCockpit.GetProcesses)
 		vmCockpit.GET("/services", h.VMCockpit.GetServices)

@@ -856,6 +856,20 @@ func (c *Client) GetVNCProxy(ctx context.Context, node string, vmid int, vmType 
 	return &resp, nil
 }
 
+// GetGuestOSInfo retrieves OS information from the QEMU guest agent.
+func (c *Client) GetGuestOSInfo(ctx context.Context, node string, vmid int) (*GuestOSInfo, error) {
+	path := fmt.Sprintf("/nodes/%s/qemu/%d/agent/get-osinfo", node, vmid)
+	data, err := c.doRequest(ctx, http.MethodGet, path)
+	if err != nil {
+		return nil, fmt.Errorf("get guest os info for vm %d: %w", vmid, err)
+	}
+	var info GuestOSInfo
+	if err := json.Unmarshal(data, &info); err != nil {
+		return nil, fmt.Errorf("unmarshal guest os info: %w", err)
+	}
+	return &info, nil
+}
+
 // GetTermProxy creates a terminal proxy connection for a VM/CT (text-based, for xterm.js).
 func (c *Client) GetTermProxy(ctx context.Context, node string, vmid int, vmType string) (*VNCProxyResponse, error) {
 	path := fmt.Sprintf("/nodes/%s/%s/%d/termproxy", node, vmType, vmid)

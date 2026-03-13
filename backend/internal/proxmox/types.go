@@ -84,6 +84,26 @@ func (v VMInfo) ToResponse() VMResponse {
 	}
 }
 
+// GuestOSInfo contains OS information from the QEMU guest agent.
+type GuestOSInfo struct {
+	ID             string `json:"id"`              // e.g. "debian", "ubuntu", "mswindows"
+	Name           string `json:"name"`            // e.g. "Debian GNU/Linux", "Microsoft Windows 10"
+	KernelRelease  string `json:"kernel-release"`
+	KernelVersion  string `json:"kernel-version"`
+	Machine        string `json:"machine"`
+	PrettyName     string `json:"pretty-name"`
+	Version        string `json:"version"`
+	VersionID      string `json:"version-id"`
+}
+
+// OSFamily returns "windows" or "linux" based on the guest OS info.
+func (o GuestOSInfo) OSFamily() string {
+	if o.ID == "mswindows" {
+		return "windows"
+	}
+	return "linux"
+}
+
 type StorageInfo struct {
 	Storage      string  `json:"storage"`
 	Type         string  `json:"type"`
