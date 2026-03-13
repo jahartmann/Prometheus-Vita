@@ -283,6 +283,9 @@ func (h *NodeHandler) GetPorts(c echo.Context) error {
 	// Fetch node ports via SSH
 	nodeResult, nodeErr := h.service.RunSSHCommand(ctx, id, "ss -tunap 2>/dev/null || ss -tuna 2>/dev/null")
 	nodePorts := parseNodePortsFlat(nodeResult, nodeErr)
+	if nodePorts == nil {
+		nodePorts = []NodePort{}
+	}
 
 	// Build grouped response
 	groups := []VMPortGroup{{
@@ -314,6 +317,9 @@ func (h *NodeHandler) GetPorts(c echo.Context) error {
 				go func(idx int, v proxmox.VMInfo) {
 					defer wg.Done()
 					vmPorts := h.fetchVMPorts(vmCtx, id, v.VMID, v.Type)
+					if vmPorts == nil {
+						vmPorts = []NodePort{}
+					}
 					vmGroups[idx] = VMPortGroup{
 						VMID:   v.VMID,
 						Name:   v.Name,
