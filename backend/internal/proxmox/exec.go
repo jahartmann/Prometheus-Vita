@@ -42,10 +42,8 @@ func (c *Client) execLXC(ctx context.Context, node string, vmid int, command []s
 func (c *Client) execQEMU(ctx context.Context, node string, vmid int, command []string) (*ExecResult, error) {
 	path := fmt.Sprintf("/nodes/%s/qemu/%d/agent/exec", node, vmid)
 	params := url.Values{}
-	params.Set("command", command[0])
-	for i, arg := range command[1:] {
-		params.Set(fmt.Sprintf("arg%d", i), arg)
-	}
+	// Proxmox API expects the full command as a single string
+	params.Set("command", strings.Join(command, " "))
 	data, err := c.doRequestWithBody(ctx, http.MethodPost, path, params)
 	if err != nil {
 		return nil, fmt.Errorf("exec qemu command: %w", err)

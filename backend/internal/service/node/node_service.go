@@ -379,6 +379,15 @@ func (s *Service) GetByID(ctx context.Context, id uuid.UUID) (*model.Node, error
 	return s.nodeRepo.GetByID(ctx, id)
 }
 
+// GetNodeSyslog retrieves syslog entries via the Proxmox API.
+func (s *Service) GetNodeSyslog(ctx context.Context, nodeID uuid.UUID, lines int) (string, error) {
+	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
+	if err != nil {
+		return "", err
+	}
+	return client.GetNodeSyslog(ctx, pveNode, lines)
+}
+
 func (s *Service) List(ctx context.Context) ([]model.Node, error) {
 	return s.nodeRepo.List(ctx)
 }

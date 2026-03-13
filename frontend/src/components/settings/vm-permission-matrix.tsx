@@ -137,12 +137,12 @@ export function VMPermissionMatrix() {
     return entries;
   }, [nodes, vms, groups, filterNode]);
 
-  // Filtered users
+  // Filtered users (show all users including admins)
   const filteredUsers = useMemo(() => {
-    if (!filterUser) return users.filter((u) => u.role !== "admin");
+    if (!filterUser) return users;
     const lower = filterUser.toLowerCase();
     return users.filter(
-      (u) => u.role !== "admin" && (u.username.toLowerCase().includes(lower) || u.email?.toLowerCase().includes(lower))
+      (u) => u.username.toLowerCase().includes(lower) || u.email?.toLowerCase().includes(lower)
     );
   }, [users, filterUser]);
 
@@ -342,6 +342,11 @@ export function VMPermissionMatrix() {
                         <Badge variant="outline" className="ml-2 text-xs">
                           {user.role}
                         </Badge>
+                        {user.role === "admin" && (
+                          <span className="ml-2 text-xs text-muted-foreground">
+                            (Volle Rechte - Admins haben automatisch alle Berechtigungen)
+                          </span>
+                        )}
                       </TableCell>
                     </TableRow>
                     {/* Target rows */}
@@ -368,9 +373,9 @@ export function VMPermissionMatrix() {
                             return (
                               <TableCell key={perm} className="text-center px-1">
                                 <Checkbox
-                                  checked={hasDirect || hasInherited}
+                                  checked={hasDirect || hasInherited || user.role === "admin"}
                                   onCheckedChange={() => togglePermission(user.id, target, perm)}
-                                  disabled={hasInherited && !hasDirect}
+                                  disabled={(hasInherited && !hasDirect) || user.role === "admin"}
                                   className={
                                     hasInherited && !hasDirect
                                       ? "opacity-50 data-[state=checked]:bg-muted-foreground"
