@@ -597,6 +597,7 @@ export interface TelegramStatus {
   telegram_username?: string;
   verification_code?: string;
   bot_enabled: boolean;
+  bot_username?: string;
 }
 
 // Chat / AI Agent types

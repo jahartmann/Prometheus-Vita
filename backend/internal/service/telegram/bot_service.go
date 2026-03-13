@@ -191,6 +191,12 @@ func (s *BotService) handleCommand(ctx context.Context, chatID int64, text strin
 
 	switch cmd {
 	case "/start":
+		// Handle deep link: /start CODE (from t.me/bot?start=CODE)
+		if len(parts) >= 2 {
+			code := parts[1]
+			s.handleLink(ctx, chatID, code, from)
+			return
+		}
 		s.sendMessage(ctx, chatID,
 			"Willkommen beim Prometheus Bot!\n\n"+
 				"Verwende /link <CODE> um dein Konto zu verknuepfen.\n"+
