@@ -1,11 +1,14 @@
 package handler
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	apiPkg "github.com/antigravity/prometheus/internal/api/response"
 	"github.com/antigravity/prometheus/internal/apierror"
@@ -255,17 +258,12 @@ type NodePort struct {
 
 // VMPortGroup contains ports for a single VM or the node itself.
 type VMPortGroup struct {
-	VMID   int        `json:"vmid"`
-	Name   string     `json:"name"`
-	Type   string     `json:"type"` // "node", "qemu", "lxc"
-	Status string     `json:"status,omitempty"`
-	Ports  []NodePort `json:"ports"`
-}
-
-// commonScanPorts are well-known ports scanned from the node for QEMU VMs without a guest agent.
-var commonScanPorts = []int{
-	22, 25, 53, 80, 443, 993, 995, 3128, 3306, 3389,
-	5432, 5900, 6379, 8006, 8080, 8443, 9090, 27017,
+	VMID       int        `json:"vmid"`
+	Name       string     `json:"name"`
+	Type       string     `json:"type"`                  // "node", "qemu", "lxc"
+	ScanStatus string     `json:"scan_status"`           // "ok", "no_agent", "error"
+	ScanError  string     `json:"scan_error,omitempty"`  // human-readable reason if not ok
+	Ports      []NodePort `json:"ports"`
 }
 
 func (h *NodeHandler) GetPorts(c echo.Context) error {
@@ -275,33 +273,52 @@ func (h *NodeHandler) GetPorts(c echo.Context) error {
 	}
 
 	ctx := c.Request().Context()
-
-	// Get node info + VM list from Proxmox API
 	node, err := h.service.GetByID(ctx, id)
 	if err != nil {
 		return handleNodeError(c, err, "failed to get node")
 	}
 
-	vms, _ := h.service.GetVMs(ctx, id)
+	// --- Phase 1: Node ports via simple SSH command ---
+	nodeGroup := VMPortGroup{
+		VMID: 0, Name: node.Name, Type: "node",
+		ScanStatus: "ok", Ports: []NodePort{},
+	}
+	nodeResult, nodeErr := h.service.RunSSHCommand(ctx, id, "ss -tunap")
+	if nodeErr != nil {
+		slog.Warn("node port scan failed", slog.Any("error", nodeErr))
+		nodeGroup.ScanStatus = "error"
+		nodeGroup.ScanError = "SSH-Verbindung fehlgeschlagen"
+	} else {
+		nodeGroup.Ports = parseSSOutput(nodeResult.Stdout)
+	}
+	groups := []VMPortGroup{nodeGroup}
 
-	// Build a single SSH script that gathers all port data at once.
-	// This avoids per-VM API calls and works without the guest agent.
-	script := h.buildPortScanScript(node.Name, vms)
-	sshResult, sshErr := h.service.RunSSHCommand(ctx, id, script)
-	if sshErr != nil {
-		slog.Warn("port scan SSH failed", slog.Any("error", sshErr))
-		// Return empty result rather than error so the UI still renders
-		return apiPkg.Success(c, map[string]interface{}{
-			"groups":      []VMPortGroup{},
-			"listening":   []NodePort{},
-			"established": []NodePort{},
-		})
+	// --- Phase 2: VM ports in parallel ---
+	vms, _ := h.service.GetVMs(ctx, id)
+	var running []proxmox.VMInfo
+	for _, vm := range vms {
+		if vm.Status == "running" {
+			running = append(running, vm)
+		}
 	}
 
-	// Parse structured output into groups
-	groups := h.parsePortScanOutput(sshResult.Stdout, node.Name, vms)
+	if len(running) > 0 {
+		vmGroups := make([]VMPortGroup, len(running))
+		var wg sync.WaitGroup
+		for i, vm := range running {
+			wg.Add(1)
+			go func(idx int, v proxmox.VMInfo) {
+				defer wg.Done()
+				scanCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
+				defer cancel()
+				vmGroups[idx] = h.scanVMPorts(scanCtx, id, v)
+			}(i, vm)
+		}
+		wg.Wait()
+		groups = append(groups, vmGroups...)
+	}
 
-	// Compute flat summaries for overview cards
+	// --- Phase 3: Compute summaries ---
 	allListening := []NodePort{}
 	allEstablished := []NodePort{}
 	for _, g := range groups {
@@ -322,118 +339,73 @@ func (h *NodeHandler) GetPorts(c echo.Context) error {
 	})
 }
 
-// buildPortScanScript creates a bash script that runs on the Proxmox node
-// and collects port data for the node itself, all LXC containers (via pct exec),
-// and all QEMU VMs (via nmap/nc scan from the node using the ARP table).
-func (h *NodeHandler) buildPortScanScript(nodeName string, vms []proxmox.VMInfo) string {
-	var sb strings.Builder
-	portList := joinInts(commonScanPorts)
-	portListComma := strings.ReplaceAll(portList, " ", ",")
+// scanVMPorts scans a single VM's ports using the appropriate method for its type.
+//   - LXC: always uses SSH "pct exec" (no guest agent needed)
+//   - QEMU: uses Proxmox guest agent API; if unavailable, reports status
+func (h *NodeHandler) scanVMPorts(ctx context.Context, nodeID uuid.UUID, vm proxmox.VMInfo) VMPortGroup {
+	group := VMPortGroup{
+		VMID: vm.VMID, Name: vm.Name, Type: vm.Type,
+		ScanStatus: "ok", Ports: []NodePort{},
+	}
 
-	// Node ports
-	sb.WriteString("echo '###NODE:0###'\n")
-	sb.WriteString("ss -tunap 2>/dev/null\n")
+	if vm.Type == "lxc" {
+		return h.scanLXCPorts(ctx, nodeID, group)
+	}
+	return h.scanQEMUPorts(ctx, nodeID, vm.VMID, group)
+}
 
-	for _, vm := range vms {
-		if vm.Status != "running" {
-			continue
-		}
-		if vm.Type == "lxc" {
-			// LXC: pct exec always works, no guest agent needed
-			fmt.Fprintf(&sb, "echo '###LXC:%d###'\n", vm.VMID)
-			fmt.Fprintf(&sb, "timeout 5 pct exec %d -- sh -c 'ss -tunap 2>/dev/null || netstat -tunap 2>/dev/null' 2>/dev/null\n", vm.VMID)
+// scanLXCPorts scans an LXC container via SSH "pct exec" — always works, no agent needed.
+func (h *NodeHandler) scanLXCPorts(ctx context.Context, nodeID uuid.UUID, group VMPortGroup) VMPortGroup {
+	cmd := fmt.Sprintf("pct exec %d -- ss -tunap", group.VMID)
+	result, err := h.service.RunSSHCommand(ctx, nodeID, cmd)
+	if err != nil {
+		slog.Warn("lxc port scan failed", slog.Int("vmid", group.VMID), slog.Any("error", err))
+		group.ScanStatus = "error"
+		group.ScanError = "pct exec fehlgeschlagen"
+		return group
+	}
+	group.Ports = parseSSOutput(result.Stdout)
+	return group
+}
+
+// scanQEMUPorts scans a QEMU VM via the Proxmox guest agent API.
+func (h *NodeHandler) scanQEMUPorts(ctx context.Context, nodeID uuid.UUID, vmid int, group VMPortGroup) VMPortGroup {
+	// Detect OS to choose the right command
+	osFamily := h.service.GetGuestOSFamily(ctx, nodeID, vmid, "qemu")
+
+	var cmd []string
+	if osFamily == "windows" {
+		cmd = []string{"netstat", "-ano"}
+	} else {
+		cmd = []string{"ss", "-tunap"}
+	}
+
+	result, err := h.service.ExecVMCommand(ctx, nodeID, vmid, "qemu", cmd)
+	if err != nil {
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "agent") || strings.Contains(errMsg, "QEMU guest agent") {
+			group.ScanStatus = "no_agent"
+			group.ScanError = "QEMU Guest Agent nicht verfuegbar"
 		} else {
-			// QEMU: find VM IP via MAC in ARP table, scan with nmap or nc
-			fmt.Fprintf(&sb, "echo '###QEMU:%d###'\n", vm.VMID)
-			fmt.Fprintf(&sb, `_mac=$(qm config %d 2>/dev/null | grep -oP '([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}' | head -1 | tr '[:upper:]' '[:lower:]')
-if [ -n "$_mac" ]; then
-  _ip=$(ip neigh 2>/dev/null | tr '[:upper:]' '[:lower:]' | grep "$_mac" | awk '$NF!="FAILED"{print $1}' | head -1)
-  if [ -n "$_ip" ]; then
-    if command -v nmap >/dev/null 2>&1; then
-      timeout 10 nmap -sT -T4 -p %s --open "$_ip" 2>/dev/null | awk -v ip="$_ip" '/^[0-9]+\/tcp.*open/{split($1,a,"/"); print "tcp LISTEN 0 0 " ip ":" a[1] " 0.0.0.0:*"}'
-    elif command -v nc >/dev/null 2>&1; then
-      for _p in %s; do
-        nc -z -w1 "$_ip" "$_p" 2>/dev/null && echo "tcp LISTEN 0 0 $_ip:$_p 0.0.0.0:*"
-      done
-    fi
-  fi
-fi
-`, vm.VMID, portListComma, portList)
+			slog.Warn("qemu port scan failed", slog.Int("vmid", vmid), slog.Any("error", err))
+			group.ScanStatus = "error"
+			group.ScanError = "Befehlsausfuehrung fehlgeschlagen"
 		}
+		return group
 	}
 
-	return sb.String()
+	if osFamily == "windows" {
+		group.Ports = parseWindowsNetstat(result.OutData)
+	} else {
+		group.Ports = parseSSOutput(result.OutData)
+	}
+	return group
 }
 
-func joinInts(nums []int) string {
-	parts := make([]string, len(nums))
-	for i, n := range nums {
-		parts[i] = strconv.Itoa(n)
-	}
-	return strings.Join(parts, " ")
-}
-
-// parsePortScanOutput parses the structured output from the SSH port scan script.
-// Sections are delimited by ###TYPE:VMID### markers.
-func (h *NodeHandler) parsePortScanOutput(output string, nodeName string, vms []proxmox.VMInfo) []VMPortGroup {
-	// Build VM lookup by VMID
-	vmLookup := map[int]proxmox.VMInfo{}
-	for _, vm := range vms {
-		vmLookup[vm.VMID] = vm
-	}
-
-	var groups []VMPortGroup
-	lines := strings.Split(output, "\n")
-	var currentType, currentContent string
-	currentVMID := 0
-
-	flushGroup := func() {
-		if currentType == "" {
-			return
-		}
-		ports := parseSSOutput(currentContent)
-		name := nodeName
-		vmType := currentType
-		if currentType != "node" {
-			if vm, ok := vmLookup[currentVMID]; ok {
-				name = vm.Name
-			} else {
-				name = fmt.Sprintf("VM %d", currentVMID)
-			}
-			vmType = strings.ToLower(currentType)
-		}
-		groups = append(groups, VMPortGroup{
-			VMID:  currentVMID,
-			Name:  name,
-			Type:  vmType,
-			Ports: ports,
-		})
-	}
-
-	for _, line := range lines {
-		if strings.HasPrefix(line, "###") && strings.HasSuffix(line, "###") {
-			flushGroup()
-			marker := strings.Trim(line, "#")
-			parts := strings.SplitN(marker, ":", 2)
-			currentType = parts[0]
-			currentContent = ""
-			if len(parts) >= 2 {
-				currentVMID, _ = strconv.Atoi(parts[1])
-			}
-			continue
-		}
-		currentContent += line + "\n"
-	}
-	flushGroup()
-
-	return groups
-}
-
-// parseSSOutput parses ss/netstat output into NodePort slice.
+// parseSSOutput parses ss -tunap output into NodePort slice.
 func parseSSOutput(output string) []NodePort {
 	ports := []NodePort{}
-	lines := strings.Split(strings.TrimSpace(output), "\n")
-	for _, line := range lines {
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
 		fields := strings.Fields(line)
 		if len(fields) < 5 {
 			continue
@@ -465,6 +437,41 @@ func parseSSOutput(output string) []NodePort {
 			PeerAddr:  pAddr,
 			PeerPort:  pPort,
 			Process:   cleanProcessName(process),
+		})
+	}
+	return ports
+}
+
+// parseWindowsNetstat parses Windows "netstat -ano" output.
+func parseWindowsNetstat(output string) []NodePort {
+	ports := []NodePort{}
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "Active") || strings.HasPrefix(line, "Proto") {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 4 {
+			continue
+		}
+		proto := strings.ToLower(fields[0])
+		localAddr := fields[1]
+		state := ""
+		pid := ""
+		if proto == "tcp" && len(fields) >= 5 {
+			state = fields[3]
+			pid = fields[4]
+		} else if proto == "udp" && len(fields) >= 4 {
+			state = "LISTEN"
+			pid = fields[3]
+		}
+		lAddr, lPort := splitAddrPort(localAddr)
+		ports = append(ports, NodePort{
+			Protocol:  proto,
+			State:     state,
+			LocalAddr: lAddr,
+			LocalPort: lPort,
+			Process:   pid,
 		})
 	}
 	return ports

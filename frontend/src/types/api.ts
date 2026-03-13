@@ -326,7 +326,8 @@ export interface VMPortGroup {
   vmid: number;
   name: string;
   type: "node" | "qemu" | "lxc";
-  status?: string;
+  scan_status: "ok" | "no_agent" | "error";
+  scan_error?: string;
   ports: NodePort[];
 }
 

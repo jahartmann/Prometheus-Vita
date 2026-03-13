@@ -11,6 +11,8 @@ import {
   ChevronDown,
   ChevronRight,
   Box,
+  AlertTriangle,
+  ShieldOff,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,7 +34,6 @@ interface NodePortsProps {
   nodeId: string;
 }
 
-// Well-known port labels
 const knownPorts: Record<number, string> = {
   22: "SSH",
   25: "SMTP",
@@ -43,6 +44,7 @@ const knownPorts: Record<number, string> = {
   995: "POP3S",
   3128: "Proxy",
   3306: "MySQL",
+  3389: "RDP",
   5432: "PostgreSQL",
   5900: "VNC",
   6379: "Redis",
@@ -76,6 +78,24 @@ function GroupIcon({ type }: { type: string }) {
   }
 }
 
+function ScanStatusBadge({ group }: { group: VMPortGroup }) {
+  if (group.scan_status === "ok") return null;
+  if (group.scan_status === "no_agent") {
+    return (
+      <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-300 shrink-0">
+        <ShieldOff className="mr-1 h-3 w-3" />
+        Kein Agent
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="outline" className="text-[10px] text-red-600 border-red-300 shrink-0">
+      <AlertTriangle className="mr-1 h-3 w-3" />
+      Fehler
+    </Badge>
+  );
+}
+
 function PortGroup({
   group,
   filter,
@@ -84,8 +104,9 @@ function PortGroup({
   filter: string;
 }) {
   const [expanded, setExpanded] = useState(group.type === "node");
+  const ports = group.ports || [];
 
-  const filteredPorts = group.ports.filter((p) => {
+  const filteredPorts = ports.filter((p) => {
     if (!filter) return true;
     const lower = filter.toLowerCase();
     return (
@@ -104,7 +125,9 @@ function PortGroup({
     (p) => p.state === "ESTAB" || p.state === "ESTABLISHED"
   ).length;
 
-  if (filter && filteredPorts.length === 0) return null;
+  const hasError = group.scan_status !== "ok";
+
+  if (filter && filteredPorts.length === 0 && !hasError) return null;
 
   return (
     <div className="rounded-lg border">
@@ -130,15 +153,40 @@ function PortGroup({
               Node
             </Badge>
           )}
+          <ScanStatusBadge group={group} />
         </div>
         <div className="ml-auto flex items-center gap-2 shrink-0 text-xs text-muted-foreground">
-          <span className="text-green-600">{listeningCount} lauschend</span>
-          <span className="text-blue-600">{estabCount} verbunden</span>
-          <span>{filteredPorts.length} gesamt</span>
+          {!hasError && (
+            <>
+              <span className="text-green-600">{listeningCount} lauschend</span>
+              <span className="text-blue-600">{estabCount} verbunden</span>
+              <span>{filteredPorts.length} gesamt</span>
+            </>
+          )}
         </div>
       </button>
 
-      {expanded && filteredPorts.length > 0 && (
+      {expanded && hasError && (
+        <div className="border-t px-4 py-3">
+          <div className="rounded-md bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-400">
+            {group.scan_status === "no_agent" ? (
+              <>
+                <p className="font-medium">QEMU Guest Agent nicht verfuegbar</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Der Guest Agent muss in der VM installiert sein, um Ports auszulesen.
+                </p>
+                <p className="mt-1 text-xs font-mono text-muted-foreground">
+                  Linux: apt install qemu-guest-agent &amp;&amp; systemctl enable --now qemu-guest-agent
+                </p>
+              </>
+            ) : (
+              <p>{group.scan_error || "Scan fehlgeschlagen"}</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {expanded && !hasError && filteredPorts.length > 0 && (
         <div className="border-t">
           <Table>
             <TableHeader>
@@ -198,7 +246,7 @@ function PortGroup({
         </div>
       )}
 
-      {expanded && filteredPorts.length === 0 && (
+      {expanded && !hasError && filteredPorts.length === 0 && (
         <div className="border-t py-4 text-center text-sm text-muted-foreground">
           Keine Ports gefunden.
         </div>
@@ -267,7 +315,7 @@ export function NodePorts({ nodeId }: NodePortsProps) {
   const groups = portsData?.groups || [];
   const listening = portsData?.listening || [];
   const established = portsData?.established || [];
-  const totalPorts = groups.reduce((sum, g) => sum + g.ports.length, 0);
+  const totalPorts = groups.reduce((sum, g) => sum + (g.ports || []).length, 0);
 
   return (
     <Card>
