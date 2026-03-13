@@ -863,16 +863,9 @@ func (c *Client) GetGuestOSInfo(ctx context.Context, node string, vmid int) (*Gu
 	if err != nil {
 		return nil, fmt.Errorf("get guest os info for vm %d: %w", vmid, err)
 	}
-	// Proxmox agent endpoints wrap the response in a "result" field
-	var wrapper struct {
-		Result GuestOSInfo `json:"result"`
-	}
-	if err := json.Unmarshal(data, &wrapper); err == nil && wrapper.Result.ID != "" {
-		return &wrapper.Result, nil
-	}
-	// Fallback: try direct unmarshal (some Proxmox versions may omit the wrapper)
+	inner := unwrapAgentResult(data)
 	var info GuestOSInfo
-	if err := json.Unmarshal(data, &info); err != nil {
+	if err := json.Unmarshal(inner, &info); err != nil {
 		return nil, fmt.Errorf("unmarshal guest os info: %w", err)
 	}
 	return &info, nil

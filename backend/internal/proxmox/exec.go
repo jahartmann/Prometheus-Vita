@@ -1,6 +1,7 @@
 package proxmox
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -9,6 +10,22 @@ import (
 	"strings"
 	"time"
 )
+
+// unwrapAgentResult handles the Proxmox agent response quirk where agent
+// endpoints wrap their payload in an extra {"result": ...} layer on top of
+// the standard {"data": ...} envelope (already stripped by doRequest).
+func unwrapAgentResult(data json.RawMessage) json.RawMessage {
+	if !bytes.Contains(data, []byte(`"result"`)) {
+		return data
+	}
+	var wrapper struct {
+		Result json.RawMessage `json:"result"`
+	}
+	if err := json.Unmarshal(data, &wrapper); err == nil && len(wrapper.Result) > 0 {
+		return wrapper.Result
+	}
+	return data
+}
 
 type ExecResult struct {
 	ExitCode int    `json:"exitcode"`
@@ -48,11 +65,15 @@ func (c *Client) execQEMU(ctx context.Context, node string, vmid int, command []
 	if err != nil {
 		return nil, fmt.Errorf("exec qemu command: %w", err)
 	}
+	inner := unwrapAgentResult(data)
 	var pidResp struct {
 		PID int `json:"pid"`
 	}
-	if err := json.Unmarshal(data, &pidResp); err != nil {
-		return nil, fmt.Errorf("parse exec pid: %w", err)
+	if err := json.Unmarshal(inner, &pidResp); err != nil {
+		return nil, fmt.Errorf("parse exec pid: %w (raw: %s)", err, string(data))
+	}
+	if pidResp.PID == 0 {
+		return nil, fmt.Errorf("exec returned pid 0 (raw: %s)", string(data))
 	}
 	return c.waitExecResult(ctx, node, vmid, pidResp.PID)
 }
@@ -62,6 +83,13 @@ func (c *Client) waitExecResult(ctx context.Context, node string, vmid int, pid 
 	timeout := time.After(30 * time.Second)
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
+
+	type execStatus struct {
+		Exited   int    `json:"exited"`
+		ExitCode int    `json:"exitcode"`
+		OutData  string `json:"out-data"`
+		ErrData  string `json:"err-data"`
+	}
 
 	for {
 		select {
@@ -74,13 +102,9 @@ func (c *Client) waitExecResult(ctx context.Context, node string, vmid int, pid 
 			if err != nil {
 				return nil, fmt.Errorf("poll exec status: %w", err)
 			}
-			var status struct {
-				Exited   int    `json:"exited"`
-				ExitCode int    `json:"exitcode"`
-				OutData  string `json:"out-data"`
-				ErrData  string `json:"err-data"`
-			}
-			if err := json.Unmarshal(data, &status); err != nil {
+			inner := unwrapAgentResult(data)
+			var status execStatus
+			if err := json.Unmarshal(inner, &status); err != nil {
 				return nil, fmt.Errorf("parse exec status: %w", err)
 			}
 			if status.Exited == 1 {
