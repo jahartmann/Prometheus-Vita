@@ -52,6 +52,18 @@ type Handlers struct {
 	VMPermission   *handler.VMPermissionHandler
 	VMGroup        *handler.VMGroupHandler
 	VMHealth       *handler.VMHealthHandler
+
+	// Log & Network Analysis
+	LogAnalysis       *handler.LogAnalysisHandler
+	LogBookmark       *handler.LogBookmarkHandler
+	LogSource         *handler.LogSourceHandler
+	LogExport         *handler.LogExportHandler
+	LogReportSchedule *handler.LogReportScheduleHandler
+	LogStream         *handler.LogStreamHandler
+	NetworkScan       *handler.NetworkScanHandler
+	NetworkDevice     *handler.NetworkDeviceHandler
+	NetworkAnomaly    *handler.NetworkAnomalyHandler
+	ScanBaseline      *handler.ScanBaselineHandler
 }
 
 func SetupRouter(e *echo.Echo, cfg *config.Config, jwtSvc *auth.JWTService, h Handlers, gatewaySvc *gateway.Service, redisClient *redis.Client, auditRepo repository.AuditRepository) {
@@ -635,6 +647,88 @@ func SetupRouter(e *echo.Echo, cfg *config.Config, jwtSvc *auth.JWTService, h Ha
 
 		// VM Dependencies (node-scoped)
 		nodes.GET("/:id/vms/:vmid/dependencies", h.VMHealth.ListVMDependencies)
+	}
+
+	// Log WebSocket (top-level, auth handled internally)
+	if h.LogStream != nil {
+		e.GET("/api/v1/ws/logs", h.LogStream.HandleWS)
+	}
+
+	// Log routes
+	if h.LogAnalysis != nil {
+		logs := protected.Group("/logs")
+		logs.POST("/analyze", h.LogAnalysis.Analyze)
+		logs.GET("/analyses", h.LogAnalysis.ListAnalyses)
+
+		if h.LogExport != nil {
+			logs.GET("/export", h.LogExport.Export)
+		}
+
+		// Report schedules (operator+)
+		if h.LogReportSchedule != nil {
+			schedOp := logs.Group("/report-schedules")
+			schedOp.Use(middleware.RequireRole(model.RoleAdmin, model.RoleOperator))
+			schedOp.POST("", h.LogReportSchedule.Create)
+			schedOp.GET("", h.LogReportSchedule.List)
+			schedOp.PUT("/:id", h.LogReportSchedule.Update)
+			schedOp.DELETE("/:id", h.LogReportSchedule.Delete)
+		}
+
+		// Node-scoped log routes
+		nodes.GET("/:id/log-anomalies", h.LogAnalysis.ListAnomalies)
+		nodes.GET("/:id/log-bookmarks", h.LogBookmark.ListByNode)
+		nodes.GET("/:id/log-sources", h.LogSource.ListByNode)
+
+		// Anomaly actions (operator+)
+		logAnomalies := protected.Group("/log-anomalies")
+		logAnomalies.GET("/:id", h.LogAnalysis.GetAnomaly)
+		logAnomaliesOp := logAnomalies.Group("")
+		logAnomaliesOp.Use(middleware.RequireRole(model.RoleAdmin, model.RoleOperator))
+		logAnomaliesOp.POST("/:id/acknowledge", h.LogAnalysis.Acknowledge)
+
+		// Bookmarks
+		bookmarks := protected.Group("/log-bookmarks")
+		bookmarks.POST("", h.LogBookmark.Create)
+		bookmarks.DELETE("/:id", h.LogBookmark.Delete)
+
+		// Source management (operator+)
+		logSourcesOp := nodes.Group("/:id/log-sources")
+		logSourcesOp.Use(middleware.RequireRole(model.RoleAdmin, model.RoleOperator))
+		logSourcesOp.PUT("", h.LogSource.Update)
+	}
+
+	// Network routes
+	if h.NetworkScan != nil {
+		nodes.GET("/:id/network-scans", h.NetworkScan.ListByNode)
+		nodes.GET("/:id/network-devices", h.NetworkDevice.ListByNode)
+		nodes.GET("/:id/network-anomalies", h.NetworkAnomaly.ListByNode)
+		nodes.GET("/:id/scan-baselines", h.ScanBaseline.ListByNode)
+
+		netScans := protected.Group("/network-scans")
+		netScans.GET("/:id", h.NetworkScan.Get)
+		netScans.GET("/:id1/diff/:id2", h.NetworkScan.Diff)
+
+		// Trigger scan (operator+)
+		netScansOp := nodes.Group("/:id/network-scans")
+		netScansOp.Use(middleware.RequireRole(model.RoleAdmin, model.RoleOperator))
+		netScansOp.POST("", h.NetworkScan.Trigger)
+
+		netDevices := protected.Group("/network-devices")
+		netDevices.PUT("/:id", h.NetworkDevice.Update)
+
+		netAnomaliesOp := protected.Group("/network-anomalies")
+		netAnomaliesOp.Use(middleware.RequireRole(model.RoleAdmin, model.RoleOperator))
+		netAnomaliesOp.POST("/:id/acknowledge", h.NetworkAnomaly.Acknowledge)
+
+		baselinesOp := nodes.Group("/:id/scan-baselines")
+		baselinesOp.Use(middleware.RequireRole(model.RoleAdmin, model.RoleOperator))
+		baselinesOp.POST("", h.ScanBaseline.Create)
+
+		baselinesMgmtOp := protected.Group("/scan-baselines")
+		baselinesMgmtOp.Use(middleware.RequireRole(model.RoleAdmin, model.RoleOperator))
+		baselinesMgmtOp.PUT("/:id", h.ScanBaseline.Update)
+		baselinesMgmtOp.DELETE("/:id", h.ScanBaseline.Delete)
+		baselinesMgmtOp.POST("/:id/activate", h.ScanBaseline.Activate)
 	}
 
 	// WebSocket

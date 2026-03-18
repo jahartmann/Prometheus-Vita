@@ -38,6 +38,10 @@ import (
 	topologyService "github.com/antigravity/prometheus/internal/service/topology"
 	"github.com/antigravity/prometheus/internal/service/sshkeys"
 	telegramService "github.com/antigravity/prometheus/internal/service/telegram"
+	"github.com/antigravity/prometheus/internal/service/loganalyzer"
+	"github.com/antigravity/prometheus/internal/service/logscan"
+	"github.com/antigravity/prometheus/internal/service/logstream"
+	"github.com/antigravity/prometheus/internal/service/netscan"
 	"github.com/antigravity/prometheus/internal/service/updates"
 	userService "github.com/antigravity/prometheus/internal/service/user"
 	vmService "github.com/antigravity/prometheus/internal/service/vm"
@@ -150,6 +154,18 @@ func main() {
 	vmPermRepo := repository.NewVMPermissionRepository(dbPool)
 	vmGroupRepo := repository.NewVMGroupRepository(dbPool)
 
+	// Log & Network Repositories
+	logAnomalyRepo := repository.NewLogAnomalyRepository(dbPool)
+	logAnalysisRepo := repository.NewLogAnalysisRepository(dbPool)
+	logBookmarkRepo := repository.NewLogBookmarkRepository(dbPool)
+	logSourceRepo := repository.NewLogSourceRepository(dbPool)
+	logReportScheduleRepo := repository.NewLogReportScheduleRepository(dbPool)
+	networkScanRepo := repository.NewNetworkScanRepository(dbPool)
+	networkDeviceRepo := repository.NewNetworkDeviceRepository(dbPool)
+	networkPortRepo := repository.NewNetworkPortRepository(dbPool)
+	networkAnomalyRepo := repository.NewNetworkAnomalyRepository(dbPool)
+	scanBaselineRepo := repository.NewScanBaselineRepository(dbPool)
+
 	// Phase 7 Repositories
 	brainRepo := repository.NewBrainRepository(dbPool)
 	reflexRepo := repository.NewReflexRuleRepository(dbPool)
@@ -240,6 +256,40 @@ func main() {
 	// Phase 7 Services
 	brainSvc := brain.NewService(brainRepo)
 	reflexSvc := reflex.NewService(reflexRepo, metricsRepo, nodeRepo, nodeSvc, notifSvc)
+
+	// Log Streaming
+	logStreamMgr := logstream.NewStreamManager(sshPool, redisClient, nodeRepo, logSourceRepo, logstream.StreamConfig{
+		WorkerPoolSize:   20,
+		RotationInterval: 30 * time.Second,
+		RedisMaxLen:      10000,
+		RedisMaxAge:      30 * time.Minute,
+	})
+
+	// Log Discovery
+	logDiscoverySvc := logscan.NewDiscoveryService(logSourceRepo, sshPool, nodeRepo)
+
+	// Log Analyzer
+	logClassifier := loganalyzer.NewClassifier(llmRegistry, "", 3)
+	logConsumer := loganalyzer.NewConsumer(redisClient, logClassifier, logAnomalyRepo, wsHub, loganalyzer.ConsumerConfig{
+		BatchSize:        10,
+		BatchTimeout:     2 * time.Second,
+		AnomalyThreshold: 0.5,
+		AlertThreshold:   0.8,
+		DedupWindow:      5 * time.Minute,
+	})
+	logReporter := loganalyzer.NewReporter(redisClient, llmRegistry, logAnalysisRepo)
+
+	// Network Scanning
+	netScanner := netscan.NewScanScheduler(sshPool, nodeRepo, networkScanRepo, networkDeviceRepo, networkPortRepo, networkAnomalyRepo, scanBaselineRepo, wsHub, netscan.ScanConfig{
+		QuickInterval: 5 * time.Minute,
+		FullInterval:  60 * time.Minute,
+		MaxParallel:   5,
+		TopPorts:      1000,
+	})
+
+	// Start log streaming and consumer
+	go logStreamMgr.Start(ctx)
+	go logConsumer.Start(ctx)
 
 	// VM Permission & Group Services
 	vmPermSvc := vmService.NewPermissionService(vmPermRepo, userRepo)
@@ -347,6 +397,14 @@ func main() {
 	sched.AddJob(reflexEvalJob)
 	intelligenceJob := scheduler.NewIntelligenceJob(analysisSvc, 10*time.Minute)
 	sched.AddJob(intelligenceJob)
+	logDiscoveryJob := scheduler.NewLogDiscoveryJob(logDiscoverySvc, nodeRepo, 5*time.Minute)
+	sched.AddJob(logDiscoveryJob)
+	netQuickScanJob := scheduler.NewNetQuickScanJob(netScanner, 5*time.Minute)
+	sched.AddJob(netQuickScanJob)
+	netFullScanJob := scheduler.NewNetFullScanJob(netScanner, 60*time.Minute)
+	sched.AddJob(netFullScanJob)
+	logRetentionJob := scheduler.NewLogRetentionJob(logAnomalyRepo, logAnalysisRepo, networkScanRepo, networkAnomalyRepo, 24*time.Hour)
+	sched.AddJob(logRetentionJob)
 
 	if telegramBotEnabled && telegramBotSvc != nil {
 		pollInterval := time.Duration(cfg.Telegram.PollInterval) * time.Second
@@ -409,6 +467,18 @@ func main() {
 		VMPermission:   handler.NewVMPermissionHandler(vmPermSvc),
 		VMGroup:        handler.NewVMGroupHandler(vmGroupSvc),
 		VMHealth:       handler.NewVMHealthHandler(vmHealthSvc, vmRightsizingSvc, vmAnomalySvc, snapshotPolicySvc, scheduledActionSvc, vmDependencySvc),
+
+		// Log & Network Analysis
+		LogAnalysis:       handler.NewLogAnalysisHandler(logReporter, logAnomalyRepo, logAnalysisRepo),
+		LogBookmark:       handler.NewLogBookmarkHandler(logBookmarkRepo),
+		LogSource:         handler.NewLogSourceHandler(logSourceRepo, logDiscoverySvc),
+		LogExport:         handler.NewLogExportHandler(redisClient, logAnomalyRepo, logBookmarkRepo),
+		LogReportSchedule: handler.NewLogReportScheduleHandler(logReportScheduleRepo),
+		LogStream:         handler.NewLogStreamHandler(logStreamMgr, jwtSvc, cfg.CORS.AllowOrigins),
+		NetworkScan:       handler.NewNetworkScanHandler(netScanner, networkScanRepo),
+		NetworkDevice:     handler.NewNetworkDeviceHandler(networkDeviceRepo),
+		NetworkAnomaly:    handler.NewNetworkAnomalyHandler(networkAnomalyRepo),
+		ScanBaseline:      handler.NewScanBaselineHandler(scanBaselineRepo),
 	}
 
 	// Setup routes
@@ -430,6 +500,16 @@ func main() {
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutdownCancel()
+
+	if err := logStreamMgr.Shutdown(shutdownCtx); err != nil {
+		slog.Error("log stream shutdown error", slog.Any("error", err))
+	}
+	if err := logConsumer.Shutdown(shutdownCtx); err != nil {
+		slog.Error("log consumer shutdown error", slog.Any("error", err))
+	}
+	if err := netScanner.Shutdown(shutdownCtx); err != nil {
+		slog.Error("network scanner shutdown error", slog.Any("error", err))
+	}
 
 	if err := e.Shutdown(shutdownCtx); err != nil {
 		slog.Error("server shutdown error", slog.Any("error", err))
