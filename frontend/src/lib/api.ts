@@ -194,6 +194,32 @@ export const networkApi = {
     api.get(`/nodes/${nodeId}/ports`),
   setAlias: (nodeId: string, iface: string, data: { display_name: string; description?: string; color?: string }) =>
     api.put(`/nodes/${nodeId}/network/${iface}/alias`, data),
+  getScans: (nodeId: string, params?: { limit?: number; offset?: number }) =>
+    api.get(`/nodes/${nodeId}/network-scans`, { params }),
+  getScan: (id: string) =>
+    api.get(`/network-scans/${id}`),
+  triggerScan: (nodeId: string, data: { scan_type: "quick" | "full" }) =>
+    api.post(`/nodes/${nodeId}/network-scans`, data),
+  diffScans: (id1: string, id2: string) =>
+    api.get(`/network-scans/${id1}/diff/${id2}`),
+  getDevices: (nodeId: string) =>
+    api.get(`/nodes/${nodeId}/network-devices`),
+  updateDevice: (id: string, data: { hostname?: string; is_known?: boolean }) =>
+    api.put(`/network-devices/${id}`, data),
+  getAnomalies: (nodeId: string, params?: { limit?: number; offset?: number }) =>
+    api.get(`/nodes/${nodeId}/network-anomalies`, { params }),
+  acknowledgeAnomaly: (id: string) =>
+    api.post(`/network-anomalies/${id}/acknowledge`),
+  getBaselines: (nodeId: string) =>
+    api.get(`/nodes/${nodeId}/scan-baselines`),
+  createBaseline: (nodeId: string, data?: { label?: string }) =>
+    api.post(`/nodes/${nodeId}/scan-baselines`, data),
+  updateBaseline: (id: string, data: { label?: string; whitelist_json?: unknown }) =>
+    api.put(`/scan-baselines/${id}`, data),
+  deleteBaseline: (id: string) =>
+    api.delete(`/scan-baselines/${id}`),
+  activateBaseline: (id: string) =>
+    api.post(`/scan-baselines/${id}/activate`),
 };
 
 // Storage API (cluster-level)
@@ -696,4 +722,38 @@ export const passwordPolicyApi = {
     max_length?: number;
     disallow_username?: boolean;
   }) => api.put("/password-policy", data).then((r) => r.data),
+};
+
+// Log API
+export const logAnalysisApi = {
+  getAnomalies: (nodeId: string, params?: { limit?: number; offset?: number }) =>
+    api.get(`/nodes/${nodeId}/log-anomalies`, { params }),
+  getAnomaly: (id: string) =>
+    api.get(`/log-anomalies/${id}`),
+  acknowledgeAnomaly: (id: string) =>
+    api.post(`/log-anomalies/${id}/acknowledge`),
+  analyze: (data: { node_ids: string[]; time_from: string; time_to: string; context?: string }) =>
+    api.post("/logs/analyze", data),
+  getAnalyses: (params?: { limit?: number; offset?: number; node_ids?: string }) =>
+    api.get("/logs/analyses", { params }),
+  exportLogs: (params: Record<string, string>) =>
+    api.get("/logs/export", { params, responseType: "blob" as const }),
+  getSources: (nodeId: string) =>
+    api.get(`/nodes/${nodeId}/log-sources`),
+  updateSources: (nodeId: string, data: { sources: Array<{ path: string; enabled: boolean }> }) =>
+    api.put(`/nodes/${nodeId}/log-sources`, data),
+  getBookmarks: (nodeId: string) =>
+    api.get(`/nodes/${nodeId}/log-bookmarks`),
+  createBookmark: (data: { node_id: string; anomaly_id?: string; log_entry_json: unknown; user_note?: string }) =>
+    api.post("/log-bookmarks", data),
+  deleteBookmark: (id: string) =>
+    api.delete(`/log-bookmarks/${id}`),
+  getReportSchedules: () =>
+    api.get("/logs/report-schedules"),
+  createReportSchedule: (data: unknown) =>
+    api.post("/logs/report-schedules", data),
+  updateReportSchedule: (id: string, data: unknown) =>
+    api.put(`/logs/report-schedules/${id}`, data),
+  deleteReportSchedule: (id: string) =>
+    api.delete(`/logs/report-schedules/${id}`),
 };
