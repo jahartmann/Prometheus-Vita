@@ -11,7 +11,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-var ErrNotFound = errors.New("not found")
+var (
+	ErrNotFound        = errors.New("not found")
+	ErrAlreadyResolved = errors.New("already resolved")
+)
 
 type UserRepository interface {
 	Create(ctx context.Context, user *model.User) error

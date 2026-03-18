@@ -72,10 +72,14 @@ func (s *Service) Login(ctx context.Context, req model.LoginRequest) (*model.Log
 			slog.Warn("failed to increment login attempts", slog.Any("error", incrErr))
 		} else {
 			if attempts == 1 {
-				s.redis.Expire(ctx, attemptsKey, lockoutTTL)
+				if expErr := s.redis.Expire(ctx, attemptsKey, lockoutTTL).Err(); expErr != nil {
+					slog.Warn("failed to set expiry on login attempts", slog.Any("error", expErr))
+				}
 			}
 			if attempts >= maxLoginAttempts {
-				s.redis.Set(ctx, lockoutKey, "1", lockoutTTL)
+				if setErr := s.redis.Set(ctx, lockoutKey, "1", lockoutTTL).Err(); setErr != nil {
+					slog.Warn("failed to set lockout key", slog.Any("error", setErr))
+				}
 			}
 		}
 		return nil, ErrInvalidCredentials
@@ -83,7 +87,9 @@ func (s *Service) Login(ctx context.Context, req model.LoginRequest) (*model.Log
 
 	// Successful login: clear lockout and attempts
 	attemptsKey := fmt.Sprintf("login_attempts:%s", req.Username)
-	s.redis.Del(ctx, lockoutKey, attemptsKey)
+	if delErr := s.redis.Del(ctx, lockoutKey, attemptsKey).Err(); delErr != nil {
+		slog.Warn("failed to clear lockout keys", slog.Any("error", delErr))
+	}
 
 	tokenPair, err := s.jwt.GenerateTokenPair(user)
 	if err != nil {

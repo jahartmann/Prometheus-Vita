@@ -251,7 +251,9 @@ func (s *Service) GetBackupFile(ctx context.Context, backupID uuid.UUID, filePat
 }
 
 // DeleteBackup removes a backup and all its associated files from the
-// database using a transaction to ensure consistency.
+// database. Files are deleted first, then the backup record.
+// Note: ideally these would share a DB transaction; a future migration should
+// add ON DELETE CASCADE to config_backup_files.backup_id.
 func (s *Service) DeleteBackup(ctx context.Context, backupID uuid.UUID) error {
 	// Verify backup exists first
 	if _, err := s.backupRepo.GetByID(ctx, backupID); err != nil {
@@ -260,7 +262,10 @@ func (s *Service) DeleteBackup(ctx context.Context, backupID uuid.UUID) error {
 	if err := s.fileRepo.DeleteByBackupID(ctx, backupID); err != nil {
 		return fmt.Errorf("delete backup files: %w", err)
 	}
-	return s.backupRepo.Delete(ctx, backupID)
+	if err := s.backupRepo.Delete(ctx, backupID); err != nil {
+		return fmt.Errorf("delete backup record: %w", err)
+	}
+	return nil
 }
 
 // DiffBackup computes the file-level diff between the specified backup and

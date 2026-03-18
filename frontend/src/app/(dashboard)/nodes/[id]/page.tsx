@@ -16,10 +16,12 @@ export default function NodeDetailPage() {
     const token = useAuthStore.getState().accessToken;
     if (token && nodes.length === 0) {
       fetchNodes();
+      return;
     }
     const unsub = useAuthStore.subscribe((state) => {
       if (state.accessToken && nodes.length === 0) {
         fetchNodes();
+        unsub();
       }
     });
     return () => unsub();
@@ -34,10 +36,12 @@ export default function NodeDetailPage() {
     const token = useAuthStore.getState().accessToken;
     if (token) {
       load();
+      return;
     }
     const unsub = useAuthStore.subscribe((state) => {
       if (state.accessToken) {
         load();
+        unsub();
       }
     });
     return () => unsub();

@@ -6,8 +6,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-prometheus}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme_db_password}
       POSTGRES_DB: ${POSTGRES_DB:-prometheus}
-    ports:
-      - "5432:5432"
+    # ports: expose only via docker-compose.override.yml for local dev
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
@@ -22,8 +21,7 @@ services:
     image: redis:8-alpine
     restart: unless-stopped
     command: redis-server --requirepass ${REDIS_PASSWORD:-changeme_redis_password}
-    ports:
-      - "6379:6379"
+    # ports: expose only via docker-compose.override.yml for local dev
     volumes:
       - redis_data:/data
     networks:

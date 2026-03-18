@@ -122,6 +122,9 @@ func (s *Service) Chat(ctx context.Context, userID uuid.UUID, req model.ChatRequ
 		if err != nil {
 			return nil, fmt.Errorf("get conversation: %w", err)
 		}
+		if conv.UserID != userID {
+			return nil, fmt.Errorf("get conversation: %w", repository.ErrNotFound)
+		}
 	} else {
 		conv = &model.ChatConversation{
 			UserID: userID,

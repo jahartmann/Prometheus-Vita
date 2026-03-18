@@ -325,11 +325,25 @@ export function DRWizard() {
     if (!state.selectedBackup) return;
     setState((s) => ({ ...s, restoreInProgress: true, restoreResult: null }));
     try {
-      await backupApi.restoreBackup(state.selectedBackup.id, { file_paths: [], dry_run: false });
+      // First fetch the backup's file list, then restore all files
+      const filesRes = await backupApi.getBackupFiles(state.selectedBackup.id);
+      const fileList = Array.isArray(filesRes.data) ? filesRes.data : (filesRes.data?.data || []);
+      const filePaths = fileList.map((f: { file_path: string }) => f.file_path);
+
+      if (filePaths.length === 0) {
+        setState((s) => ({
+          ...s,
+          restoreInProgress: false,
+          restoreResult: { success: false, message: "Keine Dateien im Backup gefunden." },
+        }));
+        return;
+      }
+
+      await backupApi.restoreBackup(state.selectedBackup.id, { file_paths: filePaths, dry_run: false });
       setState((s) => ({
         ...s,
         restoreInProgress: false,
-        restoreResult: { success: true, message: "Config-Restore erfolgreich abgeschlossen." },
+        restoreResult: { success: true, message: `Config-Restore erfolgreich abgeschlossen (${filePaths.length} Dateien).` },
       }));
     } catch {
       setState((s) => ({

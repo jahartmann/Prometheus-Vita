@@ -219,7 +219,7 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 		m.ErrorMessage = fmt.Sprintf("%s: %v", phase, err)
 		completedAt := time.Now()
 		m.CompletedAt = &completedAt
-		_ = s.migrationRepo.Update(ctx, m)
+		_ = s.migrationRepo.Update(context.Background(), m)
 		s.broadcastProgress(m, nil)
 
 		// If we stopped the VM and migration failed, restart it
@@ -286,6 +286,7 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 		handleError("preflight", fmt.Errorf("SSH-Verbindung zu Source %s fehlgeschlagen: %w", sourceNode.Name, err))
 		return
 	}
+	defer s.sshPool.Return(sourceNode.ID.String(), srcSSHClient)
 	s.broadcastLog(m.ID, "✓ SSH zu Source verbunden")
 
 	s.broadcastLog(m.ID, "Prüfe SSH-Verbindung zu Target...")
@@ -299,6 +300,7 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 		handleError("preflight", fmt.Errorf("SSH-Verbindung zu Target %s fehlgeschlagen: %w", targetNode.Name, err))
 		return
 	}
+	defer s.sshPool.Return(targetNode.ID.String(), tgtSSHClient)
 	s.broadcastLog(m.ID, "✓ SSH zu Target verbunden")
 
 	// 2. Get VM info to check disk size
@@ -437,7 +439,7 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 				return
 			}
 		}
-		if err := s.waitForTask(ctx, srcClient, srcPVENode, upid, 120*time.Second); err != nil {
+		if err := s.waitForTask(ctx, srcClient, srcPVENode, upid, 300*time.Second); err != nil {
 			handleError("preparing", fmt.Errorf("wait for vm stop: %w", err))
 			return
 		}
@@ -451,7 +453,7 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 			handleError("preparing", fmt.Errorf("suspend vm: %w", err))
 			return
 		}
-		if err := s.waitForTask(ctx, srcClient, srcPVENode, upid, 60*time.Second); err != nil {
+		if err := s.waitForTask(ctx, srcClient, srcPVENode, upid, 180*time.Second); err != nil {
 			handleError("preparing", fmt.Errorf("wait for vm suspend: %w", err))
 			return
 		}
@@ -568,7 +570,7 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 		tgtUser = "root"
 	}
 
-	scpCmd := fmt.Sprintf("scp -o StrictHostKeyChecking=no -o ConnectTimeout=10 -P %d %q %s@%s:%q",
+	scpCmd := fmt.Sprintf("scp -o StrictHostKeyChecking=no -o ConnectTimeout=30 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -P %d %q %s@%s:%q",
 		tgtPort, vzdumpPath, tgtUser, tgtHost, targetVzdumpPath)
 
 	s.broadcastLog(m.ID, fmt.Sprintf("Starte Transfer: %s → %s (%s)", sourceNode.Name, targetNode.Name, formatBytesLog(totalSize)))
@@ -592,24 +594,37 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 	// Poll progress by checking file size on target
 	transferStart := time.Now()
 	lastLogTime := time.Now()
-	pollTicker := time.NewTicker(3 * time.Second)
+	pollTicker := time.NewTicker(5 * time.Second) // 5s intervals for high-latency networks
 	defer pollTicker.Stop()
+
+	consecutivePollErrors := 0
+	const maxPollErrors = 10 // allow transient SSH failures during polling
 
 	transferDone := false
 	for !transferDone {
 		select {
 		case <-ctx.Done():
 			// Kill scp on cancel
-			_, _ = srcSSHClient.RunCommand(ctx, fmt.Sprintf("kill %s 2>/dev/null", scpPID))
-			_, _ = tgtSSHClient.RunCommand(ctx, fmt.Sprintf("rm -f %q", targetVzdumpPath))
+			_, _ = srcSSHClient.RunCommand(context.Background(), fmt.Sprintf("kill %s 2>/dev/null", scpPID))
+			_, _ = tgtSSHClient.RunCommand(context.Background(), fmt.Sprintf("rm -f %q", targetVzdumpPath))
 			handleError("transferring", ctx.Err())
 			return
 		case <-pollTicker.C:
-			// Check if scp is still running
-			checkResult, _ := srcSSHClient.RunCommand(ctx, fmt.Sprintf("kill -0 %s 2>/dev/null; echo $?", scpPID))
+			// Check if scp is still running (tolerate SSH errors during polling)
+			checkResult, checkErr := srcSSHClient.RunCommand(ctx, fmt.Sprintf("kill -0 %s 2>/dev/null; echo $?", scpPID))
+			if checkErr != nil {
+				consecutivePollErrors++
+				if consecutivePollErrors >= maxPollErrors {
+					handleError("transferring", fmt.Errorf("SSH-Verbindung zu Source nach %d Versuchen verloren: %w", maxPollErrors, checkErr))
+					return
+				}
+				s.broadcastLog(m.ID, fmt.Sprintf("⚠ SSH-Poll fehlgeschlagen (%d/%d), warte...", consecutivePollErrors, maxPollErrors))
+				continue
+			}
+			consecutivePollErrors = 0
 			scpRunning := checkResult != nil && strings.TrimSpace(checkResult.Stdout) == "0"
 
-			// Get current file size on target
+			// Get current file size on target (tolerate errors)
 			statResult, _ := tgtSSHClient.RunCommand(ctx, fmt.Sprintf("stat -c %%s %q 2>/dev/null", targetVzdumpPath))
 			var currentSize int64
 			if statResult != nil && statResult.ExitCode == 0 {
@@ -631,8 +646,8 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 			}
 			s.broadcastProgress(m, nil)
 
-			// Log progress every 10 seconds
-			if time.Since(lastLogTime) > 10*time.Second {
+			// Log progress every 15 seconds (less spam for slow networks)
+			if time.Since(lastLogTime) > 15*time.Second {
 				lastLogTime = time.Now()
 				pct := float64(0)
 				if totalSize > 0 {
@@ -648,11 +663,19 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 				// Cleanup log file
 				_, _ = srcSSHClient.RunCommand(ctx, fmt.Sprintf("rm -f /tmp/scp-mig-%s.log", m.ID.String()))
 
-				// Verify file size matches
-				finalStatResult, _ := tgtSSHClient.RunCommand(ctx, fmt.Sprintf("stat -c %%s %q 2>/dev/null", targetVzdumpPath))
+				// Verify file size matches (with retries for slow filesystems)
 				var finalSize int64
-				if finalStatResult != nil && finalStatResult.ExitCode == 0 {
-					fmt.Sscanf(strings.TrimSpace(finalStatResult.Stdout), "%d", &finalSize)
+				for retry := 0; retry < 3; retry++ {
+					finalStatResult, _ := tgtSSHClient.RunCommand(ctx, fmt.Sprintf("stat -c %%s %q 2>/dev/null", targetVzdumpPath))
+					if finalStatResult != nil && finalStatResult.ExitCode == 0 {
+						fmt.Sscanf(strings.TrimSpace(finalStatResult.Stdout), "%d", &finalSize)
+						if finalSize >= totalSize || totalSize == 0 {
+							break
+						}
+					}
+					if retry < 2 {
+						time.Sleep(3 * time.Second) // wait for filesystem sync
+					}
 				}
 
 				if totalSize > 0 && finalSize < totalSize {
@@ -820,8 +843,11 @@ func (s *Service) broadcastLog(migrationID uuid.UUID, line string) {
 
 func (s *Service) waitForTask(ctx context.Context, client *proxmox.Client, node string, upid string, timeout time.Duration) error {
 	deadline := time.After(timeout)
-	ticker := time.NewTicker(3 * time.Second)
+	ticker := time.NewTicker(5 * time.Second) // 5s for high-latency networks
 	defer ticker.Stop()
+
+	consecutiveErrors := 0
+	const maxConsecutiveErrors = 6 // ~30s of failures before giving up
 
 	for {
 		select {
@@ -832,8 +858,13 @@ func (s *Service) waitForTask(ctx context.Context, client *proxmox.Client, node 
 		case <-ticker.C:
 			status, err := client.GetTaskStatus(ctx, node, upid)
 			if err != nil {
+				consecutiveErrors++
+				if consecutiveErrors >= maxConsecutiveErrors {
+					return fmt.Errorf("task status unavailable after %d attempts: %w", maxConsecutiveErrors, err)
+				}
 				continue
 			}
+			consecutiveErrors = 0
 			if !status.IsRunning() {
 				if status.IsSuccess() {
 					return nil
@@ -845,19 +876,21 @@ func (s *Service) waitForTask(ctx context.Context, client *proxmox.Client, node 
 }
 
 func (s *Service) pollTaskWithProgress(ctx context.Context, client *proxmox.Client, node string, upid string, m *model.VMMigration, startProgress, endProgress int) error {
-	ticker := time.NewTicker(3 * time.Second)
+	ticker := time.NewTicker(5 * time.Second) // 5s for high-latency networks
 	defer ticker.Stop()
 
 	progressRange := endProgress - startProgress
 	pollCount := 0
 	lastLogLine := 0 // Track which log lines we've already sent
+	consecutiveErrors := 0
+	const maxConsecutiveErrors = 10 // ~50s of failures before giving up
 
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
-			// Stream task log lines
+			// Stream task log lines (tolerate errors)
 			entries, err := client.GetTaskLog(ctx, node, upid, lastLogLine)
 			if err == nil && len(entries) > 0 {
 				for _, e := range entries {
@@ -872,8 +905,13 @@ func (s *Service) pollTaskWithProgress(ctx context.Context, client *proxmox.Clie
 
 			status, err := client.GetTaskStatus(ctx, node, upid)
 			if err != nil {
+				consecutiveErrors++
+				if consecutiveErrors >= maxConsecutiveErrors {
+					return fmt.Errorf("task status unavailable after %d attempts: %w", maxConsecutiveErrors, err)
+				}
 				continue
 			}
+			consecutiveErrors = 0
 			if !status.IsRunning() {
 				// Fetch remaining log lines
 				finalEntries, err := client.GetTaskLog(ctx, node, upid, lastLogLine)

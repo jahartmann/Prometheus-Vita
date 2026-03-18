@@ -10,7 +10,7 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-const defaultTimeout = 30 * time.Second
+const defaultTimeout = 60 * time.Second
 
 // Client wraps an SSH connection and provides methods for remote command execution.
 type Client struct {

@@ -66,7 +66,7 @@ type Handlers struct {
 	ScanBaseline      *handler.ScanBaselineHandler
 }
 
-func SetupRouter(e *echo.Echo, cfg *config.Config, jwtSvc *auth.JWTService, h Handlers, gatewaySvc *gateway.Service, redisClient *redis.Client, auditRepo repository.AuditRepository) {
+func SetupRouter(e *echo.Echo, cfg *config.Config, jwtSvc *auth.JWTService, h Handlers, gatewaySvc *gateway.Service, redisClient *redis.Client, auditRepo repository.AuditRepository, userRepo repository.UserRepository) {
 	// Global middleware
 	e.Use(middleware.Recovery())
 	e.Use(middleware.RequestID())
@@ -107,6 +107,9 @@ func SetupRouter(e *echo.Echo, cfg *config.Config, jwtSvc *auth.JWTService, h Ha
 	// Protected routes
 	protected := v1.Group("")
 	protected.Use(middleware.JWTAuth(jwtSvc))
+	if userRepo != nil {
+		protected.Use(middleware.MustChangePassword(userRepo))
+	}
 
 	// Auth - protected
 	protected.GET("/auth/me", h.Auth.Me)
@@ -576,7 +579,7 @@ func SetupRouter(e *echo.Echo, cfg *config.Config, jwtSvc *auth.JWTService, h Ha
 		vmCockpit.GET("/disk", h.VMCockpit.GetDiskUsage)
 		vmCockpit.POST("/services/action", h.VMCockpit.ServiceAction)
 		vmCockpit.POST("/processes/kill", h.VMCockpit.KillProcess)
-		e.GET("/api/v1/nodes/:nodeId/vms/:vmid/cockpit/shell", h.VMCockpit.HandleShell)
+		vmCockpit.GET("/shell", h.VMCockpit.HandleShell)
 
 		// File operations (Phase 2)
 		vmCockpit.GET("/files", h.VMCockpit.ListFiles)

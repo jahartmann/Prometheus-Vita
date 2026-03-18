@@ -7,6 +7,8 @@ interface BackupState {
   backups: ConfigBackup[];
   schedules: BackupSchedule[];
   isLoading: boolean;
+  isCreating: boolean;
+  isLoadingSchedules: boolean;
   error: string | null;
   fetchBackups: (nodeId: string) => Promise<void>;
   createBackup: (nodeId: string, notes?: string) => Promise<ConfigBackup>;
@@ -18,6 +20,8 @@ export const useBackupStore = create<BackupState>()((set) => ({
   backups: [],
   schedules: [],
   isLoading: false,
+  isCreating: false,
+  isLoadingSchedules: false,
   error: null,
 
   fetchBackups: async (nodeId: string) => {
@@ -32,18 +36,19 @@ export const useBackupStore = create<BackupState>()((set) => ({
   },
 
   createBackup: async (nodeId: string, notes?: string) => {
+    set({ isCreating: true });
     try {
       const response = await backupApi.createBackup(nodeId, {
         backup_type: "manual",
         notes,
       });
       const backup = response.data;
-      set((state) => ({ backups: [backup, ...state.backups] }));
+      set((state) => ({ backups: [backup, ...state.backups], isCreating: false }));
       toast.success("Backup erfolgreich erstellt");
       return backup;
     } catch {
       toast.error("Backup konnte nicht erstellt werden");
-      set({ error: "Backup konnte nicht erstellt werden" });
+      set({ error: "Backup konnte nicht erstellt werden", isCreating: false });
       throw new Error("Backup konnte nicht erstellt werden");
     }
   },
@@ -63,12 +68,13 @@ export const useBackupStore = create<BackupState>()((set) => ({
   },
 
   fetchSchedules: async (nodeId: string) => {
+    set({ isLoadingSchedules: true });
     try {
       const response = await scheduleApi.listSchedules(nodeId);
-      set({ schedules: toArray<BackupSchedule>(response.data) });
+      set({ schedules: toArray<BackupSchedule>(response.data), isLoadingSchedules: false });
     } catch {
       toast.error("Zeitplaene konnten nicht geladen werden");
-      set({ error: "Zeitplaene konnten nicht geladen werden" });
+      set({ error: "Zeitplaene konnten nicht geladen werden", isLoadingSchedules: false });
     }
   },
 }));

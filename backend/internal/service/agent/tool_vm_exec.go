@@ -74,6 +74,10 @@ func (t *VMExecTool) Execute(ctx context.Context, args json.RawMessage) (json.Ra
 		params.VMType = "lxc"
 	}
 
+	if err := ValidateSSHCommand(params.Command); err != nil {
+		return json.Marshal(map[string]string{"error": err.Error()})
+	}
+
 	result, err := t.nodeService.ExecVMCommand(ctx, nodeID, params.VMID, params.VMType, []string{"sh", "-c", params.Command})
 	if err != nil {
 		return json.Marshal(map[string]string{"error": fmt.Sprintf("Fehler beim Ausfuehren: %v", err)})

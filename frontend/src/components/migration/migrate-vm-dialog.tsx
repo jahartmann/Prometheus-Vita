@@ -123,14 +123,14 @@ export function MigrateVmDialog({
     }
   }, [open]);
 
-  // Load storages from the source node when dialog opens.
-  // The source node's API connection is proven to work (we already loaded the VM from it).
+  // Load storages from the selected target node.
   useEffect(() => {
-    if (!open || !sourceNodeId) return;
+    if (!open || !targetNodeId) return;
     setLoadingStorages(true);
     setStorageError("");
+    setTargetStorage("");
     api
-      .get(`/nodes/${sourceNodeId}/storage`)
+      .get(`/nodes/${targetNodeId}/storage`)
       .then((res) => {
         setStorages(toArray<StorageOption>(res.data));
       })
@@ -141,7 +141,7 @@ export function MigrateVmDialog({
         setStorages([]);
       })
       .finally(() => setLoadingStorages(false));
-  }, [open, sourceNodeId]);
+  }, [open, targetNodeId]);
 
   // Filter storages: only those that can hold VM images/rootdir
   const vmStorages = useMemo(() => {

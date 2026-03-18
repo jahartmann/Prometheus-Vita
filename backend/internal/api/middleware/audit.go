@@ -18,22 +18,32 @@ func AuditLog(auditRepo repository.AuditRepository) echo.MiddlewareFunc {
 			// Process request
 			err := next(c)
 
+			// Capture values before goroutine to avoid data race on echo.Context
+			method := c.Request().Method
+			path := c.Request().URL.Path
+			statusCode := c.Response().Status
+			ip := c.RealIP()
+			userAgent := c.Request().UserAgent()
+			duration := int(time.Since(start).Milliseconds())
+			userID, hasUser := c.Get(ContextKeyUserID).(uuid.UUID)
+			tokenID, hasToken := c.Get(ContextKeyAPITokenID).(uuid.UUID)
+
 			// Record audit log asynchronously
 			go func() {
 				entry := &model.AuditLogEntry{
-					Method:     c.Request().Method,
-					Path:       c.Request().URL.Path,
-					StatusCode: c.Response().Status,
-					IPAddress:  c.RealIP(),
-					UserAgent:  c.Request().UserAgent(),
-					DurationMS: int(time.Since(start).Milliseconds()),
+					Method:     method,
+					Path:       path,
+					StatusCode: statusCode,
+					IPAddress:  ip,
+					UserAgent:  userAgent,
+					DurationMS: duration,
 				}
 
-				if userID, ok := c.Get(ContextKeyUserID).(uuid.UUID); ok {
+				if hasUser {
 					entry.UserID = &userID
 				}
 
-				if tokenID, ok := c.Get(ContextKeyAPITokenID).(uuid.UUID); ok {
+				if hasToken {
 					entry.APITokenID = &tokenID
 				}
 

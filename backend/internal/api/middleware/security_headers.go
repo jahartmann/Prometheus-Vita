@@ -14,11 +14,10 @@ func SecurityHeaders() echo.MiddlewareFunc {
 			res.Set("X-XSS-Protection", "1; mode=block")
 			res.Set("Referrer-Policy", "strict-origin-when-cross-origin")
 			res.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-			res.Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ws: wss:; font-src 'self'")
+			res.Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ws: wss:; font-src 'self'")
 
-			if c.Request().TLS != nil {
-				res.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
-			}
+			// Always set HSTS - in production TLS is typically terminated at the reverse proxy
+			res.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 
 			return next(c)
 		}

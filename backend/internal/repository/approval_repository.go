@@ -79,12 +79,15 @@ func (r *pgApprovalRepository) ListPending(ctx context.Context, userID uuid.UUID
 }
 
 func (r *pgApprovalRepository) Resolve(ctx context.Context, id uuid.UUID, status model.ApprovalStatus, resolvedBy uuid.UUID) error {
-	_, err := r.db.Exec(ctx,
-		`UPDATE agent_pending_approvals SET status=$1, resolved_by=$2, resolved_at=NOW() WHERE id=$3`,
+	result, err := r.db.Exec(ctx,
+		`UPDATE agent_pending_approvals SET status=$1, resolved_by=$2, resolved_at=NOW() WHERE id=$3 AND status='pending'`,
 		status, resolvedBy, id,
 	)
 	if err != nil {
 		return fmt.Errorf("resolve approval: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return ErrAlreadyResolved
 	}
 	return nil
 }

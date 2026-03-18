@@ -1,27 +1,30 @@
 # Build stage
 FROM golang:1.23-alpine AS builder
 
-RUN apk add --no-cache git
-
 WORKDIR /build
 
-COPY backend/go.mod backend/go.sum* ./
+COPY backend/go.mod backend/go.sum ./
 RUN go mod download
 
 COPY backend/ .
-RUN go mod tidy
 
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /prometheus-server ./cmd/server
 
 # Runtime stage
-FROM alpine:3.20
+FROM alpine:3.21
 
 RUN apk add --no-cache ca-certificates tzdata
+
+RUN addgroup -S prometheus && adduser -S -G prometheus prometheus
 
 WORKDIR /app
 
 COPY --from=builder /prometheus-server .
 COPY --from=builder /build/migrations ./migrations
+
+RUN chown -R prometheus:prometheus /app
+
+USER prometheus
 
 EXPOSE 8080
 

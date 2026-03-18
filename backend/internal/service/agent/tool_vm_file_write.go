@@ -79,6 +79,10 @@ func (t *VMFileWriteTool) Execute(ctx context.Context, args json.RawMessage) (js
 		params.VMType = "lxc"
 	}
 
+	if err := ValidateFilePath(params.Path); err != nil {
+		return json.Marshal(map[string]string{"error": err.Error()})
+	}
+
 	if err := t.nodeService.WriteVMFile(ctx, nodeID, params.VMID, params.VMType, params.Path, params.Content); err != nil {
 		return json.Marshal(map[string]string{"error": fmt.Sprintf("Fehler beim Schreiben: %v", err)})
 	}

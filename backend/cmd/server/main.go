@@ -482,7 +482,7 @@ func main() {
 	}
 
 	// Setup routes
-	api.SetupRouter(e, cfg, jwtSvc, handlers, gatewaySvc, redisClient, auditRepo)
+	api.SetupRouter(e, cfg, jwtSvc, handlers, gatewaySvc, redisClient, auditRepo, userRepo)
 
 	// Start server
 	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)

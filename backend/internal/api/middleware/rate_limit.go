@@ -28,7 +28,7 @@ func RateLimit(redisClient *redis.Client, cfg RateLimitConfig) echo.MiddlewareFu
 			key := fmt.Sprintf("ratelimit:%s", ip)
 
 			// If user is authenticated, use user-specific key
-			if userID, ok := c.Get(ContextKeyUserID).(fmt.Stringer); ok {
+			if userID, ok := c.Get(ContextKeyUserID).(interface{ String() string }); ok {
 				key = fmt.Sprintf("ratelimit:user:%s", userID.String())
 			}
 

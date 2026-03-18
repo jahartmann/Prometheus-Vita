@@ -12,6 +12,9 @@ interface DRState {
   runbooks: RecoveryRunbook[];
   simulationResult: DRSimulationResult | null;
   isLoading: boolean;
+  isLoadingProfile: boolean;
+  isLoadingReadiness: boolean;
+  isLoadingRunbooks: boolean;
   error: string | null;
   fetchProfile: (nodeId: string) => Promise<void>;
   collectProfile: (nodeId: string) => Promise<NodeProfile>;
@@ -31,15 +34,18 @@ export const useDRStore = create<DRState>()((set) => ({
   runbooks: [],
   simulationResult: null,
   isLoading: false,
+  isLoadingProfile: false,
+  isLoadingReadiness: false,
+  isLoadingRunbooks: false,
   error: null,
 
   fetchProfile: async (nodeId: string) => {
-    set({ isLoading: true, error: null });
+    set({ isLoadingProfile: true, error: null });
     try {
       const response = await drApi.getProfile(nodeId);
-      set({ profile: response.data, isLoading: false });
+      set({ profile: response.data, isLoadingProfile: false });
     } catch {
-      set({ profile: null, error: null, isLoading: false });
+      set({ profile: null, error: null, isLoadingProfile: false });
     }
   },
 
@@ -51,12 +57,12 @@ export const useDRStore = create<DRState>()((set) => ({
   },
 
   fetchReadiness: async (nodeId: string) => {
-    set({ isLoading: true, error: null });
+    set({ isLoadingReadiness: true, error: null });
     try {
       const response = await drApi.getReadiness(nodeId);
-      set({ currentScore: response.data, isLoading: false });
+      set({ currentScore: response.data, isLoadingReadiness: false });
     } catch {
-      set({ currentScore: null, error: null, isLoading: false });
+      set({ currentScore: null, error: null, isLoadingReadiness: false });
     }
   },
 
@@ -78,13 +84,13 @@ export const useDRStore = create<DRState>()((set) => ({
   },
 
   fetchRunbooks: async (nodeId: string) => {
-    set({ isLoading: true, error: null });
+    set({ isLoadingRunbooks: true, error: null });
     try {
       const response = await drApi.listRunbooks(nodeId);
-      set({ runbooks: toArray<RecoveryRunbook>(response.data), isLoading: false });
+      set({ runbooks: toArray<RecoveryRunbook>(response.data), isLoadingRunbooks: false });
     } catch {
       toast.error("Runbooks konnten nicht geladen werden");
-      set({ error: "Runbooks konnten nicht geladen werden", isLoading: false });
+      set({ error: "Runbooks konnten nicht geladen werden", isLoadingRunbooks: false });
     }
   },
 

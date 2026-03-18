@@ -106,6 +106,7 @@ func (s *Service) CheckDrift(ctx context.Context, nodeID uuid.UUID) (*model.Drif
 		_ = s.driftRepo.Update(ctx, check)
 		return check, nil
 	}
+	defer s.sshPool.Return(nodeID.String(), sshClient)
 
 	// Collect current files from node
 	currentFiles, err := s.collector.CollectFiles(ctx, sshClient, backup.DefaultPaths)

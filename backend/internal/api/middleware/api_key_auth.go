@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"github.com/antigravity/prometheus/internal/api/response"
 	"github.com/antigravity/prometheus/internal/service/gateway"
 	"github.com/labstack/echo/v4"
 )
@@ -18,8 +19,8 @@ func APIKeyAuth(gatewaySvc *gateway.Service) echo.MiddlewareFunc {
 
 			token, err := gatewaySvc.ValidateToken(c.Request().Context(), apiKey)
 			if err != nil {
-				// Invalid key, let JWT middleware handle auth
-				return next(c)
+				// API key was provided but is invalid — fail closed
+				return response.Unauthorized(c, "invalid api key")
 			}
 
 			// Get user for this token

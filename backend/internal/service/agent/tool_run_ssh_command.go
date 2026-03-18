@@ -59,6 +59,10 @@ func (t *RunSSHCommandTool) Execute(ctx context.Context, args json.RawMessage) (
 		return json.Marshal(map[string]string{"error": "Ungueltige Node-ID"})
 	}
 
+	if err := ValidateSSHCommand(params.Command); err != nil {
+		return json.Marshal(map[string]string{"error": err.Error()})
+	}
+
 	result, err := t.nodeService.RunSSHCommand(ctx, nodeID, params.Command)
 	if err != nil {
 		return json.Marshal(map[string]string{"error": fmt.Sprintf("Fehler beim Ausfuehren des Befehls: %v", err)})
