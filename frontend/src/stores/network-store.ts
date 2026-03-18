@@ -73,32 +73,32 @@ export const useNetworkStore = create<NetworkState>()((set) => ({
   fetchScans: async (nodeId) => {
     try {
       const res = await networkApi.getScans(nodeId, { limit: 50 });
-      const scans = res.data || [];
+      const scans = Array.isArray(res.data) ? res.data : [];
       const lastQuick = scans.find((s: NetworkScan) => s.scan_type === "quick")?.started_at;
       const lastFull = scans.find((s: NetworkScan) => s.scan_type === "full")?.started_at;
       set({ scans, scanStatus: { lastQuick, lastFull, isScanning: false } });
-    } catch { /* ignore */ }
+    } catch { set({ scans: [], scanStatus: { isScanning: false } }); }
   },
 
   fetchDevices: async (nodeId) => {
     try {
       const res = await networkApi.getDevices(nodeId);
-      set({ devices: res.data || [] });
-    } catch { /* ignore */ }
+      set({ devices: Array.isArray(res.data) ? res.data : [] });
+    } catch { set({ devices: [] }); }
   },
 
   fetchAnomalies: async (nodeId) => {
     try {
       const res = await networkApi.getAnomalies(nodeId, { limit: 100 });
-      set({ anomalies: res.data || [] });
-    } catch { /* ignore */ }
+      set({ anomalies: Array.isArray(res.data) ? res.data : [] });
+    } catch { set({ anomalies: [] }); }
   },
 
   fetchBaselines: async (nodeId) => {
     try {
       const res = await networkApi.getBaselines(nodeId);
-      set({ baselines: res.data || [] });
-    } catch { /* ignore */ }
+      set({ baselines: Array.isArray(res.data) ? res.data : [] });
+    } catch { set({ baselines: [] }); }
   },
 
   triggerScan: async (nodeId, scanType) => {

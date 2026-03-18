@@ -33,8 +33,10 @@ function formatDate(iso: string): string {
 }
 
 export function DeviceTable({ nodeId: _nodeId }: DeviceTableProps) {
-  const devices = useNetworkStore((s) => s.devices);
-  const scans = useNetworkStore((s) => s.scans);
+  const rawDevices = useNetworkStore((s) => s.devices);
+  const rawScans = useNetworkStore((s) => s.scans);
+  const devices = Array.isArray(rawDevices) ? rawDevices : [];
+  const scans = Array.isArray(rawScans) ? rawScans : [];
 
   const [filter, setFilter] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);

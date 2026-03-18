@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { logAnalysisApi } from "@/lib/api";
+import { logAnalysisApi, logApi } from "@/lib/api";
 
 interface LogEntry {
   id: string;
@@ -85,6 +85,7 @@ interface LogState {
   fetchAnomalies: (nodeId: string) => Promise<void>;
   fetchBookmarks: (nodeId: string) => Promise<void>;
   fetchSources: (nodeId: string) => Promise<void>;
+  fetchLogs: (nodeId: string, file?: string, lines?: number) => Promise<void>;
   acknowledgeAnomaly: (id: string) => Promise<void>;
   analyze: (nodeIds: string[], timeFrom: string, timeTo: string, context?: string) => Promise<void>;
   setAnalysisReport: (report: LogAnalysisReport | null) => void;
@@ -116,21 +117,59 @@ export const useLogStore = create<LogState>()((set, get) => ({
   fetchAnomalies: async (nodeId) => {
     try {
       const res = await logAnalysisApi.getAnomalies(nodeId, { limit: 100 });
-      set({ anomalies: res.data });
+      set({ anomalies: Array.isArray(res.data) ? res.data : [] });
     } catch { /* ignore */ }
   },
 
   fetchBookmarks: async (nodeId) => {
     try {
       const res = await logAnalysisApi.getBookmarks(nodeId);
-      set({ bookmarks: res.data });
+      set({ bookmarks: Array.isArray(res.data) ? res.data : [] });
     } catch { /* ignore */ }
   },
 
   fetchSources: async (nodeId) => {
     try {
       const res = await logAnalysisApi.getSources(nodeId);
-      set({ sources: res.data });
+      set({ sources: Array.isArray(res.data) ? res.data : [] });
+    } catch { /* ignore */ }
+  },
+
+  fetchLogs: async (nodeId, file = "syslog", lines = 200) => {
+    try {
+      const res = await logApi.getLogs(nodeId, file, lines);
+      const raw = typeof res.data === "string" ? res.data : (res.data?.lines || "");
+      if (!raw) return;
+      const logLines = raw.split("\n").filter((l: string) => l.trim());
+      const now = new Date().toISOString();
+      const newEntries: LogEntry[] = logLines.map((line: string, i: number) => {
+        // Try to infer severity from content
+        const lower = line.toLowerCase();
+        let severity = "info";
+        if (lower.includes("error") || lower.includes("fail")) severity = "error";
+        else if (lower.includes("warn")) severity = "warning";
+        else if (lower.includes("debug")) severity = "debug";
+        else if (lower.includes("crit") || lower.includes("emerg") || lower.includes("panic")) severity = "critical";
+
+        return {
+          id: `rest-${nodeId}-${Date.now()}-${i}`,
+          timestamp: now,
+          node_id: nodeId,
+          source: file,
+          severity,
+          process: "",
+          pid: 0,
+          message: line,
+          raw: line,
+        };
+      });
+      set((state) => {
+        const entries = [...state.entries, ...newEntries];
+        if (entries.length > state.maxEntries) {
+          entries.splice(0, entries.length - state.maxEntries);
+        }
+        return { entries };
+      });
     } catch { /* ignore */ }
   },
 
