@@ -1,209 +1,109 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, RefreshCw, Search, Play, Pause } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
+import { useLogStore } from "@/stores/log-store";
 import { useNodeStore } from "@/stores/node-store";
-import { logApi } from "@/lib/api";
-
-const LOG_FILES = [
-  { value: "syslog", label: "Syslog" },
-  { value: "auth", label: "Auth" },
-  { value: "pveproxy", label: "PVE Proxy" },
-  { value: "pvedaemon", label: "PVE Daemon" },
-  { value: "pve-firewall", label: "PVE Firewall" },
-  { value: "corosync", label: "Corosync" },
-  { value: "tasks", label: "Tasks" },
-];
-
-const LINE_OPTIONS = [
-  { value: "50", label: "50 Zeilen" },
-  { value: "100", label: "100 Zeilen" },
-  { value: "200", label: "200 Zeilen" },
-  { value: "500", label: "500 Zeilen" },
-];
+import { useLogStream } from "@/hooks/use-log-stream";
+import { LogKpiBar } from "@/components/logs/log-kpi-bar";
+import { LogFilterToolbar } from "@/components/logs/log-filter-toolbar";
+import { LogStream } from "@/components/logs/log-stream";
+import { LogAiPanel } from "@/components/logs/log-ai-panel";
+import { LogExportDialog } from "@/components/logs/log-export-dialog";
 
 export default function NodeLogsPage() {
   const params = useParams<{ id: string }>();
   const nodeId = params.id;
-  const { nodes, fetchNodes } = useNodeStore();
-  const [logFile, setLogFile] = useState("syslog");
-  const [lines, setLines] = useState("100");
-  const [logContent, setLogContent] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [autoRefresh, setAutoRefresh] = useState(false);
-  const [filter, setFilter] = useState("");
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const logRef = useRef<HTMLPreElement>(null);
 
+  const { nodes, fetchNodes } = useNodeStore();
   const node = nodes.find((n) => n.id === nodeId);
+
+  const fetchSources = useLogStore((s) => s.fetchSources);
+  const fetchAnomalies = useLogStore((s) => s.fetchAnomalies);
+  const analyze = useLogStore((s) => s.analyze);
+  const analysisReport = useLogStore((s) => s.analysisReport);
+  const setAnalysisReport = useLogStore((s) => s.setAnalysisReport);
+
+  const [autoScroll, setAutoScroll] = useState(true);
+  const [exportOpen, setExportOpen] = useState(false);
+
+  const { isConnected } = useLogStream({ nodeIds: [nodeId] });
 
   useEffect(() => {
     fetchNodes();
-  }, [fetchNodes]);
+    fetchSources(nodeId);
+    fetchAnomalies(nodeId);
+  }, [nodeId, fetchNodes, fetchSources, fetchAnomalies]);
 
-  const fetchLogs = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const response = await logApi.getLogs(nodeId, logFile, Number(lines));
-      const data = response.data;
-      setLogContent(typeof data?.lines === "string" ? data.lines : "");
-    } catch (error) {
-      console.error("Failed to fetch logs:", error);
-      setLogContent("Fehler beim Laden der Logs.");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [nodeId, logFile, lines]);
-
-  // Initial fetch and when params change
-  useEffect(() => {
-    fetchLogs();
-  }, [fetchLogs]);
-
-  // Auto-refresh
-  useEffect(() => {
-    if (autoRefresh) {
-      intervalRef.current = setInterval(fetchLogs, 5000);
-    } else if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
-  }, [autoRefresh, fetchLogs]);
-
-  // Auto-scroll to bottom when content changes
-  useEffect(() => {
-    if (logRef.current) {
-      logRef.current.scrollTop = logRef.current.scrollHeight;
-    }
-  }, [logContent]);
-
-  const logLines = logContent.split("\n");
-  const filteredLines = filter
-    ? logLines.map((line, idx) => ({ line, idx, match: line.toLowerCase().includes(filter.toLowerCase()) }))
-    : logLines.map((line, idx) => ({ line, idx, match: false }));
+  const handleAnalyze = () => {
+    const now = new Date();
+    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+    analyze([nodeId], oneHourAgo.toISOString(), now.toISOString());
+  };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-3">
+    <div className="flex flex-col gap-4 h-full">
+      {/* Page Title */}
+      <div className="flex items-center gap-3 shrink-0">
         <Link href={`/nodes/${nodeId}`}>
           <Button variant="ghost" size="icon">
             <ArrowLeft className="h-4 w-4" />
           </Button>
         </Link>
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">
-            Logs {node ? `- ${node.name}` : ""}
+        <div className="flex-1 min-w-0">
+          <h1 className="text-2xl font-bold tracking-tight truncate">
+            Log Viewer{node ? ` — ${node.name}` : ""}
           </h1>
-          <p className="text-muted-foreground">System-Logs anzeigen und durchsuchen.</p>
+          <p className="text-sm text-muted-foreground flex items-center gap-2">
+            Echtzeit-Log-Stream
+            <span
+              className={`inline-block h-2 w-2 rounded-full ${
+                isConnected ? "bg-green-500" : "bg-red-500"
+              }`}
+            />
+            {isConnected ? "Verbunden" : "Getrennt"}
+          </p>
         </div>
       </div>
 
-      {/* Controls */}
-      <div className="flex flex-wrap items-center gap-3">
-        <Select value={logFile} onValueChange={setLogFile}>
-          <SelectTrigger className="w-48">
-            <SelectValue placeholder="Log-Datei" />
-          </SelectTrigger>
-          <SelectContent>
-            {LOG_FILES.map((f) => (
-              <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select value={lines} onValueChange={setLines}>
-          <SelectTrigger className="w-36">
-            <SelectValue placeholder="Zeilen" />
-          </SelectTrigger>
-          <SelectContent>
-            {LINE_OPTIONS.map((o) => (
-              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Button variant="outline" size="sm" onClick={fetchLogs} disabled={isLoading}>
-          <RefreshCw className={`mr-2 h-3 w-3 ${isLoading ? "animate-spin" : ""}`} />
-          Aktualisieren
-        </Button>
-
-        <Button
-          variant={autoRefresh ? "default" : "outline"}
-          size="sm"
-          onClick={() => setAutoRefresh(!autoRefresh)}
-        >
-          {autoRefresh ? (
-            <>
-              <Pause className="mr-2 h-3 w-3" />
-              Auto-Refresh an
-            </>
-          ) : (
-            <>
-              <Play className="mr-2 h-3 w-3" />
-              Auto-Refresh
-            </>
-          )}
-        </Button>
-
-        {autoRefresh && (
-          <Badge variant="outline" className="gap-1">
-            Alle 5s
-          </Badge>
-        )}
+      {/* KPI Bar */}
+      <div className="shrink-0">
+        <LogKpiBar />
       </div>
 
-      {/* Filter */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          className="pl-9"
-          placeholder="Logs filtern..."
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
+      {/* Filter Toolbar */}
+      <div className="shrink-0">
+        <LogFilterToolbar
+          nodeId={nodeId}
+          onAnalyze={handleAnalyze}
+          onExport={() => setExportOpen(true)}
+          autoScroll={autoScroll}
+          onAutoScrollChange={setAutoScroll}
         />
       </div>
 
-      {/* Log Output */}
-      <Card>
-        <CardHeader className="py-3">
-          <CardTitle className="flex items-center gap-2 text-sm">
-            <span>{LOG_FILES.find((f) => f.value === logFile)?.label || logFile}</span>
-            <Badge variant="outline" className="text-xs font-normal">
-              {filteredLines.length} Zeilen
-            </Badge>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          <pre
-            ref={logRef}
-            className="max-h-[600px] overflow-auto bg-zinc-950 p-4 font-mono text-xs leading-relaxed text-zinc-300"
-          >
-            {filteredLines.map(({ line, idx, match }) => (
-              <div
-                key={idx}
-                className={`flex ${filter && match ? "bg-yellow-500/20" : ""} ${filter && !match && filter.length > 0 ? "opacity-30" : ""}`}
-              >
-                <span className="mr-4 inline-block w-10 select-none text-right text-zinc-600">
-                  {idx + 1}
-                </span>
-                <span className="flex-1 whitespace-pre-wrap break-all">{line}</span>
-              </div>
-            ))}
-          </pre>
-        </CardContent>
-      </Card>
+      {/* Log Stream + AI Panel */}
+      <div className="relative flex flex-col flex-1 min-h-0">
+        <LogStream autoScroll={autoScroll} />
+
+        {/* AI Panel — slides up over log stream */}
+        {analysisReport && (
+          <LogAiPanel
+            report={analysisReport}
+            onClose={() => setAnalysisReport(null)}
+          />
+        )}
+      </div>
+
+      {/* Export Dialog */}
+      <LogExportDialog
+        nodeId={nodeId}
+        open={exportOpen}
+        onOpenChange={setExportOpen}
+      />
     </div>
   );
 }
