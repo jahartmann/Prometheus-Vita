@@ -81,6 +81,10 @@ export function useWebSocket({
       try {
         const data = JSON.parse(event.data);
         onMessage?.(data);
+        // Dispatch anomaly events globally for the AnomalyToastListener
+        if (data?.type === "log_anomaly" || data?.type === "network_anomaly") {
+          window.dispatchEvent(new CustomEvent("ws-anomaly", { detail: data }));
+        }
       } catch {
         onMessage?.(event.data);
       }
