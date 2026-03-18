@@ -62,7 +62,8 @@ function parseDiff(data: unknown): DiffChange[] {
 }
 
 export function ScanTimeline({ nodeId: _nodeId }: ScanTimelineProps) {
-  const scans = useNetworkStore((s) => s.scans);
+  const rawScans = useNetworkStore((s) => s.scans);
+  const scans = Array.isArray(rawScans) ? rawScans : [];
 
   const [scanA, setScanA] = useState<string>("");
   const [scanB, setScanB] = useState<string>("");

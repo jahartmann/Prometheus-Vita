@@ -18,7 +18,7 @@ export function LogKpiBar() {
             <p className="text-2xl font-bold text-red-500">
               {kpis.errorsPerMin.toFixed(1)}
             </p>
-            <p className="text-xs text-muted-foreground">Errors/min</p>
+            <p className="text-xs text-zinc-400">Errors/min</p>
           </div>
         </CardContent>
       </Card>
@@ -32,7 +32,7 @@ export function LogKpiBar() {
             <p className="text-2xl font-bold text-yellow-500">
               {kpis.warningsPerMin.toFixed(1)}
             </p>
-            <p className="text-xs text-muted-foreground">Warnings/min</p>
+            <p className="text-xs text-zinc-400">Warnings/min</p>
           </div>
         </CardContent>
       </Card>
@@ -46,7 +46,7 @@ export function LogKpiBar() {
             <p className="text-2xl font-bold text-orange-500">
               {kpis.activeAnomalies}
             </p>
-            <p className="text-xs text-muted-foreground">Active Anomalies</p>
+            <p className="text-xs text-zinc-400">Active Anomalies</p>
           </div>
         </CardContent>
       </Card>
@@ -60,7 +60,7 @@ export function LogKpiBar() {
             <p className="text-2xl font-bold text-blue-500">
               {kpis.throughput.toFixed(1)}
             </p>
-            <p className="text-xs text-muted-foreground">Throughput (lines/s)</p>
+            <p className="text-xs text-zinc-400">Throughput (lines/s)</p>
           </div>
         </CardContent>
       </Card>

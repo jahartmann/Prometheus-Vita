@@ -48,7 +48,8 @@ function renderDetails(details: unknown): string {
 }
 
 export function NetworkAnomalyList({ nodeId: _nodeId }: AnomalyListProps) {
-  const anomalies = useNetworkStore((s) => s.anomalies);
+  const rawAnomalies = useNetworkStore((s) => s.anomalies);
+  const anomalies = Array.isArray(rawAnomalies) ? rawAnomalies : [];
   const acknowledgeAnomaly = useNetworkStore((s) => s.acknowledgeAnomaly);
 
   if (anomalies.length === 0) {

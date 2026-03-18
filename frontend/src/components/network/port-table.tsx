@@ -199,7 +199,8 @@ interface PortTableProps {
 }
 
 export function PortTable({ nodeId: _nodeId }: PortTableProps) {
-  const scans = useNetworkStore((s) => s.scans);
+  const rawScans = useNetworkStore((s) => s.scans);
+  const scans = Array.isArray(rawScans) ? rawScans : [];
   const [filter, setFilter] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("port");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
