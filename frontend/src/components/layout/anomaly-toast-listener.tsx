@@ -1,13 +1,22 @@
 "use client";
 
-import { useWebSocket } from "@/hooks/use-websocket";
+import { useEffect } from "react";
 import { toast } from "sonner";
 
+/**
+ * Listens for anomaly events dispatched by the existing WebSocket connections
+ * via custom DOM events. Does NOT create its own WebSocket connection.
+ *
+ * To dispatch anomaly toasts, any WS message handler can call:
+ *   window.dispatchEvent(new CustomEvent("ws-anomaly", { detail: data }))
+ */
 export function AnomalyToastListener() {
-  useWebSocket({
-    url: "/api/v1/ws",
-    onMessage: (data: unknown) => {
-      const msg = data as { type?: string; data?: Record<string, unknown> };
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const msg = (e as CustomEvent).detail as {
+        type?: string;
+        data?: Record<string, unknown>;
+      };
       if (!msg?.type || !msg?.data) return;
 
       if (msg.type === "log_anomaly") {
@@ -26,8 +35,11 @@ export function AnomalyToastListener() {
           description: `Risk: ${Number(d.risk_score ?? 0).toFixed(2)} | Node: ${d.node_id ?? "?"}`,
         });
       }
-    },
-  });
+    };
+
+    window.addEventListener("ws-anomaly", handler);
+    return () => window.removeEventListener("ws-anomaly", handler);
+  }, []);
 
   return null;
 }
