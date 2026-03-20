@@ -407,6 +407,7 @@ export const migrationApi = {
   list: () => api.get("/migrations"),
   get: (id: string) => api.get(`/migrations/${id}`),
   cancel: (id: string) => api.post(`/migrations/${id}/cancel`),
+  getLogs: (id: string) => api.get(`/migrations/${id}/logs`),
   delete: (id: string) => api.delete(`/migrations/${id}`),
   listByNode: (nodeId: string) => api.get(`/nodes/${nodeId}/migrations`),
 };

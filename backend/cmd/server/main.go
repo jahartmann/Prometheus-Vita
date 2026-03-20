@@ -123,8 +123,9 @@ func main() {
 	telegramLinkRepo := repository.NewTelegramLinkRepository(dbPool)
 	telegramConvRepo := repository.NewTelegramConversationRepository(dbPool)
 
-	// Migration Repository
+	// Migration Repositories
 	migrationRepo := repository.NewMigrationRepository(dbPool)
+	migrationLogRepo := repository.NewMigrationLogRepository(dbPool)
 
 	// DR Repositories
 	profileRepo := repository.NewNodeProfileRepository(dbPool)
@@ -211,7 +212,7 @@ func main() {
 	runbookSvc := recovery.NewRunbookService(runbookRepo, profileRepo, nodeRepo)
 
 	// Migration Service
-	migrationSvc := migrationService.NewService(migrationRepo, nodeRepo, encryptor, sshPool, clientFactory, wsHub)
+	migrationSvc := migrationService.NewService(migrationRepo, nodeRepo, encryptor, sshPool, clientFactory, wsHub, migrationLogRepo)
 
 	// LLM Registry
 	llmRegistry := llm.NewRegistry()

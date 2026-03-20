@@ -138,3 +138,21 @@ func (h *MigrationHandler) ListByNode(c echo.Context) error {
 	}
 	return apiPkg.Success(c, responses)
 }
+
+// GetLogs handles GET /api/v1/migrations/:id/logs
+func (h *MigrationHandler) GetLogs(c echo.Context) error {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return apiPkg.BadRequest(c, "invalid migration id")
+	}
+
+	logs, err := h.service.GetLogs(c.Request().Context(), id)
+	if err != nil {
+		return apiPkg.InternalError(c, "failed to get migration logs")
+	}
+	if logs == nil {
+		logs = []repository.MigrationLog{}
+	}
+
+	return apiPkg.Success(c, logs)
+}

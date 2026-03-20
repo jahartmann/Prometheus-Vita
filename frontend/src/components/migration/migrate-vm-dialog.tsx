@@ -91,12 +91,14 @@ export function MigrateVmDialog({
   const [step, setStep] = useState<Step>("target");
   const [targetNodeId, setTargetNodeId] = useState("");
   const [targetStorage, setTargetStorage] = useState("");
-  // Storages loaded from the source node. In a Proxmox cluster,
-  // storage config is shared via /etc/pve/storage.cfg, so
-  // source storages = target storages.
   const [storages, setStorages] = useState<StorageOption[]>([]);
   const [loadingStorages, setLoadingStorages] = useState(false);
   const [storageError, setStorageError] = useState("");
+  const [targetResources, setTargetResources] = useState<{
+    cpuFree: number;
+    memFree: number;
+    memTotal: number;
+  } | null>(null);
   const [mode, setMode] = useState<MigrationMode>("snapshot");
   const [newVmid, setNewVmid] = useState<string>("");
   const [cleanupSource, setCleanupSource] = useState(true);
@@ -123,25 +125,61 @@ export function MigrateVmDialog({
     }
   }, [open]);
 
-  // Load storages from the selected target node.
+  // Load target node storages when target node is selected
   useEffect(() => {
-    if (!open || !targetNodeId) return;
-    setLoadingStorages(true);
-    setStorageError("");
-    setTargetStorage("");
-    api
-      .get(`/nodes/${targetNodeId}/storage`)
-      .then((res) => {
-        setStorages(toArray<StorageOption>(res.data));
-      })
-      .catch((err) => {
-        const msg = err?.response?.data?.error || err?.message || "Unbekannt";
-        console.error("[Migration] Storage load failed:", msg);
-        setStorageError(`Storage-Abfrage fehlgeschlagen: ${msg}`);
-        setStorages([]);
-      })
-      .finally(() => setLoadingStorages(false));
-  }, [open, targetNodeId]);
+    if (!targetNodeId) {
+      setStorages([]);
+      setTargetStorage("");
+      setStorageError("");
+      return;
+    }
+
+    let cancelled = false;
+    const loadStorages = async (attempt = 1) => {
+      setLoadingStorages(true);
+      setStorageError("");
+      try {
+        const res = await api.get(`/nodes/${targetNodeId}/storage`);
+        if (!cancelled) {
+          setStorages(toArray<StorageOption>(res.data));
+          setTargetStorage(""); // reset selection when node changes
+        }
+      } catch (err: unknown) {
+        if (!cancelled) {
+          if (attempt < 3) {
+            // Retry after 2 seconds
+            setTimeout(() => loadStorages(attempt + 1), 2000);
+            return;
+          }
+          const errObj = err as { response?: { data?: { error?: string } }; message?: string };
+          const msg = errObj?.response?.data?.error || errObj?.message || "Unbekannt";
+          setStorageError(`Storage-Abfrage fehlgeschlagen (${attempt} Versuche): ${msg}`);
+          setStorages([]);
+        }
+      } finally {
+        if (!cancelled) setLoadingStorages(false);
+      }
+    };
+
+    loadStorages();
+    return () => { cancelled = true; };
+  }, [targetNodeId]);
+
+  // Load target node resources when target is selected
+  useEffect(() => {
+    if (!targetNodeId) {
+      setTargetResources(null);
+      return;
+    }
+    const st = nodeStatus[targetNodeId];
+    if (st) {
+      setTargetResources({
+        cpuFree: 100 - st.cpu_usage,
+        memFree: st.memory_total - st.memory_used,
+        memTotal: st.memory_total,
+      });
+    }
+  }, [targetNodeId, nodeStatus]);
 
   // Filter storages: only those that can hold VM images/rootdir
   const vmStorages = useMemo(() => {
@@ -345,6 +383,11 @@ export function MigrateVmDialog({
               </span>
             </Label>
 
+            <div className="text-xs text-muted-foreground bg-muted/50 rounded-lg p-2 mb-2">
+              <span className="font-medium">Aktuelle VM-Disk:</span>{" "}
+              {formatBytes(vm.disk_total)} auf {sourceNodeName}
+            </div>
+
             {loadingStorages ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -356,9 +399,17 @@ export function MigrateVmDialog({
                 <p className="text-sm text-destructive">{storageError}</p>
               </div>
             ) : vmStorages.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Keine Storages gefunden.
-              </p>
+              <div className="text-sm text-muted-foreground space-y-1">
+                <p>Keine kompatiblen Storages auf dem Ziel-Node gefunden.</p>
+                <p className="text-xs">
+                  Benoetigter Content-Typ: <code className="bg-muted px-1 rounded">{vm.type === "lxc" ? "rootdir" : "images"}</code>
+                </p>
+                {storages.length > 0 && (
+                  <p className="text-xs">
+                    Verfuegbare Storages: {storages.map(s => s.storage).join(", ")}
+                  </p>
+                )}
+              </div>
             ) : (
               <div className="grid gap-2">
                 {vmStorages.map((s) => {
@@ -570,6 +621,17 @@ export function MigrateVmDialog({
                 </div>
               )}
             </div>
+
+            {targetResources && vm.memory_total > targetResources.memFree && (
+              <div className="flex items-center gap-2 text-sm text-amber-600 bg-amber-50 dark:bg-amber-950/30 rounded-lg p-3">
+                <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+                <span>
+                  Ziel-Node hat moeglicherweise nicht genug RAM (
+                  {formatBytes(targetResources.memFree)} frei, VM benoetigt{" "}
+                  {formatBytes(vm.memory_total)}).
+                </span>
+              </div>
+            )}
 
             {!hasEnoughSpace && (
               <div className="flex items-center gap-2 text-sm text-amber-600 bg-amber-50 dark:bg-amber-950/30 rounded-lg p-3">

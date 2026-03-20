@@ -342,6 +342,7 @@ func SetupRouter(e *echo.Echo, cfg *config.Config, jwtSvc *auth.JWTService, h Ha
 		migrations := protected.Group("/migrations")
 		migrations.GET("", h.Migration.List)
 		migrations.GET("/:id", h.Migration.Get)
+		migrations.GET("/:id/logs", h.Migration.GetLogs)
 
 		migrationsAdmin := migrations.Group("")
 		migrationsAdmin.Use(middleware.RequireRole(model.RoleAdmin, model.RoleOperator))
