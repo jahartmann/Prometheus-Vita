@@ -183,8 +183,8 @@ export function ScheduleForm({ onSubmit, isSubmitting }: ScheduleFormProps) {
           min={1}
           max={90}
           step={1}
-          value={[retentionDays]}
-          onValueChange={(v) => setRetentionDays(v[0])}
+          value={retentionDays}
+          onValueChange={setRetentionDays}
         />
         <div className="flex justify-between text-xs text-muted-foreground">
           <span>1 Backup</span>
