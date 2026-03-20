@@ -44,3 +44,4 @@ docker-compose.override.yml
 # Coverage
 coverage/
 *.coverprofile
+tsconfig.tsbuildinfo
