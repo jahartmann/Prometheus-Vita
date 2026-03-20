@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/antigravity/prometheus/internal/model"
 	"github.com/antigravity/prometheus/internal/service/auth"
@@ -64,6 +65,13 @@ func NewLogStreamHandler(
 
 func (h *LogStreamHandler) HandleWS(c echo.Context) error {
 	token := c.QueryParam("token")
+	if token == "" {
+		// Try Authorization header as fallback
+		authHeader := c.Request().Header.Get("Authorization")
+		if strings.HasPrefix(authHeader, "Bearer ") {
+			token = strings.TrimPrefix(authHeader, "Bearer ")
+		}
+	}
 	if token == "" {
 		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "token required"})
 	}

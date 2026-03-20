@@ -98,16 +98,26 @@ func (s *Service) ListTokens(ctx context.Context, userID uuid.UUID) ([]model.API
 	return s.tokenRepo.ListByUser(ctx, userID)
 }
 
-func (s *Service) RevokeToken(ctx context.Context, tokenID uuid.UUID) error {
+func (s *Service) RevokeToken(ctx context.Context, tokenID uuid.UUID, userID uuid.UUID) error {
 	token, err := s.tokenRepo.GetByID(ctx, tokenID)
 	if err != nil {
 		return err
+	}
+	if token.UserID != userID {
+		return repository.ErrNotFound // don't reveal existence
 	}
 	token.IsActive = false
 	return s.tokenRepo.Update(ctx, token)
 }
 
-func (s *Service) DeleteToken(ctx context.Context, tokenID uuid.UUID) error {
+func (s *Service) DeleteToken(ctx context.Context, tokenID uuid.UUID, userID uuid.UUID) error {
+	token, err := s.tokenRepo.GetByID(ctx, tokenID)
+	if err != nil {
+		return err
+	}
+	if token.UserID != userID {
+		return repository.ErrNotFound // don't reveal existence
+	}
 	return s.tokenRepo.Delete(ctx, tokenID)
 }
 

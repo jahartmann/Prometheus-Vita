@@ -186,7 +186,7 @@ func (s *Service) SeedAdmin(ctx context.Context, username, password string) erro
 		PasswordHash:       string(hash),
 		Role:               model.RoleAdmin,
 		IsActive:           true,
-		MustChangePassword: password == "changeme",
+		MustChangePassword: true,
 	}
 
 	if err := s.userRepo.Create(ctx, user); err != nil {

@@ -171,11 +171,14 @@ func Load() (*Config, error) {
 }
 
 func (c *Config) validate() error {
-	if c.JWT.Secret == "" {
-		return fmt.Errorf("JWT_SECRET is required")
+	if c.JWT.Secret == "" || c.JWT.Secret == "changeme_jwt_secret_at_least_32_characters_long" {
+		return fmt.Errorf("JWT_SECRET must be set to a secure value (not the default)")
 	}
-	if c.Encryption.Key == "" {
-		return fmt.Errorf("ENCRYPTION_KEY is required")
+	if len(c.JWT.Secret) < 32 {
+		return fmt.Errorf("JWT_SECRET must be at least 32 characters")
+	}
+	if c.Encryption.Key == "" || c.Encryption.Key == "changeme_encryption_key_exactly_64_hex_characters_long_here" {
+		return fmt.Errorf("ENCRYPTION_KEY must be set to a secure value (not the default)")
 	}
 	if len(c.Encryption.Key) != 64 {
 		return fmt.Errorf("ENCRYPTION_KEY must be 64 hex characters (32 bytes)")

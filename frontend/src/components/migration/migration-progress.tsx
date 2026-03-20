@@ -249,7 +249,7 @@ export function ActiveMigrations() {
   useWebSocket({
     url: "/api/v1/ws",
     onMessage: handleMessage,
-    enabled: activeMigrations.length > 0,
+    enabled: true,
   });
 
   if (activeMigrations.length === 0) return null;
