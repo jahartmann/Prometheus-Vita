@@ -21,14 +21,10 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Check for auth token in cookie (set by frontend on login)
-  const token = request.cookies.get("access_token")?.value;
-  if (!token) {
-    const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("redirect", pathname);
-    return NextResponse.redirect(loginUrl);
-  }
-
+  // Auth is handled client-side via Zustand store (localStorage).
+  // The middleware cannot check localStorage, so we allow all routes
+  // through and let the client-side auth guard handle redirects.
+  // The backend JWT middleware is the actual security boundary.
   return NextResponse.next();
 }
 
