@@ -65,8 +65,6 @@ const topNavItems: NavItem[] = [
 const mainNavItems: NavItem[] = [
   { label: "Dashboard", href: "/", icon: LayoutDashboard },
   { label: "Monitoring", href: "/monitoring", icon: BarChart3, matchPrefix: "/monitoring" },
-  { label: "Logs", href: "/logs", icon: FileText, matchPrefix: "/logs" },
-  { label: "Netzwerk", href: "/network", icon: Network, matchPrefix: "/network" },
 ];
 
 const sections: NavSection[] = [
@@ -110,7 +108,6 @@ const nodeSubItems = [
   { label: "Storage", path: "storage", icon: HardDrive },
   { label: "Backups", path: "backups", icon: FolderArchive },
   { label: "ISOs & Vorlagen", path: "iso-templates", icon: Disc },
-  { label: "Logs", path: "logs", icon: FileText },
 ];
 
 export function Sidebar() {
