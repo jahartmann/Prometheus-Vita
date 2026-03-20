@@ -9,9 +9,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/antigravity/prometheus/internal/model"
 )
+
+var webhookHTTPClient = &http.Client{Timeout: 15 * time.Second}
 
 type webhookConfig struct {
 	URL     string            `json:"url"`
@@ -70,7 +73,7 @@ func (s *WebhookSender) Send(ctx context.Context, subject, body string) error {
 		req.Header.Set("X-Signature", signature)
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := webhookHTTPClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("send webhook: %w", err)
 	}

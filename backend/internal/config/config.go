@@ -123,7 +123,7 @@ func Load() (*Config, error) {
 		},
 		JWT: JWTConfig{
 			Secret:             getEnv("JWT_SECRET", ""),
-			AccessTokenExpiry:  getEnvInt("JWT_ACCESS_EXPIRY_MINUTES", 1440), // 24 hours
+			AccessTokenExpiry:  getEnvInt("JWT_ACCESS_EXPIRY_MINUTES", 15), // 15 minutes
 			RefreshTokenExpiry: getEnvInt("JWT_REFRESH_EXPIRY_HOURS", 168),   // 7 days
 		},
 		Encryption: EncryptionConfig{

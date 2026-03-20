@@ -16,7 +16,7 @@ func MustChangePassword(userRepo repository.UserRepository) echo.MiddlewareFunc 
 		return func(c echo.Context) error {
 			// Allow password-change and auth endpoints through
 			path := c.Request().URL.Path
-			if strings.HasSuffix(path, "/change-password") ||
+			if strings.HasSuffix(path, "/password") ||
 				strings.HasPrefix(path, "/api/v1/auth/") {
 				return next(c)
 			}

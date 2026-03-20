@@ -155,7 +155,8 @@ func (c *Client) CopyTo(ctx context.Context, data []byte, remotePath string) err
 
 	done := make(chan error, 1)
 	go func() {
-		done <- session.Run(fmt.Sprintf("cat > %q", remotePath))
+		tmpPath := remotePath + ".prometheus-tmp"
+		done <- session.Run(fmt.Sprintf("cat > %q && mv %q %q", tmpPath, tmpPath, remotePath))
 	}()
 
 	select {

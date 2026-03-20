@@ -26,12 +26,12 @@ func NewClient(hostname string, port int, tokenID, tokenSecret string) *Client {
 		tokenID:    tokenID,
 		tokenSecret: tokenSecret,
 		httpClient: &http.Client{
-			Timeout: 15 * time.Second,
+			Timeout: 120 * time.Second,
 			Transport: &http.Transport{
 				TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
-				DialContext:           (&net.Dialer{Timeout: 5 * time.Second}).DialContext,
-				TLSHandshakeTimeout:   5 * time.Second,
-				ResponseHeaderTimeout: 10 * time.Second,
+				DialContext:           (&net.Dialer{Timeout: 15 * time.Second}).DialContext,
+				TLSHandshakeTimeout:   15 * time.Second,
+				ResponseHeaderTimeout: 60 * time.Second,
 			},
 		},
 	}
@@ -887,14 +887,19 @@ func (c *Client) GetTermProxy(ctx context.Context, node string, vmid int, vmType
 }
 
 // RestoreVM restores a VM from a vzdump archive. Returns the task UPID.
-func (c *Client) RestoreVM(ctx context.Context, node string, archive string, storage string, vmid int) (string, error) {
+// vmType must be "qemu" or "lxc" to select the correct API endpoint.
+func (c *Client) RestoreVM(ctx context.Context, node string, archive string, storage string, vmid int, vmType string) (string, error) {
 	params := url.Values{}
 	params.Set("archive", archive)
 	params.Set("storage", storage)
 	params.Set("vmid", fmt.Sprintf("%d", vmid))
 	params.Set("force", "1")
 
-	data, err := c.doRequestWithBody(ctx, http.MethodPost, fmt.Sprintf("/nodes/%s/qemu", node), params)
+	endpoint := "qemu"
+	if vmType == "lxc" {
+		endpoint = "lxc"
+	}
+	data, err := c.doRequestWithBody(ctx, http.MethodPost, fmt.Sprintf("/nodes/%s/%s", node, endpoint), params)
 	if err != nil {
 		return "", fmt.Errorf("restore vm %d: %w", vmid, err)
 	}

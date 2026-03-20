@@ -60,6 +60,10 @@ func (h *ApprovalHandler) Approve(c echo.Context) error {
 		return apiPkg.InternalError(c, "Fehler beim Abrufen der Genehmigung")
 	}
 
+	if approval.UserID != userID {
+		return apiPkg.NotFound(c, "Genehmigung nicht gefunden")
+	}
+
 	// Atomically resolve as approved (WHERE status='pending' prevents double-approve)
 	if err := h.approvalRepo.Resolve(c.Request().Context(), id, model.ApprovalApproved, userID); err != nil {
 		if errors.Is(err, repository.ErrAlreadyResolved) {
@@ -99,12 +103,16 @@ func (h *ApprovalHandler) Reject(c echo.Context) error {
 		return apiPkg.BadRequest(c, "Ungueltige Approval-ID")
 	}
 
-	_, err = h.approvalRepo.GetByID(c.Request().Context(), id)
+	approval, err := h.approvalRepo.GetByID(c.Request().Context(), id)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
 			return apiPkg.NotFound(c, "Genehmigung nicht gefunden")
 		}
 		return apiPkg.InternalError(c, "Fehler beim Abrufen der Genehmigung")
+	}
+
+	if approval.UserID != userID {
+		return apiPkg.NotFound(c, "Genehmigung nicht gefunden")
 	}
 
 	// Atomically resolve as rejected (WHERE status='pending' prevents double-reject)

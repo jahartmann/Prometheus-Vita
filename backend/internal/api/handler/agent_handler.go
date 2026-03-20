@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"net"
 	"net/url"
 
 	apiPkg "github.com/antigravity/prometheus/internal/api/response"
@@ -92,10 +93,19 @@ func (h *AgentConfigHandler) GetModels(c echo.Context) error {
 		if parseErr != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
 			return apiPkg.BadRequest(c, "Ungueltige URL")
 		}
-		// Block requests to internal metadata endpoints and private networks
+		// Block requests to internal/private addresses via DNS resolution
 		host := parsed.Hostname()
-		if host == "169.254.169.254" || host == "localhost" || host == "127.0.0.1" || host == "::1" || host == "0.0.0.0" {
-			return apiPkg.BadRequest(c, "Zugriff auf diese Adresse ist nicht erlaubt")
+		addrs, err := net.LookupHost(host)
+		if err != nil {
+			return apiPkg.BadRequest(c, "Host nicht auflösbar")
+		}
+		for _, addr := range addrs {
+			ip := net.ParseIP(addr)
+			if ip == nil || ip.IsLoopback() || ip.IsPrivate() ||
+				ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
+				ip.IsUnspecified() || ip.IsMulticast() {
+				return apiPkg.BadRequest(c, "Zugriff auf interne Adressen ist nicht erlaubt")
+			}
 		}
 		tempProvider := llm.NewOllamaProvider(testURL)
 		models, err := tempProvider.DiscoverModels(c.Request().Context())

@@ -159,15 +159,12 @@ func (s *Service) CancelMigration(ctx context.Context, id uuid.UUID) error {
 	cancel, ok := s.cancels[id]
 	s.mu.Unlock()
 
-	if ok {
-		cancel()
+	if !ok {
+		return fmt.Errorf("no cancel function found for migration %s", id)
 	}
 
-	m.Status = model.MigrationStatusCancelled
-	m.ErrorMessage = "cancelled by user"
-	now := time.Now()
-	m.CompletedAt = &now
-	return s.migrationRepo.Update(ctx, m)
+	cancel()
+	return nil
 }
 
 func (s *Service) GetMigration(ctx context.Context, id uuid.UUID) (*model.VMMigration, error) {
@@ -215,16 +212,37 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 	// Error handler: update status + restart VM if needed
 	handleError := func(phase string, err error) {
 		slog.Error("migration failed", slog.String("phase", phase), slog.Any("error", err))
-		m.Status = model.MigrationStatusFailed
-		m.ErrorMessage = fmt.Sprintf("%s: %v", phase, err)
+		if ctx.Err() == context.Canceled {
+			m.Status = model.MigrationStatusCancelled
+			m.ErrorMessage = "Migration vom Benutzer abgebrochen"
+		} else {
+			m.Status = model.MigrationStatusFailed
+			m.ErrorMessage = fmt.Sprintf("%s: %v", phase, err)
+		}
 		completedAt := time.Now()
 		m.CompletedAt = &completedAt
 		_ = s.migrationRepo.Update(context.Background(), m)
 		s.broadcastProgress(m, nil)
 
-		// If we stopped the VM and migration failed, restart it
-		if vmWasStopped && m.Mode == model.MigrationModeStop {
-			s.tryRestartSourceVM(context.Background(), m)
+		// If we stopped/suspended the VM and migration failed, restore it
+		if vmWasStopped {
+			switch m.Mode {
+			case model.MigrationModeStop:
+				s.tryRestartSourceVM(context.Background(), m)
+			case model.MigrationModeSuspend:
+				// Resume the suspended VM
+				srcNode, nodeErr := s.nodeRepo.GetByID(context.Background(), m.SourceNodeID)
+				if nodeErr == nil {
+					srcClient, clientErr := s.clientFactory.CreateClient(srcNode)
+					if clientErr == nil {
+						pveNode, pveErr := s.resolvePVENodeName(context.Background(), srcClient, srcNode)
+						if pveErr == nil {
+							_, _ = srcClient.ResumeVM(context.Background(), pveNode, m.VMID)
+							slog.Info("migration: resumed suspended VM after failure", slog.Int("vmid", m.VMID))
+						}
+					}
+				}
+			}
 		}
 	}
 
@@ -607,7 +625,27 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 			// Kill scp on cancel
 			_, _ = srcSSHClient.RunCommand(context.Background(), fmt.Sprintf("kill %s 2>/dev/null", scpPID))
 			_, _ = tgtSSHClient.RunCommand(context.Background(), fmt.Sprintf("rm -f %q", targetVzdumpPath))
-			handleError("transferring", ctx.Err())
+			if ctx.Err() == context.Canceled {
+				m.Status = model.MigrationStatusCancelled
+				m.ErrorMessage = "Migration vom Benutzer abgebrochen"
+			} else {
+				m.Status = model.MigrationStatusFailed
+				m.ErrorMessage = fmt.Sprintf("context error: %v", ctx.Err())
+			}
+			completedAt := time.Now()
+			m.CompletedAt = &completedAt
+			_ = s.migrationRepo.Update(context.Background(), m)
+			s.broadcastProgress(m, nil)
+			// Restore VM if it was stopped/suspended
+			if vmWasStopped {
+				switch m.Mode {
+				case model.MigrationModeStop:
+					s.tryRestartSourceVM(context.Background(), m)
+				case model.MigrationModeSuspend:
+					_, _ = srcClient.ResumeVM(context.Background(), srcPVENode, m.VMID)
+					slog.Info("migration: resumed suspended VM after cancellation", slog.Int("vmid", m.VMID))
+				}
+			}
 			return
 		case <-pollTicker.C:
 			// Check if scp is still running (tolerate SSH errors during polling)
@@ -713,23 +751,25 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 		s.broadcastLog(m.ID, fmt.Sprintf("Entregistriere VM %d von Source-Node (Cluster-VMID-Konflikt)...", m.VMID))
 
 		// Save the config for rollback
-		configResult, _ := srcSSHClient.RunCommand(ctx, fmt.Sprintf("cat /etc/pve/nodes/%s/qemu-server/%d.conf 2>/dev/null", srcPVENode, m.VMID))
+		cfgDir := configDir(m.VMType)
+		configResult, _ := srcSSHClient.RunCommand(ctx, fmt.Sprintf("cat /etc/pve/nodes/%s/%s/%d.conf 2>/dev/null", srcPVENode, cfgDir, m.VMID))
 		if configResult != nil && configResult.ExitCode == 0 {
 			sourceConfigBackup = configResult.Stdout
 		}
 
 		// Remove VM registration from source (config only, not disks)
-		_, _ = srcSSHClient.RunCommand(ctx, fmt.Sprintf("mv /etc/pve/nodes/%s/qemu-server/%d.conf /etc/pve/nodes/%s/qemu-server/%d.conf.mig-backup 2>/dev/null",
-			srcPVENode, m.VMID, srcPVENode, m.VMID))
+		_, _ = srcSSHClient.RunCommand(ctx, fmt.Sprintf("mv /etc/pve/nodes/%s/%s/%d.conf /etc/pve/nodes/%s/%s/%d.conf.mig-backup 2>/dev/null",
+			srcPVENode, cfgDir, m.VMID, srcPVENode, cfgDir, m.VMID))
 		time.Sleep(2 * time.Second)
 		s.broadcastLog(m.ID, fmt.Sprintf("✓ VM %d von Source entregistriert (Config gesichert)", m.VMID))
 	}
 
 	// Also check for leftover config on target
-	checkResult, _ := tgtSSHClient.RunCommand(ctx, fmt.Sprintf("test -f /etc/pve/nodes/%s/qemu-server/%d.conf && echo exists || echo no", tgtPVENode, restoreVMID))
+	tgtCfgDir := configDir(m.VMType)
+	checkResult, _ := tgtSSHClient.RunCommand(ctx, fmt.Sprintf("test -f /etc/pve/nodes/%s/%s/%d.conf && echo exists || echo no", tgtPVENode, tgtCfgDir, restoreVMID))
 	if checkResult != nil && strings.Contains(checkResult.Stdout, "exists") {
 		s.broadcastLog(m.ID, fmt.Sprintf("⚠ Alte VM %d Config auf Target gefunden - entferne...", restoreVMID))
-		_, _ = tgtSSHClient.RunCommand(ctx, fmt.Sprintf("rm -f /etc/pve/nodes/%s/qemu-server/%d.conf", tgtPVENode, restoreVMID))
+		_, _ = tgtSSHClient.RunCommand(ctx, fmt.Sprintf("rm -f /etc/pve/nodes/%s/%s/%d.conf", tgtPVENode, tgtCfgDir, restoreVMID))
 		time.Sleep(1 * time.Second)
 	}
 
@@ -743,10 +783,10 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 	s.broadcastLog(m.ID, fmt.Sprintf("Starte Restore auf %s (VMID: %d, Storage: %s, Archive: %s)...",
 		targetNode.Name, restoreVMID, m.TargetStorage, restoreArchive))
 
-	restoreUPID, err := tgtClient.RestoreVM(ctx, tgtPVENode, restoreArchive, m.TargetStorage, restoreVMID)
+	restoreUPID, err := tgtClient.RestoreVM(ctx, tgtPVENode, restoreArchive, m.TargetStorage, restoreVMID, m.VMType)
 	if err != nil {
 		// Restore source config on failure
-		s.rollbackSourceConfig(ctx, srcSSHClient, srcPVENode, m.VMID, sourceConfigBackup)
+		s.rollbackSourceConfig(ctx, srcSSHClient, srcPVENode, m.VMID, m.VMType, sourceConfigBackup)
 		_, _ = tgtSSHClient.RunCommand(ctx, fmt.Sprintf("rm -f %q", targetVzdumpPath))
 		handleError("restoring", fmt.Errorf("restore konnte nicht gestartet werden: %w", err))
 		return
@@ -758,14 +798,14 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 	if err := s.pollTaskWithProgress(ctx, tgtClient, tgtPVENode, restoreUPID, m, 81, 94); err != nil {
 		taskLog := s.getTaskLogForError(ctx, tgtClient, tgtPVENode, restoreUPID)
 		// Restore source config on failure
-		s.rollbackSourceConfig(ctx, srcSSHClient, srcPVENode, m.VMID, sourceConfigBackup)
+		s.rollbackSourceConfig(ctx, srcSSHClient, srcPVENode, m.VMID, m.VMType, sourceConfigBackup)
 		_, _ = tgtSSHClient.RunCommand(ctx, fmt.Sprintf("rm -f %q", targetVzdumpPath))
 		handleError("restoring", fmt.Errorf("restore fehlgeschlagen: %w\n\nTask-Log:\n%s", err, taskLog))
 		return
 	}
 
 	// Restore succeeded - delete the backup config on source
-	_, _ = srcSSHClient.RunCommand(ctx, fmt.Sprintf("rm -f /etc/pve/nodes/%s/qemu-server/%d.conf.mig-backup", srcPVENode, m.VMID))
+	_, _ = srcSSHClient.RunCommand(ctx, fmt.Sprintf("rm -f /etc/pve/nodes/%s/%s/%d.conf.mig-backup", srcPVENode, configDir(m.VMType), m.VMID))
 	s.broadcastLog(m.ID, "✓ VM erfolgreich wiederhergestellt")
 	s.updatePhase(ctx, m, model.MigrationStatusRestoring, "Wiederherstellung abgeschlossen", 95)
 
@@ -1156,23 +1196,33 @@ func (s *Service) cachePVENodeName(ctx context.Context, node *model.Node, pveNod
 	}
 }
 
+// configDir returns the Proxmox config directory name for the given VM type.
+// For "qemu" it returns "qemu-server", for "lxc" it returns "lxc".
+func configDir(vmType string) string {
+	if vmType == "lxc" {
+		return "lxc"
+	}
+	return "qemu-server"
+}
+
 // rollbackSourceConfig restores the VM config on the source node if restore on target failed.
-func (s *Service) rollbackSourceConfig(ctx context.Context, srcSSHClient *ssh.Client, srcPVENode string, vmid int, configBackup string) {
+func (s *Service) rollbackSourceConfig(ctx context.Context, srcSSHClient *ssh.Client, srcPVENode string, vmid int, vmType string, configBackup string) {
+	cfgDir := configDir(vmType)
 	if configBackup == "" {
 		// Try to restore from .mig-backup file
 		_, _ = srcSSHClient.RunCommand(ctx, fmt.Sprintf(
-			"mv /etc/pve/nodes/%s/qemu-server/%d.conf.mig-backup /etc/pve/nodes/%s/qemu-server/%d.conf 2>/dev/null",
-			srcPVENode, vmid, srcPVENode, vmid))
+			"mv /etc/pve/nodes/%s/%s/%d.conf.mig-backup /etc/pve/nodes/%s/%s/%d.conf 2>/dev/null",
+			srcPVENode, cfgDir, vmid, srcPVENode, cfgDir, vmid))
 		return
 	}
 	// Write back the saved config
 	_, _ = srcSSHClient.RunCommand(ctx, fmt.Sprintf(
-		"cat > /etc/pve/nodes/%s/qemu-server/%d.conf << 'CONFIGEOF'\n%s\nCONFIGEOF",
-		srcPVENode, vmid, configBackup))
+		"cat > /etc/pve/nodes/%s/%s/%d.conf << 'CONFIGEOF'\n%s\nCONFIGEOF",
+		srcPVENode, cfgDir, vmid, configBackup))
 	// Remove backup
 	_, _ = srcSSHClient.RunCommand(ctx, fmt.Sprintf(
-		"rm -f /etc/pve/nodes/%s/qemu-server/%d.conf.mig-backup",
-		srcPVENode, vmid))
+		"rm -f /etc/pve/nodes/%s/%s/%d.conf.mig-backup",
+		srcPVENode, cfgDir, vmid))
 	slog.Info("migration: rolled back source VM config", slog.Int("vmid", vmid))
 }
 

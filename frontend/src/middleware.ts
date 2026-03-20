@@ -12,10 +12,11 @@ export function middleware(request: NextRequest) {
   }
 
   // Allow static assets, API proxy, and Next.js internals
+  const STATIC_EXT = /\.(ico|png|jpg|jpeg|gif|svg|css|js|woff2?|ttf|eot|map|webp|avif)$/;
   if (
     pathname.startsWith("/api") ||
     pathname.startsWith("/_next") ||
-    pathname.includes(".")
+    STATIC_EXT.test(pathname)
   ) {
     return NextResponse.next();
   }
