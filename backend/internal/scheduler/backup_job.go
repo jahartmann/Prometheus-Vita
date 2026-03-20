@@ -81,7 +81,11 @@ func (j *BackupScheduleJob) processSchedule(ctx context.Context, schedule model.
 	// Calculate next run time from the scheduled time (not time.Now()) to
 	// prevent schedule drift when backups take a long time.
 	now := time.Now()
-	nextRun, err := backup.NextRun(schedule.CronExpression, schedule.NextRunAt)
+	baseTime := now
+	if schedule.NextRunAt != nil {
+		baseTime = *schedule.NextRunAt
+	}
+	nextRun, err := backup.NextRun(schedule.CronExpression, baseTime)
 	if err != nil {
 		slog.Error("failed to calculate next run time",
 			slog.String("schedule_id", schedule.ID.String()),
