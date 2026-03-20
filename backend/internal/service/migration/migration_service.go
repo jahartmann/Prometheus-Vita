@@ -349,7 +349,7 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 	if vmDiskUsed <= 0 {
 		vmDiskUsed = vmInfo.MaxDisk
 	}
-	estimatedBackupSize := int64(float64(vmDiskUsed) * 0.6) // 60% of used = safety margin with zstd
+	estimatedBackupSize := int64(float64(vmDiskUsed) * 0.85) // 85% of used — conservative estimate with zstd
 	s.broadcastLog(m.ID, fmt.Sprintf("✓ VM %d (%s) gefunden - Disk: %s belegt / %s alloziert, Status: %s",
 		vmInfo.VMID, vmInfo.Name, formatBytesLog(vmDiskUsed), formatBytesLog(vmInfo.MaxDisk), vmInfo.Status))
 	s.broadcastLog(m.ID, fmt.Sprintf("  Geschätzte Backup-Größe (zstd): ~%s", formatBytesLog(estimatedBackupSize)))
@@ -407,8 +407,11 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 		var freeSpace int64
 		fmt.Sscanf(strings.TrimSpace(result.Stdout), "%d", &freeSpace)
 		if freeSpace > 0 && estimatedBackupSize > 0 && freeSpace < estimatedBackupSize {
-			s.broadcastLog(m.ID, fmt.Sprintf("⚠ Wenig Speicherplatz: geschätzt ~%s benötigt, %s verfügbar. Versuche trotzdem...",
-				formatBytesLog(estimatedBackupSize), formatBytesLog(freeSpace)))
+			handleError("preflight", fmt.Errorf("nicht genuegend Speicherplatz auf Source-Node fuer Vzdump-Backup: "+
+				"geschaetzt ~%s benoetigt, nur %s verfuegbar auf '%s'. "+
+				"Bitte Speicherplatz freigeben oder einen anderen Vzdump-Storage konfigurieren",
+				formatBytesLog(estimatedBackupSize), formatBytesLog(freeSpace), vzdumpStorage))
+			return
 		} else if freeSpace > 0 {
 			s.broadcastLog(m.ID, fmt.Sprintf("✓ Source-Speicher für Backup: %s frei (benötigt ~%s)",
 				formatBytesLog(freeSpace), formatBytesLog(estimatedBackupSize)))
