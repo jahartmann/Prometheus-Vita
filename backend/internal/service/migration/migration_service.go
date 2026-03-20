@@ -26,6 +26,7 @@ type Service struct {
 	sshPool       *ssh.Pool
 	clientFactory proxmox.ClientFactory
 	wsHub         *monitor.WSHub
+	logRepo       repository.MigrationLogRepository
 
 	mu        sync.Mutex
 	cancels   map[uuid.UUID]context.CancelFunc
@@ -38,6 +39,7 @@ func NewService(
 	sshPool *ssh.Pool,
 	clientFactory proxmox.ClientFactory,
 	wsHub *monitor.WSHub,
+	logRepo repository.MigrationLogRepository,
 ) *Service {
 	return &Service{
 		migrationRepo: migrationRepo,
@@ -46,6 +48,7 @@ func NewService(
 		sshPool:       sshPool,
 		clientFactory: clientFactory,
 		wsHub:         wsHub,
+		logRepo:       logRepo,
 		cancels:       make(map[uuid.UUID]context.CancelFunc),
 	}
 }
@@ -871,6 +874,26 @@ func (s *Service) broadcastProgress(m *model.VMMigration, logEntries []string) {
 // broadcastLog sends a single log line via WebSocket.
 func (s *Service) broadcastLog(migrationID uuid.UUID, line string) {
 	slog.Info("migration log", slog.String("migration_id", migrationID.String()), slog.String("line", line))
+
+	// Determine log level from content
+	level := "info"
+	if strings.Contains(line, "\u2713") {
+		level = "success"
+	} else if strings.Contains(line, "\u26a0") {
+		level = "warn"
+	} else if strings.Contains(line, "ERROR") || strings.Contains(line, "fehlgeschlagen") {
+		level = "error"
+	} else if strings.HasPrefix(line, "[PVE]") {
+		level = "pve"
+	}
+
+	// Persist to DB (fire-and-forget, don't block migration)
+	if s.logRepo != nil {
+		go func() {
+			_ = s.logRepo.Append(context.Background(), migrationID, line, level, "")
+		}()
+	}
+
 	s.wsHub.BroadcastMessage(monitor.WSMessage{
 		Type: "migration_log",
 		Data: map[string]interface{}{
@@ -879,6 +902,14 @@ func (s *Service) broadcastLog(migrationID uuid.UUID, line string) {
 			"timestamp":    time.Now().Format("15:04:05"),
 		},
 	})
+}
+
+// GetLogs returns persisted migration logs for a given migration.
+func (s *Service) GetLogs(ctx context.Context, migrationID uuid.UUID) ([]repository.MigrationLog, error) {
+	if s.logRepo == nil {
+		return nil, nil
+	}
+	return s.logRepo.ListByMigration(ctx, migrationID)
 }
 
 func (s *Service) waitForTask(ctx context.Context, client *proxmox.Client, node string, upid string, timeout time.Duration) error {

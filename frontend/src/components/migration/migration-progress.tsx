@@ -68,7 +68,7 @@ export function MigrationProgress({
   migration,
   totalSize,
 }: MigrationProgressProps) {
-  const { cancelMigration, retryMigration, migrationLogs } = useMigrationStore();
+  const { cancelMigration, retryMigration, migrationLogs, loadMigrationLogs } = useMigrationStore();
   const [showLogs, setShowLogs] = useState(true);
   const logRef = useRef<HTMLDivElement>(null);
 
@@ -83,6 +83,16 @@ export function MigrationProgress({
     : 0;
 
   const logs = migrationLogs[migration.id] || [];
+
+  // Auto-load persisted logs for terminal migrations that have no in-memory logs
+  useEffect(() => {
+    if (
+      ["completed", "failed", "cancelled"].includes(migration.status) &&
+      logs.length === 0
+    ) {
+      loadMigrationLogs(migration.id);
+    }
+  }, [migration.id, migration.status, logs.length, loadMigrationLogs]);
 
   // Auto-scroll log to bottom
   useEffect(() => {
@@ -188,12 +198,13 @@ export function MigrationProgress({
         </div>
       )}
 
+      {migration.error_message && (
+        <div className="text-sm text-destructive bg-destructive/10 rounded p-2 mt-2">
+          <span className="font-medium">Fehler:</span> {migration.error_message}
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
-        {migration.error_message && (
-          <p className="text-xs text-destructive max-w-[70%] whitespace-pre-wrap">
-            {migration.error_message}
-          </p>
-        )}
 
         <div className="flex gap-2 ml-auto">
           {migration.status === "failed" && (

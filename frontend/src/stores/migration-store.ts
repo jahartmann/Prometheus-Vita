@@ -34,6 +34,7 @@ interface MigrationState {
   retryMigration: (migration: VMMigration) => Promise<VMMigration>;
   updateMigrationProgress: (migration: VMMigration) => void;
   addMigrationLog: (migrationId: string, line: string, timestamp: string) => void;
+  loadMigrationLogs: (migrationId: string) => Promise<void>;
 }
 
 export const useMigrationStore = create<MigrationState>()((set, get) => ({
@@ -174,5 +175,23 @@ export const useMigrationStore = create<MigrationState>()((set, get) => ({
         migrationLogs: { ...state.migrationLogs, [migrationId]: updated },
       };
     });
+  },
+
+  loadMigrationLogs: async (migrationId: string) => {
+    try {
+      const res = await migrationApi.getLogs(migrationId);
+      const logs = toArray<{ line: string; created_at: string; level: string }>(res.data);
+      set((state) => ({
+        migrationLogs: {
+          ...state.migrationLogs,
+          [migrationId]: logs.map(l => ({
+            line: l.line,
+            timestamp: new Date(l.created_at).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+          })),
+        },
+      }));
+    } catch {
+      // silently fail - logs are optional
+    }
   },
 }));
