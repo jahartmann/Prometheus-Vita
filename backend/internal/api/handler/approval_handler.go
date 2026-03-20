@@ -60,12 +60,15 @@ func (h *ApprovalHandler) Approve(c echo.Context) error {
 		return apiPkg.InternalError(c, "Fehler beim Abrufen der Genehmigung")
 	}
 
-	if approval.Status != model.ApprovalPending {
-		return apiPkg.BadRequest(c, "Genehmigung wurde bereits bearbeitet")
+	if approval.UserID != userID {
+		return apiPkg.NotFound(c, "Genehmigung nicht gefunden")
 	}
 
-	// Resolve as approved
+	// Atomically resolve as approved (WHERE status='pending' prevents double-approve)
 	if err := h.approvalRepo.Resolve(c.Request().Context(), id, model.ApprovalApproved, userID); err != nil {
+		if errors.Is(err, repository.ErrAlreadyResolved) {
+			return apiPkg.BadRequest(c, "Genehmigung wurde bereits bearbeitet")
+		}
 		return apiPkg.InternalError(c, "Fehler beim Genehmigen")
 	}
 
@@ -108,11 +111,15 @@ func (h *ApprovalHandler) Reject(c echo.Context) error {
 		return apiPkg.InternalError(c, "Fehler beim Abrufen der Genehmigung")
 	}
 
-	if approval.Status != model.ApprovalPending {
-		return apiPkg.BadRequest(c, "Genehmigung wurde bereits bearbeitet")
+	if approval.UserID != userID {
+		return apiPkg.NotFound(c, "Genehmigung nicht gefunden")
 	}
 
+	// Atomically resolve as rejected (WHERE status='pending' prevents double-reject)
 	if err := h.approvalRepo.Resolve(c.Request().Context(), id, model.ApprovalRejected, userID); err != nil {
+		if errors.Is(err, repository.ErrAlreadyResolved) {
+			return apiPkg.BadRequest(c, "Genehmigung wurde bereits bearbeitet")
+		}
 		return apiPkg.InternalError(c, "Fehler beim Ablehnen")
 	}
 

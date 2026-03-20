@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -48,21 +49,28 @@ func (s *Scheduler) Stop() {
 
 func (s *Scheduler) runJob(ctx context.Context, job Job) {
 	defer s.wg.Done()
+	var running atomic.Bool
 
 	slog.Info("starting job", slog.String("job", job.Name()), slog.Duration("interval", job.Interval()))
 
-	// Run immediately on start
-	s.safeRun(ctx, job)
+	run := func() {
+		if !running.CompareAndSwap(false, true) {
+			slog.Debug("job still running, skipping", slog.String("job", job.Name()))
+			return
+		}
+		defer running.Store(false)
+		s.safeRun(ctx, job)
+	}
 
+	run() // immediate first run
 	ticker := time.NewTicker(job.Interval())
 	defer ticker.Stop()
-
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			s.safeRun(ctx, job)
+			run()
 		}
 	}
 }

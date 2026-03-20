@@ -6,9 +6,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/antigravity/prometheus/internal/model"
 )
+
+var telegramHTTPClient = &http.Client{Timeout: 15 * time.Second}
 
 type telegramConfig struct {
 	BotToken string `json:"bot_token"`
@@ -55,7 +58,7 @@ func (s *TelegramSender) Send(ctx context.Context, subject, body string) error {
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := telegramHTTPClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("send telegram message: %w", err)
 	}

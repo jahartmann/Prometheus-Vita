@@ -152,8 +152,12 @@ export function RestoreDialog({ backupId, open, onOpenChange }: RestoreDialogPro
   const [result, setResult] = useState<Record<string, unknown> | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const [isLoadingFiles, setIsLoadingFiles] = useState(false);
+
   useEffect(() => {
     if (open && backupId) {
+      setIsLoadingFiles(true);
+      setError(null);
       backupApi.getBackupFiles(backupId).then((res) => {
         const fileList = toArray<BackupFile>(res.data);
         setFiles(fileList);
@@ -164,10 +168,14 @@ export function RestoreDialog({ backupId, open, onOpenChange }: RestoreDialogPro
           if (parts.length > 0) topDirs.add("/" + parts[0]);
         }
         setExpandedDirs(topDirs);
+      }).catch(() => {
+        setError("Backup-Dateien konnten nicht geladen werden.");
+        setFiles([]);
+      }).finally(() => {
+        setIsLoadingFiles(false);
       });
       setSelectedPaths(new Set());
       setResult(null);
-      setError(null);
     }
   }, [open, backupId]);
 
@@ -226,7 +234,11 @@ export function RestoreDialog({ backupId, open, onOpenChange }: RestoreDialogPro
 
         <div className="space-y-4">
           <div className="rounded border p-3 max-h-[40vh] overflow-auto">
-            {tree.length === 0 ? (
+            {isLoadingFiles ? (
+              <p className="text-sm text-muted-foreground">Dateien werden geladen...</p>
+            ) : error && files.length === 0 ? (
+              <p className="text-sm text-destructive">{error}</p>
+            ) : tree.length === 0 ? (
               <p className="text-sm text-muted-foreground">Keine Dateien gefunden.</p>
             ) : (
               tree.map((node) => (

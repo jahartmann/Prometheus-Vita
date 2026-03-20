@@ -74,6 +74,10 @@ func (t *VMFileReadTool) Execute(ctx context.Context, args json.RawMessage) (jso
 		params.VMType = "lxc"
 	}
 
+	if err := ValidateFilePath(params.Path); err != nil {
+		return json.Marshal(map[string]string{"error": err.Error()})
+	}
+
 	content, err := t.nodeService.ReadVMFile(ctx, nodeID, params.VMID, params.VMType, params.Path)
 	if err != nil {
 		return json.Marshal(map[string]string{"error": fmt.Sprintf("Fehler beim Lesen: %v", err)})

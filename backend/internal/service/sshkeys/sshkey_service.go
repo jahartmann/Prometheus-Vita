@@ -122,6 +122,7 @@ func (s *Service) deployKey(ctx context.Context, nodeID uuid.UUID, key *model.SS
 	if err != nil {
 		return fmt.Errorf("ssh connection: %w", err)
 	}
+	defer s.sshPool.Return(nodeID.String(), sshClient)
 
 	// Add public key to authorized_keys
 	cmd := fmt.Sprintf(

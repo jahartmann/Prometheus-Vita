@@ -86,7 +86,11 @@ func (h *WSHub) BroadcastMessage(msg WSMessage) {
 		slog.Error("failed to marshal ws message", slog.Any("error", err))
 		return
 	}
-	h.broadcast <- data
+	select {
+	case h.broadcast <- data:
+	default:
+		slog.Warn("ws broadcast channel full, dropping message")
+	}
 }
 
 func (h *WSHub) ClientCount() int {

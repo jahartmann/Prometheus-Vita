@@ -2,10 +2,13 @@ package notification
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/smtp"
 	"strings"
+	"time"
 
 	"github.com/antigravity/prometheus/internal/model"
 )
@@ -41,7 +44,7 @@ func (s *EmailSender) Type() model.NotificationChannelType {
 	return model.ChannelTypeEmail
 }
 
-func (s *EmailSender) Send(_ context.Context, subject, body string) error {
+func (s *EmailSender) Send(ctx context.Context, subject, body string) error {
 	addr := fmt.Sprintf("%s:%d", s.config.SMTPHost, s.config.SMTPPort)
 
 	msg := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n%s",
@@ -51,13 +54,53 @@ func (s *EmailSender) Send(_ context.Context, subject, body string) error {
 		body,
 	)
 
-	var auth smtp.Auth
-	if s.config.SMTPUser != "" {
-		auth = smtp.PlainAuth("", s.config.SMTPUser, s.config.SMTPPass, s.config.SMTPHost)
+	// Use context-aware dialer instead of smtp.SendMail
+	d := &net.Dialer{Timeout: 15 * time.Second}
+	conn, err := d.DialContext(ctx, "tcp", addr)
+	if err != nil {
+		return fmt.Errorf("dial smtp: %w", err)
+	}
+	defer conn.Close()
+
+	c, err := smtp.NewClient(conn, s.config.SMTPHost)
+	if err != nil {
+		return fmt.Errorf("smtp client: %w", err)
+	}
+	defer c.Close()
+
+	// STARTTLS if available
+	if ok, _ := c.Extension("STARTTLS"); ok {
+		if err := c.StartTLS(&tls.Config{ServerName: s.config.SMTPHost}); err != nil {
+			return fmt.Errorf("starttls: %w", err)
+		}
 	}
 
-	if err := smtp.SendMail(addr, auth, s.config.FromAddress, s.config.ToAddresses, []byte(msg)); err != nil {
-		return fmt.Errorf("send email: %w", err)
+	// Auth
+	if s.config.SMTPUser != "" {
+		auth := smtp.PlainAuth("", s.config.SMTPUser, s.config.SMTPPass, s.config.SMTPHost)
+		if err := c.Auth(auth); err != nil {
+			return fmt.Errorf("smtp auth: %w", err)
+		}
 	}
-	return nil
+
+	// Send
+	if err := c.Mail(s.config.FromAddress); err != nil {
+		return fmt.Errorf("smtp mail: %w", err)
+	}
+	for _, to := range s.config.ToAddresses {
+		if err := c.Rcpt(to); err != nil {
+			return fmt.Errorf("smtp rcpt: %w", err)
+		}
+	}
+	w, err := c.Data()
+	if err != nil {
+		return fmt.Errorf("smtp data: %w", err)
+	}
+	if _, err := w.Write([]byte(msg)); err != nil {
+		return fmt.Errorf("smtp write: %w", err)
+	}
+	if err := w.Close(); err != nil {
+		return fmt.Errorf("smtp close data: %w", err)
+	}
+	return c.Quit()
 }

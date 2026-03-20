@@ -90,8 +90,14 @@ func (rs *RestoreService) RestoreFiles(ctx context.Context, backupID uuid.UUID, 
 	}
 
 	for _, filePath := range req.FilePaths {
-		// Get the backed up file
+		// Get the backed up file and decrypt if needed
 		backupFile, err := rs.fileRepo.GetSingleFile(ctx, backupID, filePath)
+		if err == nil && rs.encryptor != nil && len(backupFile.Content) > 0 {
+			decrypted, decErr := rs.encryptor.Decrypt(string(backupFile.Content))
+			if decErr == nil {
+				backupFile.Content = []byte(decrypted)
+			}
+		}
 		if err != nil {
 			slog.Warn("backup file not found, skipping",
 				slog.String("file_path", filePath),
@@ -213,6 +219,13 @@ func (rs *RestoreService) GenerateArchive(ctx context.Context, backupID uuid.UUI
 				slog.Any("error", err),
 			)
 			continue
+		}
+		// Decrypt content if encrypted
+		if rs.encryptor != nil && len(fullFile.Content) > 0 {
+			decrypted, decErr := rs.encryptor.Decrypt(string(fullFile.Content))
+			if decErr == nil {
+				fullFile.Content = []byte(decrypted)
+			}
 		}
 
 		// Parse permissions to file mode

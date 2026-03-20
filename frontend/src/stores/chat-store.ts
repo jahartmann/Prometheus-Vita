@@ -11,7 +11,7 @@ import { chatApi, toArray } from "@/lib/api";
 // generateId() is unavailable in non-secure contexts (HTTP without TLS).
 function generateId(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return generateId();
+    return crypto.randomUUID();
   }
   // Fallback: random hex string
   const bytes = new Uint8Array(16);

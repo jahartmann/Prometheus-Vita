@@ -43,8 +43,16 @@ func (p *Pool) Get(nodeID string, sshCfg SSHConfig) (*Client, error) {
 			_ = entry.client.Close()
 			delete(p.connections, nodeID)
 		} else {
-			entry.lastUsed = time.Now()
-			return entry.client, nil
+			// Verify connection is still alive
+			_, _, err := entry.client.client.SendRequest("keepalive@prometheus", true, nil)
+			if err != nil {
+				_ = entry.client.Close()
+				delete(p.connections, nodeID)
+				// Fall through to create new connection
+			} else {
+				entry.lastUsed = time.Now()
+				return entry.client, nil
+			}
 		}
 	}
 
@@ -62,10 +70,25 @@ func (p *Pool) Get(nodeID string, sshCfg SSHConfig) (*Client, error) {
 }
 
 // Return returns a client back to the pool, updating the last used timestamp.
+// A liveness check is performed first; dead connections are discarded.
 func (p *Pool) Return(nodeID string, client *Client) {
+	// Check if connection is still alive before returning to pool
+	if client == nil {
+		return
+	}
+	// Quick liveness check via SSH keepalive
+	_, _, err := client.client.SendRequest("keepalive@prometheus", true, nil)
+	if err != nil {
+		// Connection is dead, close it and don't return to pool
+		_ = client.Close()
+		p.mu.Lock()
+		delete(p.connections, nodeID)
+		p.mu.Unlock()
+		return
+	}
+
 	p.mu.Lock()
 	defer p.mu.Unlock()
-
 	p.connections[nodeID] = &poolEntry{
 		client:   client,
 		lastUsed: time.Now(),

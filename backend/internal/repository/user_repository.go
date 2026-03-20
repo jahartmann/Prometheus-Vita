@@ -11,7 +11,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-var ErrNotFound = errors.New("not found")
+var (
+	ErrNotFound        = errors.New("not found")
+	ErrAlreadyResolved = errors.New("already resolved")
+)
 
 type UserRepository interface {
 	Create(ctx context.Context, user *model.User) error
@@ -95,6 +98,7 @@ func (r *pgUserRepository) List(ctx context.Context) ([]model.User, error) {
 			&u.CreatedAt, &u.UpdatedAt, &u.LastLogin, &u.MustChangePassword); err != nil {
 			return nil, fmt.Errorf("scan user: %w", err)
 		}
+		u.PasswordHash = "" // Never return password hash in list
 		users = append(users, u)
 	}
 	return users, rows.Err()

@@ -40,6 +40,13 @@ func (j *BriefingJob) Run(ctx context.Context) error {
 		return nil
 	}
 
+	// Check DB to prevent duplicates after restart
+	existing, err := j.briefingSvc.GetLatest(ctx)
+	if err == nil && existing != nil && existing.GeneratedAt.Format("2006-01-02") == today {
+		j.lastRunDate = today
+		return nil
+	}
+
 	j.lastRunDate = today
 	slog.Info("generating morning briefing", slog.Int("hour", j.hour))
 

@@ -41,6 +41,9 @@ func (j *LogDiscoveryJob) Run(ctx context.Context) error {
 	}
 
 	for _, node := range nodes {
+		if !node.IsOnline {
+			continue
+		}
 		if _, err := j.discoverySvc.DiscoverSources(ctx, node.ID); err != nil {
 			slog.Error("log_discovery: discover sources failed",
 				slog.String("node_id", node.ID.String()),

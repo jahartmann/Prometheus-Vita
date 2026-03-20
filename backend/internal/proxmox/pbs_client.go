@@ -17,7 +17,11 @@ type PBSClient struct {
 	httpClient  *http.Client
 }
 
-func NewPBSClient(hostname string, port int, tokenID, tokenSecret string) *PBSClient {
+func NewPBSClient(hostname string, port int, tokenID, tokenSecret string, insecureSkipVerify ...bool) *PBSClient {
+	skipVerify := true // default for self-signed Proxmox certs
+	if len(insecureSkipVerify) > 0 {
+		skipVerify = insecureSkipVerify[0]
+	}
 	return &PBSClient{
 		baseURL:     fmt.Sprintf("https://%s:%d/api2/json", hostname, port),
 		tokenID:     tokenID,
@@ -25,7 +29,7 @@ func NewPBSClient(hostname string, port int, tokenID, tokenSecret string) *PBSCl
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: skipVerify},
 			},
 		},
 	}

@@ -3,11 +3,14 @@ package telegram
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/antigravity/prometheus/internal/model"
@@ -15,6 +18,8 @@ import (
 	"github.com/antigravity/prometheus/internal/service/agent"
 	"github.com/google/uuid"
 )
+
+var telegramBotHTTPClient = &http.Client{Timeout: 15 * time.Second}
 
 type BotService struct {
 	botToken        string
@@ -24,6 +29,7 @@ type BotService struct {
 	agentConfigRepo repository.AgentConfigRepository
 	lastOffset      int64
 	// pendingConfirmations tracks chatID -> pending action for autonomy level 1
+	confirmMu            sync.Mutex
 	pendingConfirmations map[int64]*pendingAction
 }
 
@@ -94,7 +100,7 @@ func (s *BotService) GetBotUsername(ctx context.Context) (string, error) {
 		return "", err
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := telegramBotHTTPClient.Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -169,8 +175,13 @@ func (s *BotService) processUpdate(ctx context.Context, msg *Message) {
 	}
 
 	// Check for pending confirmation (autonomy level 1)
-	if pending, ok := s.pendingConfirmations[chatID]; ok {
+	s.confirmMu.Lock()
+	pending, ok := s.pendingConfirmations[chatID]
+	if ok {
 		delete(s.pendingConfirmations, chatID)
+	}
+	s.confirmMu.Unlock()
+	if ok {
 		lower := strings.ToLower(text)
 		if lower == "ja" || lower == "yes" || lower == "j" || lower == "y" {
 			s.sendMessage(ctx, chatID, "Aktion wird ausgefuehrt...")
@@ -398,7 +409,7 @@ func (s *BotService) sendMessage(ctx context.Context, chatID int64, text string)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := telegramBotHTTPClient.Do(req)
 	if err != nil {
 		slog.Error("send telegram message", slog.Any("error", err))
 		return
@@ -411,7 +422,7 @@ func (s *BotService) sendMessage(ctx context.Context, chatID int64, text string)
 		data, _ = json.Marshal(payload)
 		req2, _ := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(data))
 		req2.Header.Set("Content-Type", "application/json")
-		resp2, err := http.DefaultClient.Do(req2)
+		resp2, err := telegramBotHTTPClient.Do(req2)
 		if err != nil {
 			slog.Error("send telegram message retry", slog.Any("error", err))
 			return
@@ -420,9 +431,9 @@ func (s *BotService) sendMessage(ctx context.Context, chatID int64, text string)
 	}
 }
 
-// GenerateVerificationCode creates a random 6-digit verification code.
+// GenerateVerificationCode creates a random verification code with 48-bit entropy.
 func GenerateVerificationCode() string {
-	id := uuid.New()
-	// Use first 6 hex characters as code
-	return strings.ToUpper(id.String()[:6])
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	return strings.ToUpper(hex.EncodeToString(b)[:12])
 }

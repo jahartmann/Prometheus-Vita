@@ -159,15 +159,12 @@ func (s *Service) CancelMigration(ctx context.Context, id uuid.UUID) error {
 	cancel, ok := s.cancels[id]
 	s.mu.Unlock()
 
-	if ok {
-		cancel()
+	if !ok {
+		return fmt.Errorf("no cancel function found for migration %s", id)
 	}
 
-	m.Status = model.MigrationStatusCancelled
-	m.ErrorMessage = "cancelled by user"
-	now := time.Now()
-	m.CompletedAt = &now
-	return s.migrationRepo.Update(ctx, m)
+	cancel()
+	return nil
 }
 
 func (s *Service) GetMigration(ctx context.Context, id uuid.UUID) (*model.VMMigration, error) {
@@ -215,16 +212,37 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 	// Error handler: update status + restart VM if needed
 	handleError := func(phase string, err error) {
 		slog.Error("migration failed", slog.String("phase", phase), slog.Any("error", err))
-		m.Status = model.MigrationStatusFailed
-		m.ErrorMessage = fmt.Sprintf("%s: %v", phase, err)
+		if ctx.Err() == context.Canceled {
+			m.Status = model.MigrationStatusCancelled
+			m.ErrorMessage = "Migration vom Benutzer abgebrochen"
+		} else {
+			m.Status = model.MigrationStatusFailed
+			m.ErrorMessage = fmt.Sprintf("%s: %v", phase, err)
+		}
 		completedAt := time.Now()
 		m.CompletedAt = &completedAt
-		_ = s.migrationRepo.Update(ctx, m)
+		_ = s.migrationRepo.Update(context.Background(), m)
 		s.broadcastProgress(m, nil)
 
-		// If we stopped the VM and migration failed, restart it
-		if vmWasStopped && m.Mode == model.MigrationModeStop {
-			s.tryRestartSourceVM(context.Background(), m)
+		// If we stopped/suspended the VM and migration failed, restore it
+		if vmWasStopped {
+			switch m.Mode {
+			case model.MigrationModeStop:
+				s.tryRestartSourceVM(context.Background(), m)
+			case model.MigrationModeSuspend:
+				// Resume the suspended VM
+				srcNode, nodeErr := s.nodeRepo.GetByID(context.Background(), m.SourceNodeID)
+				if nodeErr == nil {
+					srcClient, clientErr := s.clientFactory.CreateClient(srcNode)
+					if clientErr == nil {
+						pveNode, pveErr := s.resolvePVENodeName(context.Background(), srcClient, srcNode)
+						if pveErr == nil {
+							_, _ = srcClient.ResumeVM(context.Background(), pveNode, m.VMID)
+							slog.Info("migration: resumed suspended VM after failure", slog.Int("vmid", m.VMID))
+						}
+					}
+				}
+			}
 		}
 	}
 
@@ -286,6 +304,7 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 		handleError("preflight", fmt.Errorf("SSH-Verbindung zu Source %s fehlgeschlagen: %w", sourceNode.Name, err))
 		return
 	}
+	defer s.sshPool.Return(sourceNode.ID.String(), srcSSHClient)
 	s.broadcastLog(m.ID, "✓ SSH zu Source verbunden")
 
 	s.broadcastLog(m.ID, "Prüfe SSH-Verbindung zu Target...")
@@ -299,6 +318,7 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 		handleError("preflight", fmt.Errorf("SSH-Verbindung zu Target %s fehlgeschlagen: %w", targetNode.Name, err))
 		return
 	}
+	defer s.sshPool.Return(targetNode.ID.String(), tgtSSHClient)
 	s.broadcastLog(m.ID, "✓ SSH zu Target verbunden")
 
 	// 2. Get VM info to check disk size
@@ -437,7 +457,7 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 				return
 			}
 		}
-		if err := s.waitForTask(ctx, srcClient, srcPVENode, upid, 120*time.Second); err != nil {
+		if err := s.waitForTask(ctx, srcClient, srcPVENode, upid, 300*time.Second); err != nil {
 			handleError("preparing", fmt.Errorf("wait for vm stop: %w", err))
 			return
 		}
@@ -451,7 +471,7 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 			handleError("preparing", fmt.Errorf("suspend vm: %w", err))
 			return
 		}
-		if err := s.waitForTask(ctx, srcClient, srcPVENode, upid, 60*time.Second); err != nil {
+		if err := s.waitForTask(ctx, srcClient, srcPVENode, upid, 180*time.Second); err != nil {
 			handleError("preparing", fmt.Errorf("wait for vm suspend: %w", err))
 			return
 		}
@@ -568,7 +588,7 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 		tgtUser = "root"
 	}
 
-	scpCmd := fmt.Sprintf("scp -o StrictHostKeyChecking=no -o ConnectTimeout=10 -P %d %q %s@%s:%q",
+	scpCmd := fmt.Sprintf("scp -o StrictHostKeyChecking=no -o ConnectTimeout=30 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -P %d %q %s@%s:%q",
 		tgtPort, vzdumpPath, tgtUser, tgtHost, targetVzdumpPath)
 
 	s.broadcastLog(m.ID, fmt.Sprintf("Starte Transfer: %s → %s (%s)", sourceNode.Name, targetNode.Name, formatBytesLog(totalSize)))
@@ -592,24 +612,57 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 	// Poll progress by checking file size on target
 	transferStart := time.Now()
 	lastLogTime := time.Now()
-	pollTicker := time.NewTicker(3 * time.Second)
+	pollTicker := time.NewTicker(5 * time.Second) // 5s intervals for high-latency networks
 	defer pollTicker.Stop()
+
+	consecutivePollErrors := 0
+	const maxPollErrors = 10 // allow transient SSH failures during polling
 
 	transferDone := false
 	for !transferDone {
 		select {
 		case <-ctx.Done():
 			// Kill scp on cancel
-			_, _ = srcSSHClient.RunCommand(ctx, fmt.Sprintf("kill %s 2>/dev/null", scpPID))
-			_, _ = tgtSSHClient.RunCommand(ctx, fmt.Sprintf("rm -f %q", targetVzdumpPath))
-			handleError("transferring", ctx.Err())
+			_, _ = srcSSHClient.RunCommand(context.Background(), fmt.Sprintf("kill %s 2>/dev/null", scpPID))
+			_, _ = tgtSSHClient.RunCommand(context.Background(), fmt.Sprintf("rm -f %q", targetVzdumpPath))
+			if ctx.Err() == context.Canceled {
+				m.Status = model.MigrationStatusCancelled
+				m.ErrorMessage = "Migration vom Benutzer abgebrochen"
+			} else {
+				m.Status = model.MigrationStatusFailed
+				m.ErrorMessage = fmt.Sprintf("context error: %v", ctx.Err())
+			}
+			completedAt := time.Now()
+			m.CompletedAt = &completedAt
+			_ = s.migrationRepo.Update(context.Background(), m)
+			s.broadcastProgress(m, nil)
+			// Restore VM if it was stopped/suspended
+			if vmWasStopped {
+				switch m.Mode {
+				case model.MigrationModeStop:
+					s.tryRestartSourceVM(context.Background(), m)
+				case model.MigrationModeSuspend:
+					_, _ = srcClient.ResumeVM(context.Background(), srcPVENode, m.VMID)
+					slog.Info("migration: resumed suspended VM after cancellation", slog.Int("vmid", m.VMID))
+				}
+			}
 			return
 		case <-pollTicker.C:
-			// Check if scp is still running
-			checkResult, _ := srcSSHClient.RunCommand(ctx, fmt.Sprintf("kill -0 %s 2>/dev/null; echo $?", scpPID))
+			// Check if scp is still running (tolerate SSH errors during polling)
+			checkResult, checkErr := srcSSHClient.RunCommand(ctx, fmt.Sprintf("kill -0 %s 2>/dev/null; echo $?", scpPID))
+			if checkErr != nil {
+				consecutivePollErrors++
+				if consecutivePollErrors >= maxPollErrors {
+					handleError("transferring", fmt.Errorf("SSH-Verbindung zu Source nach %d Versuchen verloren: %w", maxPollErrors, checkErr))
+					return
+				}
+				s.broadcastLog(m.ID, fmt.Sprintf("⚠ SSH-Poll fehlgeschlagen (%d/%d), warte...", consecutivePollErrors, maxPollErrors))
+				continue
+			}
+			consecutivePollErrors = 0
 			scpRunning := checkResult != nil && strings.TrimSpace(checkResult.Stdout) == "0"
 
-			// Get current file size on target
+			// Get current file size on target (tolerate errors)
 			statResult, _ := tgtSSHClient.RunCommand(ctx, fmt.Sprintf("stat -c %%s %q 2>/dev/null", targetVzdumpPath))
 			var currentSize int64
 			if statResult != nil && statResult.ExitCode == 0 {
@@ -631,8 +684,8 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 			}
 			s.broadcastProgress(m, nil)
 
-			// Log progress every 10 seconds
-			if time.Since(lastLogTime) > 10*time.Second {
+			// Log progress every 15 seconds (less spam for slow networks)
+			if time.Since(lastLogTime) > 15*time.Second {
 				lastLogTime = time.Now()
 				pct := float64(0)
 				if totalSize > 0 {
@@ -648,11 +701,19 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 				// Cleanup log file
 				_, _ = srcSSHClient.RunCommand(ctx, fmt.Sprintf("rm -f /tmp/scp-mig-%s.log", m.ID.String()))
 
-				// Verify file size matches
-				finalStatResult, _ := tgtSSHClient.RunCommand(ctx, fmt.Sprintf("stat -c %%s %q 2>/dev/null", targetVzdumpPath))
+				// Verify file size matches (with retries for slow filesystems)
 				var finalSize int64
-				if finalStatResult != nil && finalStatResult.ExitCode == 0 {
-					fmt.Sscanf(strings.TrimSpace(finalStatResult.Stdout), "%d", &finalSize)
+				for retry := 0; retry < 3; retry++ {
+					finalStatResult, _ := tgtSSHClient.RunCommand(ctx, fmt.Sprintf("stat -c %%s %q 2>/dev/null", targetVzdumpPath))
+					if finalStatResult != nil && finalStatResult.ExitCode == 0 {
+						fmt.Sscanf(strings.TrimSpace(finalStatResult.Stdout), "%d", &finalSize)
+						if finalSize >= totalSize || totalSize == 0 {
+							break
+						}
+					}
+					if retry < 2 {
+						time.Sleep(3 * time.Second) // wait for filesystem sync
+					}
 				}
 
 				if totalSize > 0 && finalSize < totalSize {
@@ -690,23 +751,25 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 		s.broadcastLog(m.ID, fmt.Sprintf("Entregistriere VM %d von Source-Node (Cluster-VMID-Konflikt)...", m.VMID))
 
 		// Save the config for rollback
-		configResult, _ := srcSSHClient.RunCommand(ctx, fmt.Sprintf("cat /etc/pve/nodes/%s/qemu-server/%d.conf 2>/dev/null", srcPVENode, m.VMID))
+		cfgDir := configDir(m.VMType)
+		configResult, _ := srcSSHClient.RunCommand(ctx, fmt.Sprintf("cat /etc/pve/nodes/%s/%s/%d.conf 2>/dev/null", srcPVENode, cfgDir, m.VMID))
 		if configResult != nil && configResult.ExitCode == 0 {
 			sourceConfigBackup = configResult.Stdout
 		}
 
 		// Remove VM registration from source (config only, not disks)
-		_, _ = srcSSHClient.RunCommand(ctx, fmt.Sprintf("mv /etc/pve/nodes/%s/qemu-server/%d.conf /etc/pve/nodes/%s/qemu-server/%d.conf.mig-backup 2>/dev/null",
-			srcPVENode, m.VMID, srcPVENode, m.VMID))
+		_, _ = srcSSHClient.RunCommand(ctx, fmt.Sprintf("mv /etc/pve/nodes/%s/%s/%d.conf /etc/pve/nodes/%s/%s/%d.conf.mig-backup 2>/dev/null",
+			srcPVENode, cfgDir, m.VMID, srcPVENode, cfgDir, m.VMID))
 		time.Sleep(2 * time.Second)
 		s.broadcastLog(m.ID, fmt.Sprintf("✓ VM %d von Source entregistriert (Config gesichert)", m.VMID))
 	}
 
 	// Also check for leftover config on target
-	checkResult, _ := tgtSSHClient.RunCommand(ctx, fmt.Sprintf("test -f /etc/pve/nodes/%s/qemu-server/%d.conf && echo exists || echo no", tgtPVENode, restoreVMID))
+	tgtCfgDir := configDir(m.VMType)
+	checkResult, _ := tgtSSHClient.RunCommand(ctx, fmt.Sprintf("test -f /etc/pve/nodes/%s/%s/%d.conf && echo exists || echo no", tgtPVENode, tgtCfgDir, restoreVMID))
 	if checkResult != nil && strings.Contains(checkResult.Stdout, "exists") {
 		s.broadcastLog(m.ID, fmt.Sprintf("⚠ Alte VM %d Config auf Target gefunden - entferne...", restoreVMID))
-		_, _ = tgtSSHClient.RunCommand(ctx, fmt.Sprintf("rm -f /etc/pve/nodes/%s/qemu-server/%d.conf", tgtPVENode, restoreVMID))
+		_, _ = tgtSSHClient.RunCommand(ctx, fmt.Sprintf("rm -f /etc/pve/nodes/%s/%s/%d.conf", tgtPVENode, tgtCfgDir, restoreVMID))
 		time.Sleep(1 * time.Second)
 	}
 
@@ -720,10 +783,10 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 	s.broadcastLog(m.ID, fmt.Sprintf("Starte Restore auf %s (VMID: %d, Storage: %s, Archive: %s)...",
 		targetNode.Name, restoreVMID, m.TargetStorage, restoreArchive))
 
-	restoreUPID, err := tgtClient.RestoreVM(ctx, tgtPVENode, restoreArchive, m.TargetStorage, restoreVMID)
+	restoreUPID, err := tgtClient.RestoreVM(ctx, tgtPVENode, restoreArchive, m.TargetStorage, restoreVMID, m.VMType)
 	if err != nil {
 		// Restore source config on failure
-		s.rollbackSourceConfig(ctx, srcSSHClient, srcPVENode, m.VMID, sourceConfigBackup)
+		s.rollbackSourceConfig(ctx, srcSSHClient, srcPVENode, m.VMID, m.VMType, sourceConfigBackup)
 		_, _ = tgtSSHClient.RunCommand(ctx, fmt.Sprintf("rm -f %q", targetVzdumpPath))
 		handleError("restoring", fmt.Errorf("restore konnte nicht gestartet werden: %w", err))
 		return
@@ -735,14 +798,14 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 	if err := s.pollTaskWithProgress(ctx, tgtClient, tgtPVENode, restoreUPID, m, 81, 94); err != nil {
 		taskLog := s.getTaskLogForError(ctx, tgtClient, tgtPVENode, restoreUPID)
 		// Restore source config on failure
-		s.rollbackSourceConfig(ctx, srcSSHClient, srcPVENode, m.VMID, sourceConfigBackup)
+		s.rollbackSourceConfig(ctx, srcSSHClient, srcPVENode, m.VMID, m.VMType, sourceConfigBackup)
 		_, _ = tgtSSHClient.RunCommand(ctx, fmt.Sprintf("rm -f %q", targetVzdumpPath))
 		handleError("restoring", fmt.Errorf("restore fehlgeschlagen: %w\n\nTask-Log:\n%s", err, taskLog))
 		return
 	}
 
 	// Restore succeeded - delete the backup config on source
-	_, _ = srcSSHClient.RunCommand(ctx, fmt.Sprintf("rm -f /etc/pve/nodes/%s/qemu-server/%d.conf.mig-backup", srcPVENode, m.VMID))
+	_, _ = srcSSHClient.RunCommand(ctx, fmt.Sprintf("rm -f /etc/pve/nodes/%s/%s/%d.conf.mig-backup", srcPVENode, configDir(m.VMType), m.VMID))
 	s.broadcastLog(m.ID, "✓ VM erfolgreich wiederhergestellt")
 	s.updatePhase(ctx, m, model.MigrationStatusRestoring, "Wiederherstellung abgeschlossen", 95)
 
@@ -820,8 +883,11 @@ func (s *Service) broadcastLog(migrationID uuid.UUID, line string) {
 
 func (s *Service) waitForTask(ctx context.Context, client *proxmox.Client, node string, upid string, timeout time.Duration) error {
 	deadline := time.After(timeout)
-	ticker := time.NewTicker(3 * time.Second)
+	ticker := time.NewTicker(5 * time.Second) // 5s for high-latency networks
 	defer ticker.Stop()
+
+	consecutiveErrors := 0
+	const maxConsecutiveErrors = 6 // ~30s of failures before giving up
 
 	for {
 		select {
@@ -832,8 +898,13 @@ func (s *Service) waitForTask(ctx context.Context, client *proxmox.Client, node 
 		case <-ticker.C:
 			status, err := client.GetTaskStatus(ctx, node, upid)
 			if err != nil {
+				consecutiveErrors++
+				if consecutiveErrors >= maxConsecutiveErrors {
+					return fmt.Errorf("task status unavailable after %d attempts: %w", maxConsecutiveErrors, err)
+				}
 				continue
 			}
+			consecutiveErrors = 0
 			if !status.IsRunning() {
 				if status.IsSuccess() {
 					return nil
@@ -845,35 +916,40 @@ func (s *Service) waitForTask(ctx context.Context, client *proxmox.Client, node 
 }
 
 func (s *Service) pollTaskWithProgress(ctx context.Context, client *proxmox.Client, node string, upid string, m *model.VMMigration, startProgress, endProgress int) error {
-	ticker := time.NewTicker(3 * time.Second)
+	ticker := time.NewTicker(5 * time.Second) // 5s for high-latency networks
 	defer ticker.Stop()
 
 	progressRange := endProgress - startProgress
 	pollCount := 0
 	lastLogLine := 0 // Track which log lines we've already sent
+	consecutiveErrors := 0
+	const maxConsecutiveErrors = 10 // ~50s of failures before giving up
 
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
-			// Stream task log lines
+			// Stream task log lines (tolerate errors)
 			entries, err := client.GetTaskLog(ctx, node, upid, lastLogLine)
 			if err == nil && len(entries) > 0 {
 				for _, e := range entries {
 					if e.LineNum >= lastLogLine && e.Text != "" {
 						s.broadcastLog(m.ID, fmt.Sprintf("[PVE] %s", e.Text))
-						if e.LineNum >= lastLogLine {
-							lastLogLine = e.LineNum + 1
-						}
+						lastLogLine = e.LineNum + 1
 					}
 				}
 			}
 
 			status, err := client.GetTaskStatus(ctx, node, upid)
 			if err != nil {
+				consecutiveErrors++
+				if consecutiveErrors >= maxConsecutiveErrors {
+					return fmt.Errorf("task status unavailable after %d attempts: %w", maxConsecutiveErrors, err)
+				}
 				continue
 			}
+			consecutiveErrors = 0
 			if !status.IsRunning() {
 				// Fetch remaining log lines
 				finalEntries, err := client.GetTaskLog(ctx, node, upid, lastLogLine)
@@ -1021,7 +1097,7 @@ func (s *Service) findVzdumpPath(ctx context.Context, client *proxmox.Client, no
 	// Look for "creating archive" or the .vma/.tar file path
 	for _, e := range entries {
 		text := e.Text
-		if strings.Contains(text, "/vzdump-") && (strings.Contains(text, ".vma") || strings.Contains(text, ".tar")) {
+		if strings.Contains(text, "/vzdump-") {
 			// Extract the path
 			parts := strings.Fields(text)
 			for _, p := range parts {
@@ -1091,10 +1167,21 @@ func (s *Service) resolvePVENodeName(ctx context.Context, client *proxmox.Client
 		}
 	}
 
-	// Fallback to first node
-	pveNode := pveNodes[0]
-	s.cachePVENodeName(ctx, node, pveNode)
-	return pveNode, nil
+	// Try matching by hostname
+	for _, pn := range pveNodes {
+		if strings.EqualFold(pn, node.Hostname) || strings.HasPrefix(strings.ToLower(node.Hostname), strings.ToLower(pn)) {
+			slog.Info("migration: resolved PVE node by hostname match", slog.String("pve_node", pn), slog.String("hostname", node.Hostname))
+			s.cachePVENodeName(ctx, node, pn)
+			return pn, nil
+		}
+	}
+	// If only one node in cluster, use it (safe assumption)
+	if len(pveNodes) == 1 {
+		slog.Info("migration: single-node cluster, using sole node", slog.String("pve_node", pveNodes[0]))
+		s.cachePVENodeName(ctx, node, pveNodes[0])
+		return pveNodes[0], nil
+	}
+	return "", fmt.Errorf("PVE node name for '%s' could not be resolved. Available PVE nodes: %v. Set the correct name in node metadata", node.Name, pveNodes)
 }
 
 // cachePVENodeName stores the resolved PVE node name in the node's metadata.
@@ -1118,24 +1205,34 @@ func (s *Service) cachePVENodeName(ctx context.Context, node *model.Node, pveNod
 	}
 }
 
+// configDir returns the Proxmox config directory name for the given VM type.
+// For "qemu" it returns "qemu-server", for "lxc" it returns "lxc".
+func configDir(vmType string) string {
+	if vmType == "lxc" {
+		return "lxc"
+	}
+	return "qemu-server"
+}
+
 // rollbackSourceConfig restores the VM config on the source node if restore on target failed.
-func (s *Service) rollbackSourceConfig(ctx context.Context, srcSSHClient *ssh.Client, srcPVENode string, vmid int, configBackup string) {
+func (s *Service) rollbackSourceConfig(ctx context.Context, srcSSHClient *ssh.Client, srcPVENode string, vmid int, vmType string, configBackup string) {
+	cfgDir := configDir(vmType)
 	if configBackup == "" {
 		// Try to restore from .mig-backup file
 		_, _ = srcSSHClient.RunCommand(ctx, fmt.Sprintf(
-			"mv /etc/pve/nodes/%s/qemu-server/%d.conf.mig-backup /etc/pve/nodes/%s/qemu-server/%d.conf 2>/dev/null",
-			srcPVENode, vmid, srcPVENode, vmid))
+			"mv /etc/pve/nodes/%s/%s/%d.conf.mig-backup /etc/pve/nodes/%s/%s/%d.conf 2>/dev/null",
+			srcPVENode, cfgDir, vmid, srcPVENode, cfgDir, vmid))
 		return
 	}
-	// Write back the saved config
-	_, _ = srcSSHClient.RunCommand(ctx, fmt.Sprintf(
-		"cat > /etc/pve/nodes/%s/qemu-server/%d.conf << 'CONFIGEOF'\n%s\nCONFIGEOF",
-		srcPVENode, vmid, configBackup))
+	// Write back the saved config using CopyTo to avoid heredoc data corruption
+	path := fmt.Sprintf("/etc/pve/nodes/%s/%s/%d.conf", srcPVENode, cfgDir, vmid)
+	if err := srcSSHClient.CopyTo(ctx, []byte(configBackup), path); err != nil {
+		slog.Warn("migration: rollback source config failed", slog.Any("error", err))
+		return
+	}
 	// Remove backup
-	_, _ = srcSSHClient.RunCommand(ctx, fmt.Sprintf(
-		"rm -f /etc/pve/nodes/%s/qemu-server/%d.conf.mig-backup",
-		srcPVENode, vmid))
-	slog.Info("migration: rolled back source VM config", slog.Int("vmid", vmid))
+	_, _ = srcSSHClient.RunCommand(ctx, fmt.Sprintf("rm -f %s.mig-backup", path))
+	slog.Info("migration: source config restored", slog.Int("vmid", vmid))
 }
 
 func (s *Service) tryRestartSourceVM(ctx context.Context, m *model.VMMigration) {

@@ -85,7 +85,13 @@ func (r *pgScheduleRepository) ListByNode(ctx context.Context, nodeID uuid.UUID)
 }
 
 func (r *pgScheduleRepository) ListDue(ctx context.Context) ([]model.BackupSchedule, error) {
-	rows, err := r.db.Query(ctx,
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	rows, err := tx.Query(ctx,
 		`SELECT id, node_id, cron_expression, is_active, retention_count,
 		        last_run_at, next_run_at, created_at, updated_at
 		 FROM backup_schedules WHERE is_active = true AND next_run_at <= NOW()
@@ -104,7 +110,14 @@ func (r *pgScheduleRepository) ListDue(ctx context.Context) ([]model.BackupSched
 		}
 		schedules = append(schedules, s)
 	}
-	return schedules, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows iteration: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit tx: %w", err)
+	}
+	return schedules, nil
 }
 
 func (r *pgScheduleRepository) Update(ctx context.Context, schedule *model.BackupSchedule) error {

@@ -162,6 +162,19 @@ func (s *Service) CreateBackup(ctx context.Context, nodeID uuid.UUID, req model.
 			diffStr = fd.Diff
 		}
 
+		content := cf.Content
+		if s.encryptor != nil {
+			encryptedContent, encErr := s.encryptor.Encrypt(string(content))
+			if encErr != nil {
+				slog.Warn("failed to encrypt backup file, storing plaintext",
+					slog.String("path", cf.Path),
+					slog.Any("error", encErr),
+				)
+			} else {
+				content = []byte(encryptedContent)
+			}
+		}
+
 		backupFiles = append(backupFiles, model.BackupFile{
 			BackupID:         backup.ID,
 			FilePath:         cf.Path,
@@ -169,7 +182,7 @@ func (s *Service) CreateBackup(ctx context.Context, nodeID uuid.UUID, req model.
 			FileSize:         cf.Size,
 			FilePermissions:  cf.Permissions,
 			FileOwner:        cf.Owner,
-			Content:          cf.Content,
+			Content:          content,
 			DiffFromPrevious: diffStr,
 		})
 	}
@@ -245,13 +258,25 @@ func (s *Service) GetBackupFiles(ctx context.Context, backupID uuid.UUID) ([]mod
 }
 
 // GetBackupFile retrieves a single file (with content) from a backup by its
-// file path.
+// file path. Encrypted content is transparently decrypted.
 func (s *Service) GetBackupFile(ctx context.Context, backupID uuid.UUID, filePath string) (*model.BackupFile, error) {
-	return s.fileRepo.GetSingleFile(ctx, backupID, filePath)
+	file, err := s.fileRepo.GetSingleFile(ctx, backupID, filePath)
+	if err != nil {
+		return nil, err
+	}
+	if s.encryptor != nil && len(file.Content) > 0 {
+		decrypted, decErr := s.encryptor.Decrypt(string(file.Content))
+		if decErr == nil {
+			file.Content = []byte(decrypted)
+		}
+	}
+	return file, nil
 }
 
 // DeleteBackup removes a backup and all its associated files from the
-// database using a transaction to ensure consistency.
+// database. Files are deleted first, then the backup record.
+// Note: ideally these would share a DB transaction; a future migration should
+// add ON DELETE CASCADE to config_backup_files.backup_id.
 func (s *Service) DeleteBackup(ctx context.Context, backupID uuid.UUID) error {
 	// Verify backup exists first
 	if _, err := s.backupRepo.GetByID(ctx, backupID); err != nil {
@@ -260,7 +285,10 @@ func (s *Service) DeleteBackup(ctx context.Context, backupID uuid.UUID) error {
 	if err := s.fileRepo.DeleteByBackupID(ctx, backupID); err != nil {
 		return fmt.Errorf("delete backup files: %w", err)
 	}
-	return s.backupRepo.Delete(ctx, backupID)
+	if err := s.backupRepo.Delete(ctx, backupID); err != nil {
+		return fmt.Errorf("delete backup record: %w", err)
+	}
+	return nil
 }
 
 // DiffBackup computes the file-level diff between the specified backup and
@@ -365,9 +393,16 @@ func (s *Service) getCollectedFilesFromBackup(ctx context.Context, backupID uuid
 			)
 			continue
 		}
+		content := fullFile.Content
+		if s.encryptor != nil {
+			decrypted, decErr := s.encryptor.Decrypt(string(content))
+			if decErr == nil {
+				content = []byte(decrypted)
+			}
+		}
 		collected = append(collected, CollectedFile{
 			Path:        fullFile.FilePath,
-			Content:     fullFile.Content,
+			Content:     content,
 			Hash:        fullFile.FileHash,
 			Size:        fullFile.FileSize,
 			Permissions: fullFile.FilePermissions,

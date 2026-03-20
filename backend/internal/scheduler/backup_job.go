@@ -78,24 +78,10 @@ func (j *BackupScheduleJob) processSchedule(ctx context.Context, schedule model.
 		slog.String("node_id", schedule.NodeID.String()),
 	)
 
-	// Create the backup
-	req := model.CreateBackupRequest{
-		BackupType: model.BackupTypeScheduled,
-		Notes:      fmt.Sprintf("Automated backup from schedule %s", schedule.ID.String()),
-	}
-
-	_, err := j.backupSvc.CreateBackup(ctx, schedule.NodeID, req)
-	if err != nil {
-		slog.Error("scheduled backup failed",
-			slog.String("schedule_id", schedule.ID.String()),
-			slog.String("node_id", schedule.NodeID.String()),
-			slog.Any("error", err),
-		)
-	}
-
-	// Calculate next run time
+	// Calculate next run time from the scheduled time (not time.Now()) to
+	// prevent schedule drift when backups take a long time.
 	now := time.Now()
-	nextRun, err := backup.NextRun(schedule.CronExpression, now)
+	nextRun, err := backup.NextRun(schedule.CronExpression, schedule.NextRunAt)
 	if err != nil {
 		slog.Error("failed to calculate next run time",
 			slog.String("schedule_id", schedule.ID.String()),
@@ -105,10 +91,26 @@ func (j *BackupScheduleJob) processSchedule(ctx context.Context, schedule model.
 		return
 	}
 
-	// Update schedule with last run and next run times
+	// Advance next_run_at BEFORE creating the backup so that a slow backup
+	// does not cause duplicate triggers on the next scheduler tick.
 	if err := j.scheduleRepo.UpdateNextRun(ctx, schedule.ID, now, nextRun); err != nil {
 		slog.Error("failed to update schedule next run",
 			slog.String("schedule_id", schedule.ID.String()),
+			slog.Any("error", err),
+		)
+	}
+
+	// Create the backup
+	req := model.CreateBackupRequest{
+		BackupType: model.BackupTypeScheduled,
+		Notes:      fmt.Sprintf("Automated backup from schedule %s", schedule.ID.String()),
+	}
+
+	_, err = j.backupSvc.CreateBackup(ctx, schedule.NodeID, req)
+	if err != nil {
+		slog.Error("scheduled backup failed",
+			slog.String("schedule_id", schedule.ID.String()),
+			slog.String("node_id", schedule.NodeID.String()),
 			slog.Any("error", err),
 		)
 	}

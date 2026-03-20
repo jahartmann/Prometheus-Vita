@@ -82,7 +82,10 @@ func (j *NodeStatusJob) Run(ctx context.Context) error {
 				slog.Any("error", err),
 			)
 			wasOnline := node.IsOnline
-			_ = j.nodeRepo.UpdateStatus(ctx, node.ID, false)
+			if err := j.nodeRepo.UpdateStatus(ctx, node.ID, false); err != nil {
+				slog.Error("failed to update node offline status", slog.String("node", node.Name), slog.Any("error", err))
+				continue // don't notify if we can't persist the state change
+			}
 			j.cacheStatus(ctx, node.ID.String(), nil)
 			j.wsHub.BroadcastMessage(monitor.WSMessage{
 				Type: "node_status",
@@ -101,13 +104,16 @@ func (j *NodeStatusJob) Run(ctx context.Context) error {
 			continue
 		}
 
+		if err := j.nodeRepo.UpdateStatus(ctx, node.ID, true); err != nil {
+			slog.Error("failed to update node online status", slog.String("node", node.Name), slog.Any("error", err))
+			continue // don't notify if we can't persist the state change
+		}
 		if !node.IsOnline && j.notifSvc != nil {
 			j.notifSvc.Notify(ctx, "node_online",
 				fmt.Sprintf("Node online: %s", node.Name),
 				fmt.Sprintf("Node %s (%s) is back online.", node.Name, node.Hostname),
 			)
 		}
-		_ = j.nodeRepo.UpdateStatus(ctx, node.ID, true)
 
 		if len(pveNodes) > 0 {
 			status, err := client.GetNodeStatus(ctx, nodeService.ResolvePVENode(&node, pveNodes))

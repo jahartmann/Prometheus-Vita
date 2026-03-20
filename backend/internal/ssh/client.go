@@ -10,7 +10,7 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-const defaultTimeout = 30 * time.Second
+const defaultTimeout = 60 * time.Second
 
 // Client wraps an SSH connection and provides methods for remote command execution.
 type Client struct {
@@ -155,7 +155,8 @@ func (c *Client) CopyTo(ctx context.Context, data []byte, remotePath string) err
 
 	done := make(chan error, 1)
 	go func() {
-		done <- session.Run(fmt.Sprintf("cat > %q", remotePath))
+		tmpPath := remotePath + ".prometheus-tmp"
+		done <- session.Run(fmt.Sprintf("cat > %q && mv %q %q", tmpPath, tmpPath, remotePath))
 	}()
 
 	select {

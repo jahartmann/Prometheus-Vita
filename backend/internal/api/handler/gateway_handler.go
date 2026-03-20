@@ -59,12 +59,17 @@ func (h *GatewayHandler) ListTokens(c echo.Context) error {
 }
 
 func (h *GatewayHandler) RevokeToken(c echo.Context) error {
+	userID, ok := c.Get(middleware.ContextKeyUserID).(uuid.UUID)
+	if !ok {
+		return apiPkg.Unauthorized(c, "user not found in context")
+	}
+
 	tokenID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		return apiPkg.BadRequest(c, "invalid token id")
 	}
 
-	if err := h.gatewaySvc.RevokeToken(c.Request().Context(), tokenID); err != nil {
+	if err := h.gatewaySvc.RevokeToken(c.Request().Context(), tokenID, userID); err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
 			return apiPkg.NotFound(c, "token not found")
 		}
@@ -75,12 +80,20 @@ func (h *GatewayHandler) RevokeToken(c echo.Context) error {
 }
 
 func (h *GatewayHandler) DeleteToken(c echo.Context) error {
+	userID, ok := c.Get(middleware.ContextKeyUserID).(uuid.UUID)
+	if !ok {
+		return apiPkg.Unauthorized(c, "user not found in context")
+	}
+
 	tokenID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		return apiPkg.BadRequest(c, "invalid token id")
 	}
 
-	if err := h.gatewaySvc.DeleteToken(c.Request().Context(), tokenID); err != nil {
+	if err := h.gatewaySvc.DeleteToken(c.Request().Context(), tokenID, userID); err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return apiPkg.NotFound(c, "token not found")
+		}
 		return apiPkg.InternalError(c, "failed to delete token")
 	}
 

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/antigravity/prometheus/internal/model"
@@ -46,9 +47,18 @@ func (s *Service) Notify(ctx context.Context, eventType, subject, body string) {
 		return
 	}
 
+	var wg sync.WaitGroup
 	for _, ch := range channels {
-		s.sendToChannel(ctx, &ch, eventType, subject, body)
+		ch := ch
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			sendCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			defer cancel()
+			s.sendToChannel(sendCtx, &ch, eventType, subject, body)
+		}()
 	}
+	wg.Wait()
 }
 
 // NotifyChannels sends a notification to specific channels by ID.

@@ -75,6 +75,7 @@ func (s *Service) CheckUpdates(ctx context.Context, nodeID uuid.UUID) (*model.Up
 		_ = s.updateRepo.Update(ctx, check)
 		return check, nil
 	}
+	defer s.sshPool.Return(nodeID.String(), sshClient)
 
 	// Update package list first
 	_, _ = sshClient.RunCommand(ctx, "apt-get update -qq 2>/dev/null")
