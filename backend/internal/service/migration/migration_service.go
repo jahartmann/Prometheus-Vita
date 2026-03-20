@@ -936,9 +936,7 @@ func (s *Service) pollTaskWithProgress(ctx context.Context, client *proxmox.Clie
 				for _, e := range entries {
 					if e.LineNum >= lastLogLine && e.Text != "" {
 						s.broadcastLog(m.ID, fmt.Sprintf("[PVE] %s", e.Text))
-						if e.LineNum >= lastLogLine {
-							lastLogLine = e.LineNum + 1
-						}
+						lastLogLine = e.LineNum + 1
 					}
 				}
 			}
@@ -1099,7 +1097,7 @@ func (s *Service) findVzdumpPath(ctx context.Context, client *proxmox.Client, no
 	// Look for "creating archive" or the .vma/.tar file path
 	for _, e := range entries {
 		text := e.Text
-		if strings.Contains(text, "/vzdump-") && (strings.Contains(text, ".vma") || strings.Contains(text, ".tar")) {
+		if strings.Contains(text, "/vzdump-") {
 			// Extract the path
 			parts := strings.Fields(text)
 			for _, p := range parts {
@@ -1169,10 +1167,21 @@ func (s *Service) resolvePVENodeName(ctx context.Context, client *proxmox.Client
 		}
 	}
 
-	// Fallback to first node
-	pveNode := pveNodes[0]
-	s.cachePVENodeName(ctx, node, pveNode)
-	return pveNode, nil
+	// Try matching by hostname
+	for _, pn := range pveNodes {
+		if strings.EqualFold(pn, node.Hostname) || strings.HasPrefix(strings.ToLower(node.Hostname), strings.ToLower(pn)) {
+			slog.Info("migration: resolved PVE node by hostname match", slog.String("pve_node", pn), slog.String("hostname", node.Hostname))
+			s.cachePVENodeName(ctx, node, pn)
+			return pn, nil
+		}
+	}
+	// If only one node in cluster, use it (safe assumption)
+	if len(pveNodes) == 1 {
+		slog.Info("migration: single-node cluster, using sole node", slog.String("pve_node", pveNodes[0]))
+		s.cachePVENodeName(ctx, node, pveNodes[0])
+		return pveNodes[0], nil
+	}
+	return "", fmt.Errorf("PVE node name for '%s' could not be resolved. Available PVE nodes: %v. Set the correct name in node metadata", node.Name, pveNodes)
 }
 
 // cachePVENodeName stores the resolved PVE node name in the node's metadata.
@@ -1215,15 +1224,15 @@ func (s *Service) rollbackSourceConfig(ctx context.Context, srcSSHClient *ssh.Cl
 			srcPVENode, cfgDir, vmid, srcPVENode, cfgDir, vmid))
 		return
 	}
-	// Write back the saved config
-	_, _ = srcSSHClient.RunCommand(ctx, fmt.Sprintf(
-		"cat > /etc/pve/nodes/%s/%s/%d.conf << 'CONFIGEOF'\n%s\nCONFIGEOF",
-		srcPVENode, cfgDir, vmid, configBackup))
+	// Write back the saved config using CopyTo to avoid heredoc data corruption
+	path := fmt.Sprintf("/etc/pve/nodes/%s/%s/%d.conf", srcPVENode, cfgDir, vmid)
+	if err := srcSSHClient.CopyTo(ctx, []byte(configBackup), path); err != nil {
+		slog.Warn("migration: rollback source config failed", slog.Any("error", err))
+		return
+	}
 	// Remove backup
-	_, _ = srcSSHClient.RunCommand(ctx, fmt.Sprintf(
-		"rm -f /etc/pve/nodes/%s/%s/%d.conf.mig-backup",
-		srcPVENode, cfgDir, vmid))
-	slog.Info("migration: rolled back source VM config", slog.Int("vmid", vmid))
+	_, _ = srcSSHClient.RunCommand(ctx, fmt.Sprintf("rm -f %s.mig-backup", path))
+	slog.Info("migration: source config restored", slog.Int("vmid", vmid))
 }
 
 func (s *Service) tryRestartSourceVM(ctx context.Context, m *model.VMMigration) {

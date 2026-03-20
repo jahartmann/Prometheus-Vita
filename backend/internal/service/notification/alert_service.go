@@ -74,8 +74,11 @@ func (s *AlertService) evaluateRule(ctx context.Context, rule *model.AlertRule) 
 	}
 
 	// Check cooldown based on duration_seconds
-	if rule.LastTriggeredAt != nil && rule.DurationSeconds > 0 {
+	if rule.LastTriggeredAt != nil {
 		cooldown := time.Duration(rule.DurationSeconds) * time.Second
+		if cooldown < 5*time.Minute {
+			cooldown = 5 * time.Minute // minimum 5min cooldown to prevent spam
+		}
 		if time.Since(*rule.LastTriggeredAt) < cooldown {
 			return
 		}

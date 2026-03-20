@@ -178,17 +178,17 @@ export function ScheduleForm({ onSubmit, isSubmitting }: ScheduleFormProps) {
       </div>
 
       <div className="space-y-2">
-        <Label>Aufbewahrungsdauer: {retentionDays} Tage</Label>
+        <Label>Aufbewahrung: {retentionDays} Backups</Label>
         <Slider
           min={1}
-          max={365}
+          max={90}
           step={1}
-          value={retentionDays}
-          onValueChange={setRetentionDays}
+          value={[retentionDays]}
+          onValueChange={(v) => setRetentionDays(v[0])}
         />
         <div className="flex justify-between text-xs text-muted-foreground">
-          <span>1 Tag</span>
-          <span>365 Tage</span>
+          <span>1 Backup</span>
+          <span>90 Backups</span>
         </div>
       </div>
 

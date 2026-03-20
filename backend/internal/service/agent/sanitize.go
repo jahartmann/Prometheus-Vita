@@ -66,15 +66,47 @@ var dangerousCommandPatterns = regexp.MustCompile(
 		`\bshutdown\b|\breboot\b|\binit\s+0\b|\bpoweroff\b)`,
 )
 
-// ValidateSSHCommand checks that a command does not contain dangerous patterns.
+// allowedCommandPrefixes are commands that are safe to run via the AI agent.
+var allowedCommandPrefixes = []string{
+	"uptime", "df ", "df\n", "free ", "free\n", "top -bn1", "ps ", "ps\n",
+	"cat /var/log/", "cat /etc/", "tail ", "head ", "grep ",
+	"systemctl status", "systemctl list-units", "systemctl is-active",
+	"journalctl ", "dmesg", "uname ", "hostname", "whoami",
+	"ip addr", "ip link", "ip route", "ss ", "netstat ",
+	"lsblk", "blkid", "fdisk -l", "zpool ", "zfs ", "lvs", "vgs", "pvs",
+	"pvesm ", "pveversion", "pvecm ", "qm list", "qm status", "qm config",
+	"pct list", "pct status", "pct config",
+	"apt list", "apt-cache", "dpkg -l", "dpkg --list",
+	"smartctl ", "sensors", "lscpu", "lspci", "lsusb",
+	"ls ", "stat ", "file ", "wc ", "sort ", "uniq ", "awk ", "sed ",
+	"test ", "echo ", "date", "timedatectl", "mount", "findmnt",
+}
+
+// ValidateSSHCommand checks that a command is in the allowlist and does not contain dangerous patterns.
 func ValidateSSHCommand(command string) error {
 	if strings.TrimSpace(command) == "" {
 		return fmt.Errorf("leerer Befehl ist nicht erlaubt")
 	}
 
+	// Always block dangerous patterns regardless of allowlist
 	if dangerousCommandPatterns.MatchString(command) {
 		return fmt.Errorf("Befehl enthaelt potenziell gefaehrliche Ausdruecke und wurde blockiert")
 	}
 
-	return nil
+	// Check if command starts with an allowed prefix
+	trimmed := strings.TrimSpace(command)
+	for _, prefix := range allowedCommandPrefixes {
+		if strings.HasPrefix(trimmed, prefix) || trimmed == strings.TrimSpace(prefix) {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("Befehl '%s' ist nicht in der Liste erlaubter Befehle. Erlaubt sind diagnostische und lesende Befehle", firstWord(trimmed))
+}
+
+func firstWord(s string) string {
+	if i := strings.IndexByte(s, ' '); i > 0 {
+		return s[:i]
+	}
+	return s
 }

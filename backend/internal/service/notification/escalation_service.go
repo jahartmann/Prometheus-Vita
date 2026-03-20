@@ -93,7 +93,10 @@ func (s *EscalationService) processIncident(ctx context.Context, incident *model
 		return
 	}
 
-	// Find next step to execute
+	// Find next steps to execute (allow up to 3 overdue steps per cycle to catch up after restarts)
+	stepsExecuted := 0
+	const maxStepsPerCycle = 3
+
 	for _, step := range policy.Steps {
 		if step.StepOrder <= incident.CurrentStep {
 			continue
@@ -106,6 +109,10 @@ func (s *EscalationService) processIncident(ctx context.Context, incident *model
 		}
 
 		if time.Since(referenceTime) < time.Duration(step.DelaySeconds)*time.Second {
+			break
+		}
+
+		if stepsExecuted >= maxStepsPerCycle {
 			break
 		}
 
@@ -132,7 +139,7 @@ func (s *EscalationService) processIncident(ctx context.Context, incident *model
 			slog.Int("step", step.StepOrder),
 			slog.String("rule", rule.Name))
 
-		break
+		stepsExecuted++
 	}
 }
 
