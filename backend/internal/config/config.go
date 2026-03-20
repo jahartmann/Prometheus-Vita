@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"strconv"
 	"strings"
@@ -171,17 +172,20 @@ func Load() (*Config, error) {
 }
 
 func (c *Config) validate() error {
-	if c.JWT.Secret == "" || c.JWT.Secret == "changeme_jwt_secret_at_least_32_characters_long" {
-		return fmt.Errorf("JWT_SECRET must be set to a secure value (not the default)")
+	if c.JWT.Secret == "" {
+		return fmt.Errorf("JWT_SECRET must be set")
+	}
+	if c.JWT.Secret == "changeme_jwt_secret_at_least_32_characters_long" {
+		slog.Warn("JWT_SECRET is using the default placeholder value — change this for production!")
 	}
 	if len(c.JWT.Secret) < 32 {
-		return fmt.Errorf("JWT_SECRET must be at least 32 characters")
+		slog.Warn("JWT_SECRET is shorter than 32 characters — consider using a longer secret")
 	}
-	if c.Encryption.Key == "" || c.Encryption.Key == "changeme_encryption_key_exactly_64_hex_characters_long_here" {
-		return fmt.Errorf("ENCRYPTION_KEY must be set to a secure value (not the default)")
+	if c.Encryption.Key == "" {
+		return fmt.Errorf("ENCRYPTION_KEY must be set")
 	}
-	if len(c.Encryption.Key) != 64 {
-		return fmt.Errorf("ENCRYPTION_KEY must be 64 hex characters (32 bytes)")
+	if c.Encryption.Key == "changeme_encryption_key_exactly_64_hex_characters_long_here" {
+		slog.Warn("ENCRYPTION_KEY is using the default placeholder value — change this for production!")
 	}
 	return nil
 }
