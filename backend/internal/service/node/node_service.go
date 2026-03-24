@@ -328,6 +328,14 @@ func getCachedPVENode(node *model.Node) string {
 
 // cachePVENode stores the resolved PVE node name in the node's metadata.
 func (s *Service) cachePVENode(ctx context.Context, node *model.Node, pveNode string) {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("cachePVENode goroutine panicked",
+				slog.String("node_id", node.ID.String()),
+				slog.Any("panic", r),
+			)
+		}
+	}()
 	var meta map[string]interface{}
 	if len(node.Metadata) > 0 {
 		if err := json.Unmarshal(node.Metadata, &meta); err != nil {

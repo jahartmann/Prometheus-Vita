@@ -13,6 +13,7 @@ import (
 	"github.com/antigravity/prometheus/internal/model"
 	"github.com/antigravity/prometheus/internal/proxmox"
 	"github.com/antigravity/prometheus/internal/repository"
+	"github.com/antigravity/prometheus/internal/util"
 	"github.com/antigravity/prometheus/internal/service/crypto"
 	"github.com/antigravity/prometheus/internal/service/monitor"
 	"github.com/antigravity/prometheus/internal/ssh"
@@ -51,6 +52,35 @@ func NewService(
 		logRepo:       logRepo,
 		cancels:       make(map[uuid.UUID]context.CancelFunc),
 	}
+}
+
+// RecoverOrphanedMigrations marks all migrations in non-terminal states as failed.
+// This should be called on server startup to clean up migrations that were interrupted
+// by a server restart.
+func (s *Service) RecoverOrphanedMigrations(ctx context.Context) error {
+	nonTerminalStatuses := []string{"pending", "preparing", "backing_up", "transferring", "restoring", "cleaning_up"}
+	migrations, err := s.migrationRepo.ListByStatus(ctx, nonTerminalStatuses)
+	if err != nil {
+		return fmt.Errorf("list orphaned migrations: %w", err)
+	}
+
+	for _, m := range migrations {
+		slog.Warn("recovering orphaned migration",
+			slog.String("id", m.ID.String()),
+			slog.String("status", m.Status),
+		)
+		oldStatus := m.Status
+		m.Status = "failed"
+		m.ErrorMessage = fmt.Sprintf("Migration abgebrochen: Server-Neustart während Status '%s'", oldStatus)
+		if err := s.migrationRepo.Update(ctx, &m); err != nil {
+			slog.Error("failed to recover migration", slog.String("id", m.ID.String()), slog.Any("error", err))
+		}
+	}
+
+	if len(migrations) > 0 {
+		slog.Info("recovered orphaned migrations", slog.Int("count", len(migrations)))
+	}
+	return nil
 }
 
 func (s *Service) StartMigration(ctx context.Context, req model.StartMigrationRequest, userID *uuid.UUID) (*model.VMMigration, error) {
@@ -144,7 +174,9 @@ func (s *Service) StartMigration(ctx context.Context, req model.StartMigrationRe
 	s.cancels[m.ID] = cancel
 	s.mu.Unlock()
 
-	go s.executeMigration(migCtx, m.ID)
+	util.SafeGo("migration-"+m.ID.String(), func() {
+		s.executeMigration(migCtx, m.ID)
+	})
 
 	return m, nil
 }

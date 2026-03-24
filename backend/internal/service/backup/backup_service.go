@@ -194,6 +194,7 @@ func (s *Service) CreateBackup(ctx context.Context, nodeID uuid.UUID, req model.
 
 	// Mark backup as completed
 	if err := s.backupRepo.UpdateCompleted(ctx, backup.ID, len(backupFiles), totalSize); err != nil {
+		s.failBackup(ctx, backup.ID, fmt.Sprintf("update backup completed: %v", err))
 		return nil, fmt.Errorf("update backup completed: %w", err)
 	}
 

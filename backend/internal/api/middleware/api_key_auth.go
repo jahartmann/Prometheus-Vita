@@ -26,7 +26,7 @@ func APIKeyAuth(gatewaySvc *gateway.Service) echo.MiddlewareFunc {
 			// Get user for this token
 			user, err := gatewaySvc.GetUserForToken(c.Request().Context(), token)
 			if err != nil {
-				return next(c)
+				return response.Unauthorized(c, "failed to resolve api key user")
 			}
 
 			// Set context like JWT would

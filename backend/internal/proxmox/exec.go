@@ -80,7 +80,17 @@ func (c *Client) execQEMU(ctx context.Context, node string, vmid int, command []
 
 func (c *Client) waitExecResult(ctx context.Context, node string, vmid int, pid int) (*ExecResult, error) {
 	path := fmt.Sprintf("/nodes/%s/qemu/%d/agent/exec-status?pid=%d", node, vmid, pid)
-	timeout := time.After(30 * time.Second)
+	// Use context deadline if available, otherwise default to 30s
+	deadline, ok := ctx.Deadline()
+	timeoutDur := 30 * time.Second
+	if ok {
+		remaining := time.Until(deadline)
+		if remaining < timeoutDur {
+			timeoutDur = remaining
+		}
+	}
+	timer := time.NewTimer(timeoutDur)
+	defer timer.Stop()
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
 
@@ -95,8 +105,8 @@ func (c *Client) waitExecResult(ctx context.Context, node string, vmid int, pid 
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
-		case <-timeout:
-			return nil, fmt.Errorf("exec timeout after 30s")
+		case <-timer.C:
+			return nil, fmt.Errorf("exec timeout after %s", timeoutDur)
 		case <-ticker.C:
 			data, err := c.doRequest(ctx, http.MethodGet, path)
 			if err != nil {

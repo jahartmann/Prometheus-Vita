@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"runtime/debug"
 	"strings"
+	"sync"
 
 	"github.com/antigravity/prometheus/internal/model"
 	"github.com/antigravity/prometheus/internal/service/auth"
@@ -130,11 +132,22 @@ func (h *LogStreamHandler) HandleWS(c echo.Context) error {
 	// Fan-in all subscription channels into a single merged channel.
 	merged := make(chan model.LogEntry, 256)
 	done := make(chan struct{})
-	defer close(done)
+	var fanWg sync.WaitGroup
 
 	for _, s := range subs {
 		s := s
+		fanWg.Add(1)
 		go func() {
+			defer fanWg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					slog.Error("log stream fan-in goroutine panicked",
+						slog.String("node_id", s.nodeID),
+						slog.Any("panic", r),
+						slog.String("stack", string(debug.Stack())),
+					)
+				}
+			}()
 			for {
 				select {
 				case <-done:
@@ -146,38 +159,45 @@ func (h *LogStreamHandler) HandleWS(c echo.Context) error {
 					select {
 					case merged <- entry:
 					default:
+						// Drop if merged is full
 					}
 				}
 			}
 		}()
 	}
 
-	// Write pump: send entries from merged channel to WebSocket.
-	for {
-		select {
-		case entry := <-merged:
-			// Apply source filter.
-			if len(sourceSet) > 0 {
-				if _, ok := sourceSet[entry.Source]; !ok {
-					continue
-				}
-			}
-			// Apply severity filter.
-			if len(severitySet) > 0 {
-				if _, ok := severitySet[entry.Severity]; !ok {
-					continue
-				}
-			}
+	// Close merged after all fan-in goroutines exit.
+	go func() {
+		fanWg.Wait()
+		close(merged)
+	}()
 
-			msg := logStreamMsg{Type: "log", Data: entry}
-			data, err := json.Marshal(msg)
-			if err != nil {
+	defer close(done)
+
+	// Write pump: send entries from merged channel to WebSocket.
+	for entry := range merged {
+		// Apply source filter.
+		if len(sourceSet) > 0 {
+			if _, ok := sourceSet[entry.Source]; !ok {
 				continue
 			}
-			if err := conn.WriteMessage(websocket.TextMessage, data); err != nil {
-				slog.Debug("log stream ws: write error, closing", slog.Any("error", err))
-				return nil
+		}
+		// Apply severity filter.
+		if len(severitySet) > 0 {
+			if _, ok := severitySet[entry.Severity]; !ok {
+				continue
 			}
 		}
+
+		msg := logStreamMsg{Type: "log", Data: entry}
+		data, err := json.Marshal(msg)
+		if err != nil {
+			continue
+		}
+		if err := conn.WriteMessage(websocket.TextMessage, data); err != nil {
+			slog.Debug("log stream ws: write error, closing", slog.Any("error", err))
+			return nil
+		}
 	}
+	return nil
 }

@@ -27,7 +27,8 @@ type BotService struct {
 	linkRepo        repository.TelegramLinkRepository
 	convRepo        repository.TelegramConversationRepository
 	agentConfigRepo repository.AgentConfigRepository
-	lastOffset      int64
+	lastOffset int64
+	offsetMu   sync.Mutex
 	// pendingConfirmations tracks chatID -> pending action for autonomy level 1
 	confirmMu            sync.Mutex
 	pendingConfirmations map[int64]*pendingAction
@@ -130,8 +131,12 @@ func (s *BotService) getConfiguredModel(ctx context.Context) string {
 
 // PollUpdates fetches new messages from Telegram.
 func (s *BotService) PollUpdates(ctx context.Context) error {
+	s.offsetMu.Lock()
+	offset := s.lastOffset + 1
+	s.offsetMu.Unlock()
+
 	url := fmt.Sprintf("https://api.telegram.org/bot%s/getUpdates?offset=%d&timeout=1&limit=20",
-		s.botToken, s.lastOffset+1)
+		s.botToken, offset)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -155,7 +160,9 @@ func (s *BotService) PollUpdates(ctx context.Context) error {
 	}
 
 	for _, update := range result.Result {
+		s.offsetMu.Lock()
 		s.lastOffset = update.UpdateID
+		s.offsetMu.Unlock()
 		if update.Message != nil && update.Message.Text != "" {
 			s.processUpdate(ctx, update.Message)
 		}

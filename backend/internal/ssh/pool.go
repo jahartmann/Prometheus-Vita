@@ -66,33 +66,36 @@ func (p *Pool) Get(nodeID string, sshCfg SSHConfig) (*Client, error) {
 		lastUsed: time.Now(),
 	}
 
+	p.evictLRU()
+
 	return client, nil
 }
 
 // Return returns a client back to the pool, updating the last used timestamp.
-// A liveness check is performed first; dead connections are discarded.
+// A liveness check is performed under the lock to avoid race conditions;
+// dead connections are discarded atomically.
 func (p *Pool) Return(nodeID string, client *Client) {
-	// Check if connection is still alive before returning to pool
 	if client == nil {
-		return
-	}
-	// Quick liveness check via SSH keepalive
-	_, _, err := client.client.SendRequest("keepalive@prometheus", true, nil)
-	if err != nil {
-		// Connection is dead, close it and don't return to pool
-		_ = client.Close()
-		p.mu.Lock()
-		delete(p.connections, nodeID)
-		p.mu.Unlock()
 		return
 	}
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
+
+	// Liveness check under lock to prevent race between check and pool update
+	_, _, err := client.client.SendRequest("keepalive@prometheus", true, nil)
+	if err != nil {
+		_ = client.Close()
+		delete(p.connections, nodeID)
+		return
+	}
+
 	p.connections[nodeID] = &poolEntry{
 		client:   client,
 		lastUsed: time.Now(),
 	}
+
+	p.evictLRU()
 }
 
 // NewDirect creates a fresh SSH connection bypassing the pool.
@@ -100,6 +103,27 @@ func (p *Pool) Return(nodeID string, client *Client) {
 // like file transfers where pooled connections may be stale.
 func (p *Pool) NewDirect(sshCfg SSHConfig) (*Client, error) {
 	return NewClient(sshCfg)
+}
+
+// evictLRU removes the least-recently-used connections when the pool exceeds
+// MaxConnections. Must be called with p.mu held.
+func (p *Pool) evictLRU() {
+	for len(p.connections) > p.cfg.MaxConnections {
+		var oldestID string
+		var oldestTime time.Time
+		first := true
+		for id, entry := range p.connections {
+			if first || entry.lastUsed.Before(oldestTime) {
+				oldestID = id
+				oldestTime = entry.lastUsed
+				first = false
+			}
+		}
+		if oldestID != "" {
+			_ = p.connections[oldestID].client.Close()
+			delete(p.connections, oldestID)
+		}
+	}
 }
 
 // CloseAll closes all connections in the pool.

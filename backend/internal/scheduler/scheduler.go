@@ -3,6 +3,7 @@ package scheduler
 import (
 	"context"
 	"log/slog"
+	"runtime/debug"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -43,8 +44,17 @@ func (s *Scheduler) Stop() {
 	if s.cancel != nil {
 		s.cancel()
 	}
-	s.wg.Wait()
-	slog.Info("scheduler stopped")
+	done := make(chan struct{})
+	go func() {
+		s.wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		slog.Info("scheduler stopped")
+	case <-time.After(30 * time.Second):
+		slog.Warn("scheduler stop timed out after 30s, forcing shutdown")
+	}
 }
 
 func (s *Scheduler) runJob(ctx context.Context, job Job) {
@@ -80,10 +90,23 @@ func (s *Scheduler) runJob(ctx context.Context, job Job) {
 func (s *Scheduler) safeRun(ctx context.Context, job Job) {
 	defer func() {
 		if r := recover(); r != nil {
-			slog.Error("job panicked", slog.String("job", job.Name()), slog.Any("panic", r))
+			slog.Error("job panicked",
+				slog.String("job", job.Name()),
+				slog.Any("panic", r),
+				slog.String("stack", string(debug.Stack())),
+			)
 		}
 	}()
-	if err := job.Run(ctx); err != nil {
+
+	// Add job-level timeout (5 minutes default, or 2x interval, whichever is larger)
+	timeout := 5 * time.Minute
+	if job.Interval()*2 > timeout {
+		timeout = job.Interval() * 2
+	}
+	jobCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	if err := job.Run(jobCtx); err != nil {
 		slog.Error("job failed", slog.String("job", job.Name()), slog.Any("error", err))
 	}
 }

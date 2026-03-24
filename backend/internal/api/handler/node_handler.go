@@ -80,6 +80,12 @@ func (h *NodeHandler) Create(c echo.Context) error {
 	if !req.Type.IsValid() {
 		return apiPkg.BadRequest(c, "type must be 'pve' or 'pbs'")
 	}
+	if req.Port < 1 || req.Port > 65535 {
+		return apiPkg.BadRequest(c, "port must be between 1 and 65535")
+	}
+	if req.SSHPort != 0 && (req.SSHPort < 1 || req.SSHPort > 65535) {
+		return apiPkg.BadRequest(c, "ssh_port must be between 1 and 65535")
+	}
 
 	node, err := h.service.Create(c.Request().Context(), req)
 	if err != nil {
@@ -126,6 +132,12 @@ func (h *NodeHandler) Update(c echo.Context) error {
 	var req model.UpdateNodeRequest
 	if err := c.Bind(&req); err != nil {
 		return apiPkg.BadRequest(c, "invalid request body")
+	}
+	if req.Port != nil && (*req.Port < 1 || *req.Port > 65535) {
+		return apiPkg.BadRequest(c, "port must be between 1 and 65535")
+	}
+	if req.SSHPort != nil && (*req.SSHPort < 1 || *req.SSHPort > 65535) {
+		return apiPkg.BadRequest(c, "ssh_port must be between 1 and 65535")
 	}
 
 	node, err := h.service.Update(c.Request().Context(), id, req)
@@ -196,7 +208,7 @@ func (h *NodeHandler) GetStorage(c echo.Context) error {
 		slog.Error("handler GetStorage failed",
 			slog.String("node_id", id.String()),
 			slog.Any("error", err))
-		return handleNodeError(c, err, fmt.Sprintf("failed to get storage: %v", err))
+		return handleNodeError(c, err, "failed to get storage")
 	}
 
 	slog.Info("handler GetStorage returning",
@@ -209,7 +221,8 @@ func (h *NodeHandler) GetStorage(c echo.Context) error {
 func (h *NodeHandler) GetClusterStorage(c echo.Context) error {
 	storage, err := h.service.GetClusterStorage(c.Request().Context())
 	if err != nil {
-		return apiPkg.InternalError(c, fmt.Sprintf("failed to get cluster storage: %v", err))
+		slog.Error("failed to get cluster storage", slog.Any("error", err))
+		return apiPkg.InternalError(c, "failed to get cluster storage")
 	}
 
 	return apiPkg.Success(c, storage)
@@ -546,7 +559,7 @@ func (h *NodeHandler) Onboard(c echo.Context) error {
 	node, err := h.service.Onboard(c.Request().Context(), req)
 	if err != nil {
 		slog.Error("failed to onboard node", slog.Any("error", err))
-		return apiPkg.InternalError(c, err.Error())
+		return apiPkg.InternalError(c, "failed to onboard node")
 	}
 
 	return apiPkg.Created(c, node.ToResponse())
@@ -576,6 +589,9 @@ func parseVMParams(c echo.Context) (uuid.UUID, int, string, error) {
 	vmid, err := strconv.Atoi(c.Param("vmid"))
 	if err != nil {
 		return uuid.UUID{}, 0, "", err
+	}
+	if vmid <= 0 {
+		return uuid.UUID{}, 0, "", fmt.Errorf("vmid must be positive")
 	}
 
 	vmType := c.QueryParam("type")
@@ -641,6 +657,9 @@ func (h *NodeHandler) SuspendVM(c echo.Context) error {
 	if err != nil {
 		return apiPkg.BadRequest(c, "invalid vmid")
 	}
+	if vmid <= 0 {
+		return apiPkg.BadRequest(c, "vmid must be positive")
+	}
 
 	upid, err := h.service.SuspendVM(c.Request().Context(), id, vmid)
 	if err != nil {
@@ -659,6 +678,9 @@ func (h *NodeHandler) ResumeVM(c echo.Context) error {
 	vmid, err := strconv.Atoi(c.Param("vmid"))
 	if err != nil {
 		return apiPkg.BadRequest(c, "invalid vmid")
+	}
+	if vmid <= 0 {
+		return apiPkg.BadRequest(c, "vmid must be positive")
 	}
 
 	upid, err := h.service.ResumeVM(c.Request().Context(), id, vmid)

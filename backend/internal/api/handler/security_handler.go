@@ -1,8 +1,6 @@
 package handler
 
 import (
-	"strconv"
-
 	"github.com/antigravity/prometheus/internal/model"
 	"github.com/antigravity/prometheus/internal/repository"
 	"github.com/antigravity/prometheus/internal/service/intelligence"
@@ -33,12 +31,7 @@ func (h *SecurityHandler) ListUnacknowledged(c echo.Context) error {
 }
 
 func (h *SecurityHandler) ListRecent(c echo.Context) error {
-	limit := 50
-	if l := c.QueryParam("limit"); l != "" {
-		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 {
-			limit = parsed
-		}
-	}
+	limit, _ := ParsePagination(c)
 	events, err := h.repo.ListRecent(c.Request().Context(), limit)
 	if err != nil {
 		return apiPkg.InternalError(c, "Fehler beim Abrufen der Security-Events")

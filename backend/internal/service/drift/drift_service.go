@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -72,7 +73,13 @@ func (s *Service) CheckDrift(ctx context.Context, nodeID uuid.UUID) (*model.Drif
 	if err != nil {
 		check.Status = model.DriftStatusFailed
 		check.ErrorMessage = "no backup found for comparison"
-		_ = s.driftRepo.Update(ctx, check)
+		if err := s.driftRepo.Update(ctx, check); err != nil {
+			slog.Error("failed to update drift check status",
+				slog.String("check_id", check.ID.String()),
+				slog.String("status", check.Status),
+				slog.Any("error", err),
+			)
+		}
 		return check, nil
 	}
 
@@ -81,7 +88,13 @@ func (s *Service) CheckDrift(ctx context.Context, nodeID uuid.UUID) (*model.Drif
 	if err != nil {
 		check.Status = model.DriftStatusFailed
 		check.ErrorMessage = fmt.Sprintf("failed to get backup files: %v", err)
-		_ = s.driftRepo.Update(ctx, check)
+		if err := s.driftRepo.Update(ctx, check); err != nil {
+			slog.Error("failed to update drift check status",
+				slog.String("check_id", check.ID.String()),
+				slog.String("status", check.Status),
+				slog.Any("error", err),
+			)
+		}
 		return check, nil
 	}
 
@@ -90,7 +103,13 @@ func (s *Service) CheckDrift(ctx context.Context, nodeID uuid.UUID) (*model.Drif
 	if err != nil {
 		check.Status = model.DriftStatusFailed
 		check.ErrorMessage = "failed to decrypt SSH key"
-		_ = s.driftRepo.Update(ctx, check)
+		if err := s.driftRepo.Update(ctx, check); err != nil {
+			slog.Error("failed to update drift check status",
+				slog.String("check_id", check.ID.String()),
+				slog.String("status", check.Status),
+				slog.Any("error", err),
+			)
+		}
 		return check, nil
 	}
 
@@ -103,7 +122,13 @@ func (s *Service) CheckDrift(ctx context.Context, nodeID uuid.UUID) (*model.Drif
 	if err != nil {
 		check.Status = model.DriftStatusFailed
 		check.ErrorMessage = fmt.Sprintf("SSH connection failed: %v", err)
-		_ = s.driftRepo.Update(ctx, check)
+		if err := s.driftRepo.Update(ctx, check); err != nil {
+			slog.Error("failed to update drift check status",
+				slog.String("check_id", check.ID.String()),
+				slog.String("status", check.Status),
+				slog.Any("error", err),
+			)
+		}
 		return check, nil
 	}
 	defer s.sshPool.Return(nodeID.String(), sshClient)
@@ -113,7 +138,13 @@ func (s *Service) CheckDrift(ctx context.Context, nodeID uuid.UUID) (*model.Drif
 	if err != nil {
 		check.Status = model.DriftStatusFailed
 		check.ErrorMessage = fmt.Sprintf("failed to collect files: %v", err)
-		_ = s.driftRepo.Update(ctx, check)
+		if err := s.driftRepo.Update(ctx, check); err != nil {
+			slog.Error("failed to update drift check status",
+				slog.String("check_id", check.ID.String()),
+				slog.String("status", check.Status),
+				slog.Any("error", err),
+			)
+		}
 		return check, nil
 	}
 
@@ -148,7 +179,14 @@ func (s *Service) CheckDrift(ctx context.Context, nodeID uuid.UUID) (*model.Drif
 		}
 	}
 
-	detailsJSON, _ := json.Marshal(details)
+	detailsJSON, err := json.Marshal(details)
+	if err != nil {
+		slog.Error("failed to marshal drift details",
+			slog.String("check_id", check.ID.String()),
+			slog.Any("error", err),
+		)
+		return nil, fmt.Errorf("marshal drift details: %w", err)
+	}
 
 	check.Status = model.DriftStatusCompleted
 	check.TotalFiles = len(currentFiles)
@@ -172,6 +210,15 @@ func (s *Service) CheckDrift(ctx context.Context, nodeID uuid.UUID) (*model.Drif
 	// Run AI analysis asynchronously if there are changes
 	if (changed + added + removed) > 0 {
 		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					slog.Error("AI drift analysis goroutine panicked",
+						slog.String("check_id", check.ID.String()),
+						slog.Any("panic", r),
+						slog.String("stack", string(debug.Stack())),
+					)
+				}
+			}()
 			bgCtx := context.Background()
 			if err := s.analyzeDriftWithAI(bgCtx, check); err != nil {
 				slog.Warn("AI drift analysis failed",
@@ -325,7 +372,10 @@ Geaenderte Dateien:
 		}
 	}
 
-	enrichedDetailsJSON, _ := json.Marshal(details)
+	enrichedDetailsJSON, err := json.Marshal(details)
+	if err != nil {
+		return fmt.Errorf("marshal enriched drift details: %w", err)
+	}
 
 	// Update the drift check with AI analysis
 	check.AIAnalysis = analysisJSON
@@ -353,7 +403,10 @@ func (s *Service) AcceptBaseline(ctx context.Context, checkID uuid.UUID) error {
 	check.BaselineUpdatedAt = &now
 
 	// Clear the drift details since we accepted them
-	emptyDetails, _ := json.Marshal([]model.DriftFileDetail{})
+	emptyDetails, err := json.Marshal([]model.DriftFileDetail{})
+	if err != nil {
+		return fmt.Errorf("marshal empty details: %w", err)
+	}
 	check.Details = emptyDetails
 	check.ChangedFiles = 0
 	check.AddedFiles = 0
@@ -395,7 +448,10 @@ func (s *Service) IgnoreDrift(ctx context.Context, checkID uuid.UUID, filePath s
 		return fmt.Errorf("file not found in drift details: %s", filePath)
 	}
 
-	detailsJSON, _ := json.Marshal(details)
+	detailsJSON, err := json.Marshal(details)
+	if err != nil {
+		return fmt.Errorf("marshal drift details: %w", err)
+	}
 	check.Details = detailsJSON
 
 	if err := s.driftRepo.Update(ctx, check); err != nil {

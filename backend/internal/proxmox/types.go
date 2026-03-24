@@ -1,5 +1,7 @@
 package proxmox
 
+import "strings"
+
 type NodeStatus struct {
 	Node        string    `json:"node"`
 	Status      string    `json:"status"`
@@ -165,7 +167,11 @@ func (t *TaskStatus) IsRunning() bool {
 }
 
 func (t *TaskStatus) IsSuccess() bool {
-	return t.Status == "stopped" && t.ExitStatus == "OK"
+	return t.Status == "stopped" && (t.ExitStatus == "OK" || strings.HasPrefix(t.ExitStatus, "TASK WARNINGS"))
+}
+
+func (t *TaskStatus) IsSuccessWithWarnings() bool {
+	return t.Status == "stopped" && strings.HasPrefix(t.ExitStatus, "TASK WARNINGS")
 }
 
 type TaskLogEntry struct {

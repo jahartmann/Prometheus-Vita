@@ -2,7 +2,6 @@ package handler
 
 import (
 	"errors"
-	"strconv"
 
 	apiPkg "github.com/antigravity/prometheus/internal/api/response"
 	"github.com/antigravity/prometheus/internal/api/middleware"
@@ -101,8 +100,7 @@ func (h *GatewayHandler) DeleteToken(c echo.Context) error {
 }
 
 func (h *GatewayHandler) ListAuditLog(c echo.Context) error {
-	limit, _ := strconv.Atoi(c.QueryParam("limit"))
-	offset, _ := strconv.Atoi(c.QueryParam("offset"))
+	limit, offset := ParsePagination(c)
 
 	entries, err := h.auditRepo.ListWithAgentActions(c.Request().Context(), limit, offset)
 	if err != nil {

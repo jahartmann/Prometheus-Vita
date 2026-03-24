@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -53,6 +54,15 @@ func (s *Service) Notify(ctx context.Context, eventType, subject, body string) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					slog.Error("notification goroutine panicked",
+						slog.String("channel_id", ch.ID.String()),
+						slog.Any("panic", r),
+						slog.String("stack", string(debug.Stack())),
+					)
+				}
+			}()
 			sendCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 			defer cancel()
 			s.sendToChannel(sendCtx, &ch, eventType, subject, body)

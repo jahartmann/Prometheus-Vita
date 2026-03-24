@@ -47,8 +47,11 @@ func (j *BriefingJob) Run(ctx context.Context) error {
 		return nil
 	}
 
-	j.lastRunDate = today
 	slog.Info("generating morning briefing", slog.Int("hour", j.hour))
 
-	return j.briefingSvc.GenerateBriefing(ctx)
+	if err := j.briefingSvc.GenerateBriefing(ctx); err != nil {
+		return err // lastRunDate NOT set, will retry next tick
+	}
+	j.lastRunDate = today
+	return nil
 }

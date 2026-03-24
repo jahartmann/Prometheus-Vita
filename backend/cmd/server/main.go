@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"syscall"
 	"time"
 
@@ -213,6 +214,11 @@ func main() {
 
 	// Migration Service
 	migrationSvc := migrationService.NewService(migrationRepo, nodeRepo, encryptor, sshPool, clientFactory, wsHub, migrationLogRepo)
+
+	// Recover migrations that were interrupted by a server restart
+	if err := migrationSvc.RecoverOrphanedMigrations(ctx); err != nil {
+		slog.Error("failed to recover orphaned migrations", slog.Any("error", err))
+	}
 
 	// LLM Registry
 	llmRegistry := llm.NewRegistry()
@@ -490,6 +496,15 @@ func main() {
 	slog.Info("server listening", slog.String("addr", addr))
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("server goroutine panicked",
+					slog.Any("panic", r),
+					slog.String("stack", string(debug.Stack())),
+				)
+				os.Exit(1)
+			}
+		}()
 		if err := e.Start(addr); err != nil {
 			slog.Info("server stopped", slog.Any("reason", err))
 		}

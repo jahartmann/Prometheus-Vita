@@ -3,6 +3,7 @@ package middleware
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -47,7 +48,7 @@ func RateLimit(redisClient *redis.Client, cfg RateLimitConfig) echo.MiddlewareFu
 			pipe.Expire(ctx, key, 2*time.Minute)
 
 			if _, err := pipe.Exec(ctx); err != nil {
-				// On Redis error, allow request through
+				slog.Error("rate limit redis error, allowing request", slog.Any("error", err))
 				return next(c)
 			}
 

@@ -22,6 +22,8 @@ type RefreshToken struct {
 	Revoked   bool
 }
 
+var ErrAlreadyRevoked = fmt.Errorf("token already revoked")
+
 type TokenRepository interface {
 	Create(ctx context.Context, userID uuid.UUID, tokenHash string, expiresAt time.Time) error
 	GetByHash(ctx context.Context, tokenHash string) (*RefreshToken, error)
@@ -70,11 +72,14 @@ func (r *pgTokenRepository) GetByHash(ctx context.Context, tokenHash string) (*R
 }
 
 func (r *pgTokenRepository) RevokeByHash(ctx context.Context, tokenHash string) error {
-	_, err := r.db.Exec(ctx,
-		"UPDATE refresh_tokens SET revoked=true WHERE token_hash=$1", tokenHash,
+	tag, err := r.db.Exec(ctx,
+		"UPDATE refresh_tokens SET revoked=true WHERE token_hash=$1 AND revoked=false", tokenHash,
 	)
 	if err != nil {
 		return fmt.Errorf("revoke refresh token: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrAlreadyRevoked
 	}
 	return nil
 }

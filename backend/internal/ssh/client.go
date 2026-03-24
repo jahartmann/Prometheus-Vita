@@ -15,6 +15,7 @@ const defaultTimeout = 60 * time.Second
 // Client wraps an SSH connection and provides methods for remote command execution.
 type Client struct {
 	client *ssh.Client
+	done   chan struct{}
 }
 
 // NewClient establishes an SSH connection using the provided configuration.
@@ -75,19 +76,29 @@ func NewClient(cfg SSHConfig) (*Client, error) {
 
 	client := ssh.NewClient(sshConn, chans, reqs)
 
+	c := &Client{
+		client: client,
+		done:   make(chan struct{}),
+	}
+
 	// Start SSH-level keepalive (sends request every 30s)
 	go func() {
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
-		for range ticker.C {
-			_, _, err := client.SendRequest("keepalive@prometheus", true, nil)
-			if err != nil {
+		for {
+			select {
+			case <-c.done:
 				return
+			case <-ticker.C:
+				_, _, err := client.SendRequest("keepalive@prometheus", true, nil)
+				if err != nil {
+					return
+				}
 			}
 		}
 	}()
 
-	return &Client{client: client}, nil
+	return c, nil
 }
 
 // RunCommand executes a command on the remote host and returns the result.
@@ -171,8 +182,14 @@ func (c *Client) CopyTo(ctx context.Context, data []byte, remotePath string) err
 	}
 }
 
-// Close closes the underlying SSH connection.
+// Close closes the underlying SSH connection and stops the keepalive goroutine.
 func (c *Client) Close() error {
+	select {
+	case <-c.done:
+		// Already closed
+	default:
+		close(c.done)
+	}
 	if c.client != nil {
 		return c.client.Close()
 	}

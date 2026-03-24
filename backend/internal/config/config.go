@@ -2,7 +2,6 @@ package config
 
 import (
 	"fmt"
-	"log/slog"
 	"os"
 	"strconv"
 	"strings"
@@ -176,16 +175,22 @@ func (c *Config) validate() error {
 		return fmt.Errorf("JWT_SECRET must be set")
 	}
 	if c.JWT.Secret == "changeme_jwt_secret_at_least_32_characters_long" {
-		slog.Warn("JWT_SECRET is using the default placeholder value — change this for production!")
+		return fmt.Errorf("JWT_SECRET is using the default placeholder value — change this for production")
 	}
 	if len(c.JWT.Secret) < 32 {
-		slog.Warn("JWT_SECRET is shorter than 32 characters — consider using a longer secret")
+		return fmt.Errorf("JWT_SECRET must be at least 32 characters long (got %d)", len(c.JWT.Secret))
+	}
+	if c.JWT.AccessTokenExpiry <= 0 {
+		return fmt.Errorf("JWT_ACCESS_EXPIRY_MINUTES must be greater than 0")
+	}
+	if c.JWT.RefreshTokenExpiry <= 0 {
+		return fmt.Errorf("JWT_REFRESH_EXPIRY_HOURS must be greater than 0")
 	}
 	if c.Encryption.Key == "" {
 		return fmt.Errorf("ENCRYPTION_KEY must be set")
 	}
 	if c.Encryption.Key == "changeme_encryption_key_exactly_64_hex_characters_long_here" {
-		slog.Warn("ENCRYPTION_KEY is using the default placeholder value — change this for production!")
+		return fmt.Errorf("ENCRYPTION_KEY is using the default placeholder value — change this for production")
 	}
 	return nil
 }

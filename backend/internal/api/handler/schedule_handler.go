@@ -47,7 +47,7 @@ func (h *ScheduleHandler) CreateSchedule(c echo.Context) error {
 	}
 
 	if err := h.cronParser(req.CronExpression); err != nil {
-		return apiPkg.BadRequest(c, "invalid cron expression: "+err.Error())
+		return apiPkg.BadRequest(c, "invalid cron expression")
 	}
 
 	retentionCount := req.RetentionCount
@@ -58,7 +58,7 @@ func (h *ScheduleHandler) CreateSchedule(c echo.Context) error {
 	// Calculate next run time
 	nextRun, err := backup.NextRun(req.CronExpression, time.Now())
 	if err != nil {
-		return apiPkg.BadRequest(c, "failed to calculate next run time: "+err.Error())
+		return apiPkg.BadRequest(c, "failed to calculate next run time")
 	}
 
 	schedule := &model.BackupSchedule{
@@ -117,14 +117,14 @@ func (h *ScheduleHandler) UpdateSchedule(c echo.Context) error {
 
 	if req.CronExpression != nil {
 		if err := h.cronParser(*req.CronExpression); err != nil {
-			return apiPkg.BadRequest(c, "invalid cron expression: "+err.Error())
+			return apiPkg.BadRequest(c, "invalid cron expression")
 		}
 		schedule.CronExpression = *req.CronExpression
 
 		// Recalculate next run
 		nextRun, err := backup.NextRun(*req.CronExpression, time.Now())
 		if err != nil {
-			return apiPkg.BadRequest(c, "failed to calculate next run time: "+err.Error())
+			return apiPkg.BadRequest(c, "failed to calculate next run time")
 		}
 		schedule.NextRunAt = &nextRun
 	}

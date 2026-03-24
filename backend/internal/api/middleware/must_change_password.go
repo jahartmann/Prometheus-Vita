@@ -1,8 +1,6 @@
 package middleware
 
 import (
-	"strings"
-
 	"github.com/antigravity/prometheus/internal/api/response"
 	"github.com/antigravity/prometheus/internal/repository"
 	"github.com/google/uuid"
@@ -14,10 +12,11 @@ import (
 func MustChangePassword(userRepo repository.UserRepository) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			// Allow password-change and auth endpoints through
+			// Allow only password-change, logout, and refresh endpoints through
 			path := c.Request().URL.Path
-			if strings.HasSuffix(path, "/password") ||
-				strings.HasPrefix(path, "/api/v1/auth/") {
+			if path == "/api/v1/auth/logout" ||
+				path == "/api/v1/auth/refresh" ||
+				path == "/api/v1/users/me/password" {
 				return next(c)
 			}
 

@@ -13,4 +13,5 @@ CREATE TABLE IF NOT EXISTS password_policy (
 
 -- Insert default policy
 INSERT INTO password_policy (id, min_length, require_uppercase, require_lowercase, require_digit, require_special, max_length, disallow_username)
-VALUES (gen_random_uuid(), 8, false, false, false, false, 128, true);
+SELECT gen_random_uuid(), 8, false, false, false, false, 128, true
+WHERE NOT EXISTS (SELECT 1 FROM password_policy);

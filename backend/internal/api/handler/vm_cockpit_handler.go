@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"runtime/debug"
 	"strconv"
 	"strings"
 
@@ -109,6 +110,9 @@ func parseCockpitParams(c echo.Context) (uuid.UUID, int, string, uuid.UUID, erro
 	vmid, err := strconv.Atoi(c.Param("vmid"))
 	if err != nil {
 		return uuid.UUID{}, 0, "", uuid.UUID{}, fmt.Errorf("invalid vmid")
+	}
+	if vmid <= 0 {
+		return uuid.UUID{}, 0, "", uuid.UUID{}, fmt.Errorf("vmid must be positive")
 	}
 
 	vmType := c.QueryParam("type")
@@ -512,6 +516,9 @@ func (h *VMCockpitHandler) HandleShell(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid vmid"})
 	}
+	if vmid <= 0 {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "vmid must be positive"})
+	}
 
 	vmType := c.QueryParam("type")
 	if vmType == "" {
@@ -575,6 +582,14 @@ func (h *VMCockpitHandler) HandleShell(c echo.Context) error {
 	// Browser -> Proxmox: wrap xterm.js input in Proxmox framing
 	go func() {
 		defer func() { done <- struct{}{} }()
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("terminal browser->pve goroutine panicked",
+					slog.Any("panic", r),
+					slog.String("stack", string(debug.Stack())),
+				)
+			}
+		}()
 		for {
 			_, msg, err := browserConn.ReadMessage()
 			if err != nil {
@@ -591,6 +606,14 @@ func (h *VMCockpitHandler) HandleShell(c echo.Context) error {
 	// Proxmox -> Browser: forward terminal output directly
 	go func() {
 		defer func() { done <- struct{}{} }()
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("terminal pve->browser goroutine panicked",
+					slog.Any("panic", r),
+					slog.String("stack", string(debug.Stack())),
+				)
+			}
+		}()
 		for {
 			_, msg, err := pveConn.ReadMessage()
 			if err != nil {

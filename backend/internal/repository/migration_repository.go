@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/antigravity/prometheus/internal/model"
 	"github.com/google/uuid"
@@ -15,6 +16,7 @@ type MigrationRepository interface {
 	Create(ctx context.Context, m *model.VMMigration) error
 	GetByID(ctx context.Context, id uuid.UUID) (*model.VMMigration, error)
 	List(ctx context.Context) ([]model.VMMigration, error)
+	ListByStatus(ctx context.Context, statuses []string) ([]model.VMMigration, error)
 	ListByNode(ctx context.Context, nodeID uuid.UUID) ([]model.VMMigration, error)
 	Update(ctx context.Context, m *model.VMMigration) error
 	Delete(ctx context.Context, id uuid.UUID) error
@@ -95,6 +97,45 @@ func (r *pgMigrationRepository) List(ctx context.Context) ([]model.VMMigration, 
 		`SELECT `+migrationColumns+` FROM vm_migrations ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, fmt.Errorf("list migrations: %w", err)
+	}
+	defer rows.Close()
+
+	var migrations []model.VMMigration
+	for rows.Next() {
+		var m model.VMMigration
+		if err := rows.Scan(
+			&m.ID, &m.SourceNodeID, &m.TargetNodeID, &m.VMID, &m.VMName, &m.VMType,
+			&m.Status, &m.Mode, &m.TargetStorage, &m.Progress, &m.CurrentStep,
+			&m.VzdumpFilePath, &m.VzdumpFileSize, &m.VzdumpTaskUPID,
+			&m.TransferBytesSent, &m.TransferSpeedBps,
+			&m.NewVMID, &m.RestoreTaskUPID,
+			&m.CleanupSource, &m.CleanupTarget, &m.ErrorMessage,
+			&m.StartedAt, &m.CompletedAt, &m.CreatedAt, &m.UpdatedAt, &m.InitiatedBy,
+		); err != nil {
+			return nil, fmt.Errorf("scan migration: %w", err)
+		}
+		migrations = append(migrations, m)
+	}
+	return migrations, rows.Err()
+}
+
+func (r *pgMigrationRepository) ListByStatus(ctx context.Context, statuses []string) ([]model.VMMigration, error) {
+	if len(statuses) == 0 {
+		return nil, nil
+	}
+
+	// Build parameterized IN clause
+	params := make([]interface{}, len(statuses))
+	placeholders := make([]string, len(statuses))
+	for i, s := range statuses {
+		params[i] = s
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
+	}
+	query := `SELECT ` + migrationColumns + ` FROM vm_migrations WHERE status IN (` + strings.Join(placeholders, ",") + `) ORDER BY created_at DESC`
+
+	rows, err := r.db.Query(ctx, query, params...)
+	if err != nil {
+		return nil, fmt.Errorf("list migrations by status: %w", err)
 	}
 	defer rows.Close()
 
