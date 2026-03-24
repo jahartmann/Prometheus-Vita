@@ -382,7 +382,7 @@ export default function MigrationsPage() {
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[400px] overflow-y-auto pr-1">
-                {filteredVMs.map((vm) => {
+                {(filteredVMs ?? []).map((vm) => {
                   const isSelected = String(vm.vmid) === selectedVmid;
                   return (
                     <button

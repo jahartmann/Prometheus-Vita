@@ -40,6 +40,7 @@ import { BackupDetailDialog } from "@/components/backup/backup-detail-dialog";
 import { RestoreDialog } from "@/components/backup/restore-dialog";
 import { VzdumpDialog } from "@/components/backup/vzdump-dialog";
 import { ScheduleForm } from "@/components/backup/schedule-form";
+import { toast } from "sonner";
 
 const statusVariant: Record<string, "default" | "success" | "destructive" | "outline"> = {
   pending: "outline",
@@ -98,7 +99,8 @@ export default function BackupsPage() {
       const response = await backupApi.listAll();
       const data = toArray<ConfigBackup>(response.data);
       setBackups(data);
-    } catch {
+    } catch (e) {
+      console.error('Failed to load backups:', e);
       setBackups([]);
     } finally {
       setIsLoading(false);
@@ -118,13 +120,15 @@ export default function BackupsPage() {
           try {
             const res = await scheduleApi.listSchedules(n.id);
             return toArray<BackupSchedule>(res.data).map((s) => ({ ...s, _nodeId: n.id }));
-          } catch {
+          } catch (e) {
+            console.error(`Failed to load schedules for node ${n.id}:`, e);
             return [];
           }
         })
       );
       setAllSchedules(results.flat());
-    } catch {
+    } catch (e) {
+      console.error('Failed to load schedules:', e);
       setAllSchedules([]);
     } finally {
       setSchedulesLoading(false);
@@ -156,8 +160,8 @@ export default function BackupsPage() {
       a.download = `backup-${backupId}.tar.gz`;
       a.click();
       window.URL.revokeObjectURL(url);
-    } catch {
-      /* ignore */
+    } catch (e) {
+      console.error('Failed to download backup:', e);
     }
   };
 
@@ -166,8 +170,9 @@ export default function BackupsPage() {
       await backupApi.deleteBackup(backupId);
       setBackups((prev) => prev.filter((b) => b.id !== backupId));
       setDeleteConfirm(null);
-    } catch {
-      /* ignore */
+      toast.success("Backup geloescht");
+    } catch (e) {
+      console.error('Failed to delete backup:', e);
     }
   };
 
@@ -179,11 +184,12 @@ export default function BackupsPage() {
         backup_type: "manual",
         notes: createNotes || undefined,
       });
+      toast.success("Backup wird erstellt");
       setCreateNotes("");
       setCreateNodeId("");
       loadBackups();
-    } catch {
-      /* ignore */
+    } catch (e) {
+      console.error('Failed to create backup:', e);
     }
     setIsCreating(false);
   };
@@ -197,9 +203,10 @@ export default function BackupsPage() {
         is_active: true,
         retention_count: retentionDays,
       });
+      toast.success("Backup-Zeitplan erstellt");
       loadAllSchedules();
-    } catch {
-      /* ignore */
+    } catch (e) {
+      console.error('Failed to create schedule:', e);
     }
     setIsCreatingSchedule(false);
   };
@@ -207,18 +214,20 @@ export default function BackupsPage() {
   const handleDeleteSchedule = async (id: string) => {
     try {
       await scheduleApi.deleteSchedule(id);
+      toast.success("Zeitplan geloescht");
       loadAllSchedules();
-    } catch {
-      /* ignore */
+    } catch (e) {
+      console.error('Failed to delete schedule:', e);
     }
   };
 
   const handleToggleSchedule = async (schedule: BackupSchedule & { _nodeId: string }) => {
     try {
       await scheduleApi.updateSchedule(schedule.id, { is_active: !schedule.is_active });
+      toast.success(schedule.is_active ? "Zeitplan pausiert" : "Zeitplan aktiviert");
       loadAllSchedules();
-    } catch {
-      /* ignore */
+    } catch (e) {
+      console.error('Failed to toggle schedule:', e);
     }
   };
 

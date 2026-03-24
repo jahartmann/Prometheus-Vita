@@ -1,8 +1,8 @@
 "use client";
 
 import { useTheme } from "next-themes";
-import { useRouter } from "next/navigation";
-import { Moon, Sun, LogOut, User, PanelLeftClose, PanelLeft, Bell } from "lucide-react";
+import { useRouter, usePathname } from "next/navigation";
+import { Moon, Sun, LogOut, User, PanelLeftClose, PanelLeft, Bell, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -17,15 +17,46 @@ import { useAuthStore } from "@/stores/auth-store";
 import { SearchTrigger } from "@/components/search/search-command";
 import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 
+const segmentLabels: Record<string, string> = {
+  nodes: "Nodes",
+  settings: "Einstellungen",
+  backups: "Backups",
+  monitoring: "Monitoring",
+  migrations: "Migrationen",
+  topology: "Topologie",
+  recommendations: "Empfehlungen",
+  "disaster-recovery": "Disaster Recovery",
+  storage: "Speicher",
+  security: "Sicherheit",
+  alerts: "Alerts",
+  drift: "Drift-Erkennung",
+  health: "VM-Gesundheit",
+  tags: "Tags",
+  isos: "ISOs & Vorlagen",
+  reflex: "Reflex-Regeln",
+  dependencies: "Abhaengigkeiten",
+  search: "Suche",
+};
+
 interface HeaderProps {
   collapsed: boolean;
   onToggleCollapse: () => void;
+  onMobileMenuToggle?: () => void;
 }
 
-export function Header({ collapsed, onToggleCollapse }: HeaderProps) {
+export function Header({ collapsed, onToggleCollapse, onMobileMenuToggle }: HeaderProps) {
   const { theme, setTheme } = useTheme();
   const router = useRouter();
+  const pathname = usePathname();
   const { user, logout } = useAuthStore();
+
+  // Derive mobile page title from pathname
+  const mobileTitle = (() => {
+    if (pathname === "/") return "Dashboard";
+    const segments = pathname.split("/").filter(Boolean);
+    const last = segments[segments.length - 1];
+    return segmentLabels[last] || last;
+  })();
 
   const handleLogout = () => {
     logout();
@@ -39,7 +70,12 @@ export function Header({ collapsed, onToggleCollapse }: HeaderProps) {
   return (
     <header className="flex h-14 items-center justify-between border-b bg-card px-4">
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={onToggleCollapse}>
+        {/* Mobile menu button */}
+        <Button variant="ghost" size="icon" className="md:hidden" onClick={onMobileMenuToggle}>
+          <Menu className="h-5 w-5" />
+        </Button>
+        {/* Desktop collapse button */}
+        <Button variant="ghost" size="icon" className="hidden md:inline-flex" onClick={onToggleCollapse}>
           {collapsed ? (
             <PanelLeft className="h-4 w-4" />
           ) : (
@@ -47,6 +83,11 @@ export function Header({ collapsed, onToggleCollapse }: HeaderProps) {
           )}
         </Button>
         <SearchTrigger />
+        {/* Mobile: show current page title */}
+        <span className="md:hidden text-sm font-medium truncate max-w-[200px]">
+          {mobileTitle}
+        </span>
+        {/* Desktop: show breadcrumbs */}
         <div className="hidden md:block">
           <Breadcrumbs />
         </div>

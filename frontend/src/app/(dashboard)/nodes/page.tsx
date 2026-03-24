@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import Link from "next/link";
-import { Server, Plus, Wifi, WifiOff } from "lucide-react";
+import { Server, Plus, Wifi, WifiOff, Circle, CircleOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -98,9 +98,17 @@ export default function NodesPage() {
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <p className="font-medium truncate">{node.name}</p>
-                        <Badge variant={node.is_online ? "success" : "destructive"}>
-                          {node.is_online ? "Online" : "Offline"}
-                        </Badge>
+                        {node.is_online ? (
+                          <Badge variant="success" className="gap-1">
+                            <Circle className="h-2 w-2 fill-current" />
+                            Online
+                          </Badge>
+                        ) : (
+                          <Badge variant="destructive" className="gap-1">
+                            <CircleOff className="h-2 w-2" />
+                            Offline
+                          </Badge>
+                        )}
                       </div>
                       <p className="text-sm text-muted-foreground truncate">
                         {node.hostname}:{node.port}

@@ -20,9 +20,9 @@ export function NodeGrid() {
 
   if (isLoading) {
     return (
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {Array.from({ length: 4 }).map((_, i) => (
-          <Skeleton key={i} className="h-64 rounded-xl" />
+          <Skeleton key={i} className="h-48 md:h-56 lg:h-64 rounded-xl" />
         ))}
       </div>
     );
@@ -40,7 +40,7 @@ export function NodeGrid() {
   }
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+    <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       {nodes.map((node) => (
         <NodeCard
           key={node.id}

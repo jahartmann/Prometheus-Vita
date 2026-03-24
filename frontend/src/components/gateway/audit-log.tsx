@@ -51,6 +51,7 @@ export function AuditLog() {
         </Button>
       </div>
 
+      <div className="overflow-x-auto">
       <Table>
         <TableHeader>
           <TableRow>
@@ -99,6 +100,7 @@ export function AuditLog() {
           )}
         </TableBody>
       </Table>
+      </div>
     </div>
   );
 }

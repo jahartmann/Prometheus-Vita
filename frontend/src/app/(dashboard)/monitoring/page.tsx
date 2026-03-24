@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
-import { Activity, Cpu, MemoryStick, HardDrive, Server, Monitor, Box, RefreshCw, Wifi, WifiOff } from "lucide-react";
+import { Activity, Cpu, MemoryStick, HardDrive, Server, Monitor, Box, RefreshCw } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -10,7 +10,8 @@ import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useNodeStore } from "@/stores/node-store";
-import { formatBytes } from "@/lib/utils";
+import { formatBytes, cn } from "@/lib/utils";
+import { useWebSocket } from "@/hooks/use-websocket";
 import { LiveTraffic } from "@/components/monitoring/live-traffic";
 import { AlertHistory } from "@/components/monitoring/alert-history";
 
@@ -30,6 +31,11 @@ export default function MonitoringPage() {
   const [displayTime, setDisplayTime] = useState("");
   const pollRef = useRef<ReturnType<typeof setInterval>>(undefined);
   const isMountedRef = useRef(true);
+
+  const { isConnected } = useWebSocket({
+    url: "/api/v1/ws",
+    enabled: true,
+  });
 
   const refreshAll = useCallback(async () => {
     await fetchNodes();
@@ -92,12 +98,16 @@ export default function MonitoringPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          {lastUpdated && (
-            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Wifi className="h-3 w-3 text-green-500" />
-              Aktualisiert {displayTime}
-            </span>
-          )}
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <span className={cn(
+              "h-2 w-2 rounded-full",
+              isConnected ? "bg-green-500" : "bg-red-500"
+            )} />
+            <span>{isConnected ? "Live" : "Polling"}</span>
+            {lastUpdated && (
+              <span>&middot; Aktualisiert {displayTime}</span>
+            )}
+          </div>
           <Button
             variant="outline"
             size="sm"

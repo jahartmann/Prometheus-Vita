@@ -77,35 +77,49 @@ export const useNetworkStore = create<NetworkState>()((set) => ({
       const lastQuick = scans.find((s: NetworkScan) => s.scan_type === "quick")?.started_at;
       const lastFull = scans.find((s: NetworkScan) => s.scan_type === "full")?.started_at;
       set({ scans, scanStatus: { lastQuick, lastFull, isScanning: false } });
-    } catch { set({ scans: [], scanStatus: { isScanning: false } }); }
+    } catch (e) {
+      console.error('Failed to fetch scans:', e);
+      set({ scans: [], scanStatus: { isScanning: false } });
+    }
   },
 
   fetchDevices: async (nodeId) => {
     try {
       const res = await networkApi.getDevices(nodeId);
       set({ devices: Array.isArray(res.data) ? res.data : [] });
-    } catch { set({ devices: [] }); }
+    } catch (e) {
+      console.error('Failed to fetch devices:', e);
+      set({ devices: [] });
+    }
   },
 
   fetchAnomalies: async (nodeId) => {
     try {
       const res = await networkApi.getAnomalies(nodeId, { limit: 100 });
       set({ anomalies: Array.isArray(res.data) ? res.data : [] });
-    } catch { set({ anomalies: [] }); }
+    } catch (e) {
+      console.error('Failed to fetch network anomalies:', e);
+      set({ anomalies: [] });
+    }
   },
 
   fetchBaselines: async (nodeId) => {
     try {
       const res = await networkApi.getBaselines(nodeId);
       set({ baselines: Array.isArray(res.data) ? res.data : [] });
-    } catch { set({ baselines: [] }); }
+    } catch (e) {
+      console.error('Failed to fetch baselines:', e);
+      set({ baselines: [] });
+    }
   },
 
   triggerScan: async (nodeId, scanType) => {
     set((state) => ({ scanStatus: { ...state.scanStatus, isScanning: true } }));
     try {
       await networkApi.triggerScan(nodeId, { scan_type: scanType });
-    } catch { /* ignore */ }
+    } catch (e) {
+      console.error('Failed to trigger scan:', e);
+    }
     // Status will update via polling
   },
 
@@ -117,7 +131,9 @@ export const useNetworkStore = create<NetworkState>()((set) => ({
           a.id === id ? { ...a, is_acknowledged: true } : a
         ),
       }));
-    } catch { /* ignore */ }
+    } catch (e) {
+      console.error('Failed to acknowledge network anomaly:', e);
+    }
   },
 
   activateBaseline: async (id) => {
@@ -129,6 +145,8 @@ export const useNetworkStore = create<NetworkState>()((set) => ({
           is_active: b.id === id,
         })),
       }));
-    } catch { /* ignore */ }
+    } catch (e) {
+      console.error('Failed to activate baseline:', e);
+    }
   },
 }));

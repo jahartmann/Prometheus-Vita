@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -35,9 +35,13 @@ export function RRDBandwidth({ nodeId }: RRDBandwidthProps) {
   const [timeframe, setTimeframe] = useState<string>("hour");
   const [loading, setLoading] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const lastFetchRef = useRef(0);
 
   const fetchData = useCallback(async () => {
     if (!nodeId) return;
+    const now = Date.now();
+    if (now - lastFetchRef.current < 5000) return; // 5s cooldown
+    lastFetchRef.current = now;
     setLoading(true);
     try {
       const res = await metricsApi.getNodeRRD(nodeId, timeframe);
@@ -82,7 +86,7 @@ export function RRDBandwidth({ nodeId }: RRDBandwidthProps) {
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold">Bandbreite (Proxmox RRD)</h3>
         <div className="flex items-center gap-2">
-          <div className="flex gap-1">
+          <div className="flex flex-wrap gap-1">
             {timeframes.map((tf) => (
               <Button
                 key={tf.value}
@@ -169,7 +173,7 @@ export function RRDBandwidth({ nodeId }: RRDBandwidthProps) {
               Keine RRD-Daten verfuegbar
             </div>
           ) : (
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={250}>
               <AreaChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                 <XAxis dataKey="time" tick={{ fontSize: 10 }} />

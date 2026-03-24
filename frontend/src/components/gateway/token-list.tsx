@@ -71,6 +71,7 @@ export function TokenList({ refreshKey }: TokenListProps) {
         </Button>
       </div>
 
+      <div className="overflow-x-auto">
       <Table>
         <TableHeader>
           <TableRow>
@@ -146,6 +147,7 @@ export function TokenList({ refreshKey }: TokenListProps) {
           )}
         </TableBody>
       </Table>
+      </div>
     </div>
   );
 }

@@ -75,6 +75,7 @@ interface LogState {
   };
   isAnalyzing: boolean;
   analysisReport: LogAnalysisReport | null;
+  error: string | null;
   maxEntries: number;
 
   addEntry: (entry: LogEntry) => void;
@@ -100,6 +101,7 @@ export const useLogStore = create<LogState>()((set, get) => ({
   filters: { nodeIds: [], sources: [], severities: [], searchRegex: "", timeRange: null },
   isAnalyzing: false,
   analysisReport: null,
+  error: null,
   maxEntries: 10000,
 
   addEntry: (entry) => set((state) => {
@@ -118,21 +120,30 @@ export const useLogStore = create<LogState>()((set, get) => ({
     try {
       const res = await logAnalysisApi.getAnomalies(nodeId, { limit: 100 });
       set({ anomalies: Array.isArray(res.data) ? res.data : [] });
-    } catch { /* ignore */ }
+    } catch (e) {
+      console.error('Failed to fetch anomalies:', e);
+      set({ error: 'Failed to fetch anomalies' });
+    }
   },
 
   fetchBookmarks: async (nodeId) => {
     try {
       const res = await logAnalysisApi.getBookmarks(nodeId);
       set({ bookmarks: Array.isArray(res.data) ? res.data : [] });
-    } catch { /* ignore */ }
+    } catch (e) {
+      console.error('Failed to fetch bookmarks:', e);
+      set({ error: 'Failed to fetch bookmarks' });
+    }
   },
 
   fetchSources: async (nodeId) => {
     try {
       const res = await logAnalysisApi.getSources(nodeId);
       set({ sources: Array.isArray(res.data) ? res.data : [] });
-    } catch { /* ignore */ }
+    } catch (e) {
+      console.error('Failed to fetch sources:', e);
+      set({ error: 'Failed to fetch sources' });
+    }
   },
 
   fetchLogs: async (nodeId, file = "syslog", lines = 200) => {
@@ -170,7 +181,10 @@ export const useLogStore = create<LogState>()((set, get) => ({
         }
         return { entries };
       });
-    } catch { /* ignore */ }
+    } catch (e) {
+      console.error('Failed to fetch logs:', e);
+      set({ error: 'Failed to fetch logs' });
+    }
   },
 
   acknowledgeAnomaly: async (id) => {
@@ -181,7 +195,10 @@ export const useLogStore = create<LogState>()((set, get) => ({
           a.id === id ? { ...a, is_acknowledged: true } : a
         ),
       }));
-    } catch { /* ignore */ }
+    } catch (e) {
+      console.error('Failed to acknowledge anomaly:', e);
+      set({ error: 'Failed to acknowledge anomaly' });
+    }
   },
 
   analyze: async (nodeIds, timeFrom, timeTo, context) => {
@@ -189,8 +206,9 @@ export const useLogStore = create<LogState>()((set, get) => ({
     try {
       const res = await logAnalysisApi.analyze({ node_ids: nodeIds, time_from: timeFrom, time_to: timeTo, context });
       set({ analysisReport: res.data?.report_json ? JSON.parse(res.data.report_json) : res.data, isAnalyzing: false });
-    } catch {
-      set({ isAnalyzing: false });
+    } catch (e) {
+      console.error('Failed to analyze logs:', e);
+      set({ isAnalyzing: false, error: 'Failed to analyze logs' });
     }
   },
 

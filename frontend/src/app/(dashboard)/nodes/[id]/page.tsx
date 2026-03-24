@@ -29,14 +29,19 @@ export default function NodeDetailPage() {
 
   useEffect(() => {
     if (!nodeId) return;
+    const controller = new AbortController();
     const load = () => {
-      fetchNodeStatus(nodeId);
-      fetchNodeVMs(nodeId);
+      fetchNodeStatus(nodeId, { signal: controller.signal }).catch((e: unknown) => {
+        if (e instanceof Error && e.name === 'CanceledError') return;
+      });
+      fetchNodeVMs(nodeId, { signal: controller.signal }).catch((e: unknown) => {
+        if (e instanceof Error && e.name === 'CanceledError') return;
+      });
     };
     const token = useAuthStore.getState().accessToken;
     if (token) {
       load();
-      return;
+      return () => controller.abort();
     }
     const unsub = useAuthStore.subscribe((state) => {
       if (state.accessToken) {
@@ -44,7 +49,7 @@ export default function NodeDetailPage() {
         unsub();
       }
     });
-    return () => unsub();
+    return () => { controller.abort(); unsub(); };
   }, [nodeId, fetchNodeStatus, fetchNodeVMs]);
 
   const node = nodes.find((n) => n.id === nodeId);

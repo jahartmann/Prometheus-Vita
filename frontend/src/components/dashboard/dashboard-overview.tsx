@@ -28,7 +28,7 @@ export function DashboardOverview() {
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 grid-cols-2 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
           title="Server"
           value={nodes.length}

@@ -25,7 +25,7 @@ type SortDir = "asc" | "desc";
 function MiniSparkline({ data, color }: { data: Array<{ v: number }>; color: string }) {
   if (data.length < 2) return null;
   return (
-    <div className="h-6 w-16">
+    <div className="h-8 w-20">
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={data}>
           <Area
