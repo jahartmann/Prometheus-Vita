@@ -118,6 +118,7 @@ func (s *Service) CheckDrift(ctx context.Context, nodeID uuid.UUID) (*model.Drif
 		Port:       node.SSHPort,
 		User:       node.SSHUser,
 		PrivateKey: privateKey,
+		HostKey:    node.SSHHostKey,
 	})
 	if err != nil {
 		check.Status = model.DriftStatusFailed
@@ -499,6 +500,7 @@ func (s *Service) CompareNodes(ctx context.Context, req model.CompareNodesReques
 			Port:       node.SSHPort,
 			User:       node.SSHUser,
 			PrivateKey: privateKey,
+			HostKey:    node.SSHHostKey,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("SSH to node %s: %w", node.Name, err)

@@ -4,18 +4,27 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"log/slog"
 	"net"
+	"strings"
 	"time"
 
 	"golang.org/x/crypto/ssh"
 )
 
+// ShellQuote wraps a string in single quotes for safe use in POSIX shell commands.
+// Single quotes prevent ALL shell interpretation including $(), ``, etc.
+func ShellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
+}
+
 const defaultTimeout = 60 * time.Second
 
 // Client wraps an SSH connection and provides methods for remote command execution.
 type Client struct {
-	client *ssh.Client
-	done   chan struct{}
+	client  *ssh.Client
+	done    chan struct{}
+	hostKey string // server host key in authorized_keys format, captured during handshake
 }
 
 // NewClient establishes an SSH connection using the provided configuration.
@@ -49,10 +58,17 @@ func NewClient(cfg SSHConfig) (*Client, error) {
 		return nil, fmt.Errorf("no authentication method provided")
 	}
 
+	// Build host key verification callback (TOFU pattern).
+	var capturedHostKey string
+	hostKeyCallback, err := buildHostKeyCallback(cfg.Host, cfg.HostKey, &capturedHostKey)
+	if err != nil {
+		return nil, fmt.Errorf("build host key callback: %w", err)
+	}
+
 	sshConfig := &ssh.ClientConfig{
 		User:            user,
 		Auth:            authMethods,
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		HostKeyCallback: hostKeyCallback,
 		Timeout:         timeout,
 	}
 
@@ -77,8 +93,9 @@ func NewClient(cfg SSHConfig) (*Client, error) {
 	client := ssh.NewClient(sshConn, chans, reqs)
 
 	c := &Client{
-		client: client,
-		done:   make(chan struct{}),
+		client:  client,
+		done:    make(chan struct{}),
+		hostKey: capturedHostKey,
 	}
 
 	// Start SSH-level keepalive (sends request every 30s)
@@ -141,7 +158,7 @@ func (c *Client) RunCommand(ctx context.Context, cmd string) (*CommandResult, er
 
 // CopyFrom reads the contents of a remote file.
 func (c *Client) CopyFrom(ctx context.Context, remotePath string) ([]byte, error) {
-	result, err := c.RunCommand(ctx, fmt.Sprintf("cat %q", remotePath))
+	result, err := c.RunCommand(ctx, "cat "+ShellQuote(remotePath))
 	if err != nil {
 		return nil, fmt.Errorf("copy from %s: %w", remotePath, err)
 	}
@@ -167,7 +184,7 @@ func (c *Client) CopyTo(ctx context.Context, data []byte, remotePath string) err
 	done := make(chan error, 1)
 	go func() {
 		tmpPath := remotePath + ".prometheus-tmp"
-		done <- session.Run(fmt.Sprintf("cat > %q && mv %q %q", tmpPath, tmpPath, remotePath))
+		done <- session.Run("cat > " + ShellQuote(tmpPath) + " && mv " + ShellQuote(tmpPath) + " " + ShellQuote(remotePath))
 	}()
 
 	select {
@@ -180,6 +197,49 @@ func (c *Client) CopyTo(ctx context.Context, data []byte, remotePath string) err
 		}
 		return nil
 	}
+}
+
+// GetHostKey returns the remote server's SSH host key in authorized_keys format
+// (e.g. "ssh-ed25519 AAAA..."). Useful for persisting the key after a TOFU connection.
+func (c *Client) GetHostKey() string {
+	return c.hostKey
+}
+
+// buildHostKeyCallback creates an ssh.HostKeyCallback implementing Trust-On-First-Use (TOFU).
+// If expectedKey is non-empty, it parses the key and verifies the server presents it exactly.
+// If expectedKey is empty, any key is accepted and a warning is logged. In both cases, the
+// server's key (in authorized_keys format) is written to capturedKey for later persistence.
+func buildHostKeyCallback(host, expectedKey string, capturedKey *string) (ssh.HostKeyCallback, error) {
+	if expectedKey != "" {
+		// Parse the trusted host key and verify against it.
+		trustedKey, _, _, _, err := ssh.ParseAuthorizedKey([]byte(expectedKey))
+		if err != nil {
+			return nil, fmt.Errorf("parse expected host key: %w", err)
+		}
+
+		return func(hostname string, remote net.Addr, key ssh.PublicKey) error {
+			*capturedKey = strings.TrimSpace(string(ssh.MarshalAuthorizedKey(key)))
+			if key.Type() != trustedKey.Type() || !bytes.Equal(key.Marshal(), trustedKey.Marshal()) {
+				return fmt.Errorf(
+					"ssh host key mismatch for %s: expected %s, got %s",
+					host,
+					ssh.FingerprintSHA256(trustedKey),
+					ssh.FingerprintSHA256(key),
+				)
+			}
+			return nil
+		}, nil
+	}
+
+	// TOFU: no known key — accept and log a warning.
+	return func(hostname string, remote net.Addr, key ssh.PublicKey) error {
+		*capturedKey = strings.TrimSpace(string(ssh.MarshalAuthorizedKey(key)))
+		slog.Warn("accepting unverified SSH host key (TOFU)",
+			slog.String("host", host),
+			slog.String("fingerprint", ssh.FingerprintSHA256(key)),
+		)
+		return nil
+	}, nil
 }
 
 // Close closes the underlying SSH connection and stops the keepalive goroutine.

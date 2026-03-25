@@ -163,16 +163,15 @@ func (s *Service) CreateBackup(ctx context.Context, nodeID uuid.UUID, req model.
 		}
 
 		content := cf.Content
+		isEncrypted := false
 		if s.encryptor != nil {
 			encryptedContent, encErr := s.encryptor.Encrypt(string(content))
 			if encErr != nil {
-				slog.Warn("failed to encrypt backup file, storing plaintext",
-					slog.String("path", cf.Path),
-					slog.Any("error", encErr),
-				)
-			} else {
-				content = []byte(encryptedContent)
+				s.failBackup(ctx, backup.ID, fmt.Sprintf("Verschlüsselung fehlgeschlagen für %s: %v", cf.Path, encErr))
+				return nil, fmt.Errorf("encrypt backup file %s: %w", cf.Path, encErr)
 			}
+			content = []byte(encryptedContent)
+			isEncrypted = true
 		}
 
 		backupFiles = append(backupFiles, model.BackupFile{
@@ -183,6 +182,7 @@ func (s *Service) CreateBackup(ctx context.Context, nodeID uuid.UUID, req model.
 			FilePermissions:  cf.Permissions,
 			FileOwner:        cf.Owner,
 			Content:          content,
+			IsEncrypted:      isEncrypted,
 			DiffFromPrevious: diffStr,
 		})
 	}
@@ -265,11 +265,15 @@ func (s *Service) GetBackupFile(ctx context.Context, backupID uuid.UUID, filePat
 	if err != nil {
 		return nil, err
 	}
-	if s.encryptor != nil && len(file.Content) > 0 {
-		decrypted, decErr := s.encryptor.Decrypt(string(file.Content))
-		if decErr == nil {
-			file.Content = []byte(decrypted)
+	if file.IsEncrypted && len(file.Content) > 0 {
+		if s.encryptor == nil {
+			return nil, fmt.Errorf("Backup verschlüsselt, aber kein Entschlüsselungskey konfiguriert")
 		}
+		decrypted, decErr := s.encryptor.Decrypt(string(file.Content))
+		if decErr != nil {
+			return nil, fmt.Errorf("Entschlüsselung fehlgeschlagen — möglicherweise wurde der Encryption-Key rotiert: %w", decErr)
+		}
+		file.Content = []byte(decrypted)
 	}
 	return file, nil
 }
@@ -323,9 +327,10 @@ func (s *Service) DiffBackup(ctx context.Context, backupID uuid.UUID) ([]FileDif
 // credentials.
 func (s *Service) buildSSHConfig(node *model.Node) (ssh.SSHConfig, error) {
 	cfg := ssh.SSHConfig{
-		Host: node.Hostname,
-		Port: node.SSHPort,
-		User: node.SSHUser,
+		Host:    node.Hostname,
+		Port:    node.SSHPort,
+		User:    node.SSHUser,
+		HostKey: node.SSHHostKey,
 	}
 
 	if node.SSHPrivateKey != "" {
@@ -395,11 +400,15 @@ func (s *Service) getCollectedFilesFromBackup(ctx context.Context, backupID uuid
 			continue
 		}
 		content := fullFile.Content
-		if s.encryptor != nil {
-			decrypted, decErr := s.encryptor.Decrypt(string(content))
-			if decErr == nil {
-				content = []byte(decrypted)
+		if fullFile.IsEncrypted && len(content) > 0 {
+			if s.encryptor == nil {
+				return nil, fmt.Errorf("Backup-Datei %s ist verschlüsselt, aber kein Entschlüsselungskey konfiguriert", fullFile.FilePath)
 			}
+			decrypted, decErr := s.encryptor.Decrypt(string(content))
+			if decErr != nil {
+				return nil, fmt.Errorf("Entschlüsselung fehlgeschlagen für %s — möglicherweise wurde der Encryption-Key rotiert: %w", fullFile.FilePath, decErr)
+			}
+			content = []byte(decrypted)
 		}
 		collected = append(collected, CollectedFile{
 			Path:        fullFile.FilePath,

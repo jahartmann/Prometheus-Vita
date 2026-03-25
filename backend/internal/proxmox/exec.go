@@ -34,7 +34,15 @@ type ExecResult struct {
 }
 
 // ExecCommand runs a command inside a VM/container via Proxmox API.
+// For LXC containers, this uses the pct exec API endpoint.
+// For QEMU VMs, this requires the qemu-guest-agent to be installed and running inside the VM.
 func (c *Client) ExecCommand(ctx context.Context, node string, vmid int, vmType string, command []string) (*ExecResult, error) {
+	if err := validateVMType(vmType); err != nil {
+		return nil, err
+	}
+	if len(command) == 0 {
+		return nil, fmt.Errorf("command darf nicht leer sein")
+	}
 	if vmType == "lxc" {
 		return c.execLXC(ctx, node, vmid, command)
 	}
@@ -63,7 +71,9 @@ func (c *Client) execQEMU(ctx context.Context, node string, vmid int, command []
 	params.Set("command", strings.Join(command, " "))
 	data, err := c.doRequestWithBody(ctx, http.MethodPost, path, params)
 	if err != nil {
-		return nil, fmt.Errorf("exec qemu command: %w", err)
+		// The client layer already detects "guest agent not running" in doRequestWithBody.
+		// Add VM context for better error messages upstream.
+		return nil, fmt.Errorf("exec auf QEMU VM %d: %w", vmid, err)
 	}
 	inner := unwrapAgentResult(data)
 	var pidResp struct {
@@ -101,17 +111,25 @@ func (c *Client) waitExecResult(ctx context.Context, node string, vmid int, pid 
 		ErrData  string `json:"err-data"`
 	}
 
+	consecutiveErrors := 0
+	const maxConsecutiveErrors = 5 // Tolerate transient polling failures
+
 	for {
 		select {
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return nil, fmt.Errorf("exec auf VM %d abgebrochen (PID %d): %w", vmid, pid, ctx.Err())
 		case <-timer.C:
-			return nil, fmt.Errorf("exec timeout after %s", timeoutDur)
+			return nil, fmt.Errorf("exec timeout nach %s für VM %d (PID %d). Der Befehl läuft möglicherweise noch im Hintergrund", timeoutDur, vmid, pid)
 		case <-ticker.C:
 			data, err := c.doRequest(ctx, http.MethodGet, path)
 			if err != nil {
-				return nil, fmt.Errorf("poll exec status: %w", err)
+				consecutiveErrors++
+				if consecutiveErrors >= maxConsecutiveErrors {
+					return nil, fmt.Errorf("exec status nach %d Versuchen nicht abrufbar (VM %d, PID %d): %w", maxConsecutiveErrors, vmid, pid, err)
+				}
+				continue
 			}
+			consecutiveErrors = 0
 			inner := unwrapAgentResult(data)
 			var status execStatus
 			if err := json.Unmarshal(inner, &status); err != nil {

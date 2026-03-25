@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -20,6 +22,28 @@ import (
 	"github.com/google/uuid"
 )
 
+// Shell-safe validation patterns to prevent command injection via user-controlled values
+// that end up in SSH/SCP commands executed on Proxmox hosts.
+var (
+	// validStorageName matches Proxmox storage identifiers (alphanumeric, hyphens, underscores)
+	validStorageName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$`)
+	// validHostname matches RFC-1123 hostnames and IPv4 addresses
+	validHostname = regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9.\-]{0,251}[a-zA-Z0-9])?$`)
+	// validSSHUser matches standard Unix usernames
+	validSSHUser = regexp.MustCompile(`^[a-z_][a-z0-9_-]{0,31}$`)
+	// validVzdumpPath matches safe vzdump file paths (no shell metacharacters)
+	validVzdumpPath = regexp.MustCompile(`^/[a-zA-Z0-9/_.\-]+$`)
+)
+
+// shellQuote wraps a string in single quotes for safe use in POSIX shell commands.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
+}
+
+// maxMigrationDuration is the absolute maximum time a migration can run before being cancelled.
+// This prevents stuck migrations from consuming resources indefinitely.
+const maxMigrationDuration = 6 * time.Hour
+
 type Service struct {
 	migrationRepo repository.MigrationRepository
 	nodeRepo      repository.NodeRepository
@@ -31,6 +55,9 @@ type Service struct {
 
 	mu        sync.Mutex
 	cancels   map[uuid.UUID]context.CancelFunc
+	// activeVMs tracks VMIDs that are currently being migrated to prevent parallel migrations
+	// of the same VM (which would cause VMID conflicts in Proxmox clusters).
+	activeVMs map[int]uuid.UUID
 }
 
 func NewService(
@@ -51,6 +78,7 @@ func NewService(
 		wsHub:         wsHub,
 		logRepo:       logRepo,
 		cancels:       make(map[uuid.UUID]context.CancelFunc),
+		activeVMs:     make(map[int]uuid.UUID),
 	}
 }
 
@@ -80,25 +108,57 @@ func (s *Service) RecoverOrphanedMigrations(ctx context.Context) error {
 	if len(migrations) > 0 {
 		slog.Info("recovered orphaned migrations", slog.Int("count", len(migrations)))
 	}
+
+	// Clear any stale VMID locks from a previous server instance
+	s.mu.Lock()
+	s.activeVMs = make(map[int]uuid.UUID)
+	s.cancels = make(map[uuid.UUID]context.CancelFunc)
+	s.mu.Unlock()
+
 	return nil
 }
 
 func (s *Service) StartMigration(ctx context.Context, req model.StartMigrationRequest, userID *uuid.UUID) (*model.VMMigration, error) {
 	if req.SourceNodeID == req.TargetNodeID {
-		return nil, fmt.Errorf("source and target node must differ")
+		return nil, fmt.Errorf("Quell- und Ziel-Node müssen sich unterscheiden")
 	}
 	if req.VMID <= 0 {
-		return nil, fmt.Errorf("invalid vmid")
+		return nil, fmt.Errorf("ungültige VMID: %d", req.VMID)
 	}
 	if req.TargetStorage == "" {
-		return nil, fmt.Errorf("target_storage is required")
+		return nil, fmt.Errorf("target_storage ist erforderlich")
 	}
 	if req.Mode == "" {
 		req.Mode = model.MigrationModeSnapshot
 	}
 	if !req.Mode.IsValid() {
-		return nil, fmt.Errorf("invalid migration mode: %s", req.Mode)
+		return nil, fmt.Errorf("ungültiger Migrationsmodus: %s (erlaubt: stop, snapshot, suspend)", req.Mode)
 	}
+
+	// VMID-Lock: Prevent parallel migrations of the same VM.
+	// We reserve the VMID slot atomically here. If validation fails later, we release it.
+	s.mu.Lock()
+	if existingMigID, active := s.activeVMs[req.VMID]; active {
+		s.mu.Unlock()
+		return nil, fmt.Errorf("VM %d wird bereits migriert (Migration %s). Parallele Migrationen derselben VM sind nicht erlaubt", req.VMID, existingMigID)
+	}
+	// Reserve VMID with a placeholder UUID (will be updated with real migration ID later)
+	placeholderID := uuid.New()
+	s.activeVMs[req.VMID] = placeholderID
+	s.mu.Unlock()
+
+	// Release VMID lock if validation fails (deferred cleanup)
+	vmidReserved := true
+	defer func() {
+		if vmidReserved {
+			s.mu.Lock()
+			// Only delete if still our placeholder (not replaced by real migration)
+			if s.activeVMs[req.VMID] == placeholderID {
+				delete(s.activeVMs, req.VMID)
+			}
+			s.mu.Unlock()
+		}
+	}()
 
 	// Validate nodes exist
 	sourceNode, err := s.nodeRepo.GetByID(ctx, req.SourceNodeID)
@@ -141,7 +201,12 @@ func (s *Service) StartMigration(ctx context.Context, req model.StartMigrationRe
 		}
 	}
 	if vmInfo == nil {
-		return nil, fmt.Errorf("VM %d not found on node %s", req.VMID, sourceNode.Name)
+		return nil, fmt.Errorf("VM %d nicht auf Node %s gefunden", req.VMID, sourceNode.Name)
+	}
+
+	// LXC containers do not support Proxmox suspend mode — block early with clear error
+	if vmInfo.Type == "lxc" && req.Mode == model.MigrationModeSuspend {
+		return nil, fmt.Errorf("LXC-Container unterstützen keinen Suspend-Modus. Bitte 'stop' oder 'snapshot' verwenden")
 	}
 
 	vmid := req.VMID
@@ -168,26 +233,42 @@ func (s *Service) StartMigration(ctx context.Context, req model.StartMigrationRe
 		return nil, fmt.Errorf("create migration record: %w", err)
 	}
 
-	// Start async execution
-	migCtx, cancel := context.WithCancel(context.Background())
+	// Start async execution with overall timeout to prevent stuck migrations
+	migCtx, cancel := context.WithTimeout(context.Background(), maxMigrationDuration)
 	s.mu.Lock()
 	s.cancels[m.ID] = cancel
+	s.activeVMs[m.VMID] = m.ID // Replace placeholder with real migration ID
 	s.mu.Unlock()
+	vmidReserved = false // Prevent defer from cleaning up — SafeGo will handle it
 
 	util.SafeGo("migration-"+m.ID.String(), func() {
+		defer func() {
+			cancel() // Release timeout context resources
+			s.mu.Lock()
+			delete(s.activeVMs, m.VMID)
+			delete(s.cancels, m.ID)
+			s.mu.Unlock()
+		}()
 		s.executeMigration(migCtx, m.ID)
 	})
 
 	return m, nil
 }
 
-func (s *Service) CancelMigration(ctx context.Context, id uuid.UUID) error {
+func (s *Service) CancelMigration(ctx context.Context, id uuid.UUID, userID *uuid.UUID, isAdmin bool) error {
 	m, err := s.migrationRepo.GetByID(ctx, id)
 	if err != nil {
 		return err
 	}
 	if m.Status.IsTerminal() {
 		return fmt.Errorf("migration already in terminal state: %s", m.Status)
+	}
+
+	// Ownership check: only the initiator or an admin may cancel a migration
+	if !isAdmin {
+		if userID == nil || m.InitiatedBy == nil || *userID != *m.InitiatedBy {
+			return fmt.Errorf("nur der Ersteller oder ein Admin darf diese Migration abbrechen")
+		}
 	}
 
 	s.mu.Lock()
@@ -227,11 +308,7 @@ func (s *Service) DeleteMigration(ctx context.Context, id uuid.UUID) error {
 
 // executeMigration runs the 5-phase migration pipeline.
 func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
-	defer func() {
-		s.mu.Lock()
-		delete(s.cancels, migrationID)
-		s.mu.Unlock()
-	}()
+	// NOTE: Cleanup of s.cancels and s.activeVMs is done in the SafeGo wrapper in StartMigration.
 
 	m, err := s.migrationRepo.GetByID(ctx, migrationID)
 	if err != nil {
@@ -247,10 +324,15 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 	// Error handler: update status + restart VM if needed
 	handleError := func(phase string, err error) {
 		slog.Error("migration failed", slog.String("phase", phase), slog.Any("error", err))
-		if ctx.Err() == context.Canceled {
+		switch {
+		case ctx.Err() == context.Canceled:
 			m.Status = model.MigrationStatusCancelled
 			m.ErrorMessage = "Migration vom Benutzer abgebrochen"
-		} else {
+		case ctx.Err() == context.DeadlineExceeded:
+			m.Status = model.MigrationStatusFailed
+			m.ErrorMessage = fmt.Sprintf("Migration Timeout: Maximale Laufzeit von %s überschritten in Phase '%s'. "+
+				"Die Migration wurde abgebrochen. Bitte Netzwerk-Geschwindigkeit und Speicherplatz prüfen.", maxMigrationDuration, phase)
+		default:
 			m.Status = model.MigrationStatusFailed
 			m.ErrorMessage = fmt.Sprintf("%s: %v", phase, err)
 		}
@@ -356,6 +438,84 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 	defer s.sshPool.Return(targetNode.ID.String(), tgtSSHClient)
 	s.broadcastLog(m.ID, "✓ SSH zu Target verbunden")
 
+	// 1b. Validate SSH credentials format (prevent command injection via DB-stored values)
+	tgtHost := targetNode.Hostname
+	tgtPort := targetNode.SSHPort
+	if tgtPort == 0 {
+		tgtPort = 22
+	}
+	tgtUser := targetNode.SSHUser
+	if tgtUser == "" {
+		tgtUser = "root"
+	}
+	if !validHostname.MatchString(tgtHost) {
+		handleError("preflight", fmt.Errorf("ungültiger Hostname für Target-Node: %q. Hostname darf nur Buchstaben, Zahlen, Punkte und Bindestriche enthalten", tgtHost))
+		return
+	}
+	if !validSSHUser.MatchString(tgtUser) {
+		handleError("preflight", fmt.Errorf("ungültiger SSH-Benutzername für Target-Node: %q. Erlaubt: Kleinbuchstaben, Zahlen, Unterstrich, Bindestrich", tgtUser))
+		return
+	}
+	if !validStorageName.MatchString(m.TargetStorage) {
+		handleError("preflight", fmt.Errorf("ungültiger Storage-Name: %q. Erlaubt: Buchstaben, Zahlen, Unterstrich, Bindestrich", m.TargetStorage))
+		return
+	}
+
+	// 1c. Set up known_hosts for secure node-to-node SSH/SCP.
+	// If we have the target's SSH host key, write it to a temp file on source for StrictHostKeyChecking=yes.
+	// Otherwise, fall back to accept-new (TOFU) which is still better than =no.
+	hostKeyOpts := "-o StrictHostKeyChecking=accept-new"
+	knownHostsCleanup := ""
+	if targetNode.SSHHostKey != "" {
+		knownHostsFile := fmt.Sprintf("/tmp/.prometheus-known-hosts-%s", m.ID.String())
+		// Write the target host key to a temporary known_hosts file on the source node.
+		// Format: [hostname]:port ssh-rsa AAAA... (or just hostname if port 22)
+		hostEntry := tgtHost
+		if tgtPort != 22 {
+			hostEntry = fmt.Sprintf("[%s]:%d", tgtHost, tgtPort)
+		}
+		knownHostsContent := fmt.Sprintf("%s %s\n", hostEntry, strings.TrimSpace(targetNode.SSHHostKey))
+		writeResult, writeErr := srcSSHClient.RunCommand(ctx, fmt.Sprintf("printf '%%s' %s > %s && chmod 600 %s",
+			shellQuote(knownHostsContent), shellQuote(knownHostsFile), shellQuote(knownHostsFile)))
+		if writeErr == nil && writeResult != nil && writeResult.ExitCode == 0 {
+			hostKeyOpts = fmt.Sprintf("-o StrictHostKeyChecking=yes -o UserKnownHostsFile=%s", shellQuote(knownHostsFile))
+			knownHostsCleanup = knownHostsFile
+			s.broadcastLog(m.ID, "✓ SSH-Hostkey des Targets verifiziert (StrictHostKeyChecking=yes)")
+		} else {
+			slog.Warn("migration: could not write known_hosts file, falling back to accept-new",
+				slog.Any("error", writeErr))
+			s.broadcastLog(m.ID, "⚠ Konnte known_hosts nicht schreiben, verwende accept-new")
+		}
+	} else {
+		s.broadcastLog(m.ID, "⚠ Kein SSH-Hostkey für Target gespeichert, verwende accept-new (TOFU)")
+	}
+	// Clean up known_hosts file when done (deferred)
+	if knownHostsCleanup != "" {
+		defer func() {
+			_, _ = srcSSHClient.RunCommand(context.Background(), "rm -f "+shellQuote(knownHostsCleanup))
+		}()
+	}
+
+	// 1d. Check node-to-node SSH connectivity (required for SCP transfer)
+	s.broadcastLog(m.ID, "Prüfe SSH-Verbindung zwischen Source und Target (für SCP-Transfer)...")
+	sshCheckCmd := fmt.Sprintf("ssh %s -o ConnectTimeout=10 -o BatchMode=yes -p %d %s@%s echo ok 2>&1",
+		hostKeyOpts, tgtPort, tgtUser, tgtHost)
+	sshCheckResult, sshCheckErr := srcSSHClient.RunCommand(ctx, sshCheckCmd)
+	if sshCheckErr != nil || sshCheckResult == nil || !strings.Contains(sshCheckResult.Stdout, "ok") {
+		errDetail := "unbekannt"
+		if sshCheckErr != nil {
+			errDetail = sshCheckErr.Error()
+		} else if sshCheckResult != nil {
+			errDetail = sshCheckResult.Stdout + sshCheckResult.Stderr
+		}
+		handleError("preflight", fmt.Errorf(
+			"SSH von Source (%s) zu Target (%s) fehlgeschlagen. SCP-Transfer benötigt SSH-Konnektivität zwischen den Nodes. "+
+				"Bitte SSH-Key des Source-Nodes auf dem Target autorisieren (z.B. ssh-copy-id). Detail: %s",
+			sourceNode.Name, targetNode.Name, errDetail))
+		return
+	}
+	s.broadcastLog(m.ID, "✓ SSH zwischen Source und Target funktioniert")
+
 	// 2. Get VM info to check disk size
 	s.broadcastLog(m.ID, fmt.Sprintf("Prüfe VM %d...", m.VMID))
 	vms, err := srcClient.GetVMs(ctx, srcPVENode)
@@ -375,9 +535,30 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 		handleError("preflight", fmt.Errorf("VM %d nicht auf Source-Node gefunden", m.VMID))
 		return
 	}
+
+	// Check VM configuration for migration compatibility
+	warnings, blocker := s.checkVMCompatibility(ctx, srcClient, srcPVENode, m.VMID, m.VMType, m.Mode, srcSSHClient, vmInfo.Status)
+	for _, w := range warnings {
+		s.broadcastLog(m.ID, fmt.Sprintf("⚠ %s", w))
+	}
+	if blocker != nil {
+		handleError("preflight", blocker)
+		return
+	}
+
 	// Use actual disk usage (not allocated size) for space estimates.
 	// vzdump with zstd compresses to ~50% of used data.
+	// Prefer config-based disk size calculation (sums all disk volumes) over the reported Disk field,
+	// which is 0 for stopped VMs.
 	vmDiskUsed := vmInfo.Disk
+	vmConfig, configErr := srcClient.GetVMConfig(ctx, srcPVENode, m.VMID, m.VMType)
+	if configErr == nil {
+		configDiskSize := parseVMDiskSizes(vmConfig)
+		if configDiskSize > 0 {
+			vmDiskUsed = configDiskSize
+			s.broadcastLog(m.ID, fmt.Sprintf("  Disk-Größe aus VM-Config: %s (Summe aller Volumes)", formatBytesLog(configDiskSize)))
+		}
+	}
 	if vmDiskUsed <= 0 {
 		vmDiskUsed = vmInfo.MaxDisk
 	}
@@ -516,6 +697,15 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 		s.broadcastLog(m.ID, fmt.Sprintf("✓ %d CD/ISO-Laufwerk(e) temporär entfernt (werden nach Backup wiederhergestellt)", len(detachedMedia)))
 	}
 
+	// Re-check vzdump storage free space right before backup (disk may have filled up since pre-flight)
+	currentVzdumpFree := s.getDiskFree(ctx, srcSSHClient, vzdumpStorage)
+	if currentVzdumpFree > 0 && estimatedBackupSize > 0 && currentVzdumpFree < estimatedBackupSize {
+		handleError("backing_up", fmt.Errorf("Vzdump-Storage '%s' hat nicht mehr genug Platz: benötigt ~%s, verfügbar %s. "+
+			"Speicherplatz wurde seit Pre-Flight-Check belegt",
+			vzdumpStorage, formatBytesLog(estimatedBackupSize), formatBytesLog(currentVzdumpFree)))
+		return
+	}
+
 	s.broadcastLog(m.ID, fmt.Sprintf("Starte vzdump Backup (Mode: %s, Compress: zstd, Storage: %s)...", m.Mode, vzdumpStorage))
 
 	vzdumpOpts := proxmox.VzdumpOptions{
@@ -555,7 +745,7 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 	s.broadcastLog(m.ID, fmt.Sprintf("Backup-Datei: %s", vzdumpPath))
 
 	// Get file size
-	sizeResult, err := srcSSHClient.RunCommand(ctx, fmt.Sprintf("stat -c %%s %q", vzdumpPath))
+	sizeResult, err := srcSSHClient.RunCommand(ctx, "stat -c %s "+shellQuote(vzdumpPath))
 	if err == nil && sizeResult.ExitCode == 0 {
 		var fileSize int64
 		fmt.Sscanf(strings.TrimSpace(sizeResult.Stdout), "%d", &fileSize)
@@ -582,14 +772,18 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 	// Find a vzdump-capable storage on target with enough space for the actual backup
 	targetDumpDir := "/var/lib/vz/dump" // default
 	tgtVzdumpStorage := s.findVzdumpStorage(ctx, tgtClient, tgtPVENode, tgtSSHClient, totalSize)
-	if tgtVzdumpStorage != "" {
-		// Resolve the actual filesystem path for this storage
+	if tgtVzdumpStorage != "" && validStorageName.MatchString(tgtVzdumpStorage) {
+		// Resolve the actual filesystem path for this storage (storageName validated above)
 		pathResult, pathErr := tgtSSHClient.RunCommand(ctx, fmt.Sprintf("pvesm path %s:backup/test.vma 2>/dev/null | sed 's|/test.vma$||'", tgtVzdumpStorage))
 		if pathErr == nil && pathResult.ExitCode == 0 && strings.TrimSpace(pathResult.Stdout) != "" {
 			resolvedPath := strings.TrimSpace(pathResult.Stdout)
-			mkdirResult, _ := tgtSSHClient.RunCommand(ctx, fmt.Sprintf("mkdir -p %q && test -w %q && echo ok", resolvedPath, resolvedPath))
-			if mkdirResult != nil && strings.TrimSpace(mkdirResult.Stdout) == "ok" {
-				targetDumpDir = resolvedPath
+			// Validate resolved path has no shell metacharacters before using in mkdir
+			if validVzdumpPath.MatchString(resolvedPath) {
+				safePath := shellQuote(resolvedPath)
+				mkdirResult, _ := tgtSSHClient.RunCommand(ctx, fmt.Sprintf("mkdir -p %s && test -w %s && echo ok", safePath, safePath))
+				if mkdirResult != nil && strings.TrimSpace(mkdirResult.Stdout) == "ok" {
+					targetDumpDir = resolvedPath
+				}
 			}
 		}
 		s.broadcastLog(m.ID, fmt.Sprintf("Verwende Target-Dump-Verzeichnis: %s (Storage: %s)", targetDumpDir, tgtVzdumpStorage))
@@ -599,21 +793,15 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 	targetVzdumpPath := targetDumpDir + "/" + vzdumpFilename
 
 	// Ensure target directory exists
-	_, _ = tgtSSHClient.RunCommand(ctx, fmt.Sprintf("mkdir -p %q", targetDumpDir))
+	_, _ = tgtSSHClient.RunCommand(ctx, "mkdir -p "+shellQuote(targetDumpDir))
 
 	// Transfer via scp directly between nodes (bypasses Docker networking limitations)
-	tgtHost := targetNode.Hostname
-	tgtPort := targetNode.SSHPort
-	if tgtPort == 0 {
-		tgtPort = 22
-	}
-	tgtUser := targetNode.SSHUser
-	if tgtUser == "" {
-		tgtUser = "root"
-	}
-
-	scpCmd := fmt.Sprintf("scp -o StrictHostKeyChecking=no -o ConnectTimeout=30 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -P %d %q %s@%s:%q",
-		tgtPort, vzdumpPath, tgtUser, tgtHost, targetVzdumpPath)
+	// tgtHost, tgtPort, tgtUser are already resolved in the pre-flight phase above.
+	// SECURITY: Use shellQuote for paths to prevent injection via crafted filenames.
+	// tgtUser and tgtHost are validated against strict regexes in pre-flight phase.
+	// hostKeyOpts uses StrictHostKeyChecking=yes with known_hosts when available.
+	scpCmd := fmt.Sprintf("scp %s -o ConnectTimeout=30 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -P %d %s %s@%s:%s",
+		hostKeyOpts, tgtPort, shellQuote(vzdumpPath), tgtUser, tgtHost, shellQuote(targetVzdumpPath))
 
 	s.broadcastLog(m.ID, fmt.Sprintf("Starte Transfer: %s → %s (%s)", sourceNode.Name, targetNode.Name, formatBytesLog(totalSize)))
 	s.broadcastLog(m.ID, "Transfer via scp direkt zwischen Nodes...")
@@ -631,6 +819,11 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 		return
 	}
 	scpPID := strings.TrimSpace(pidResult.Stdout)
+	// Validate PID is numeric to prevent injection
+	if _, err := strconv.Atoi(scpPID); err != nil {
+		handleError("transferring", fmt.Errorf("ungültige PID von scp: %q", scpPID))
+		return
+	}
 	s.broadcastLog(m.ID, fmt.Sprintf("scp gestartet (PID: %s)", scpPID))
 
 	// Poll progress by checking file size on target
@@ -648,7 +841,7 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 		case <-ctx.Done():
 			// Kill scp on cancel
 			_, _ = srcSSHClient.RunCommand(context.Background(), fmt.Sprintf("kill %s 2>/dev/null", scpPID))
-			_, _ = tgtSSHClient.RunCommand(context.Background(), fmt.Sprintf("rm -f %q", targetVzdumpPath))
+			_, _ = tgtSSHClient.RunCommand(context.Background(), "rm -f "+shellQuote(targetVzdumpPath))
 			if ctx.Err() == context.Canceled {
 				m.Status = model.MigrationStatusCancelled
 				m.ErrorMessage = "Migration vom Benutzer abgebrochen"
@@ -687,7 +880,7 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 			scpRunning := checkResult != nil && strings.TrimSpace(checkResult.Stdout) == "0"
 
 			// Get current file size on target (tolerate errors)
-			statResult, _ := tgtSSHClient.RunCommand(ctx, fmt.Sprintf("stat -c %%s %q 2>/dev/null", targetVzdumpPath))
+			statResult, _ := tgtSSHClient.RunCommand(ctx, "stat -c %s "+shellQuote(targetVzdumpPath)+" 2>/dev/null")
 			var currentSize int64
 			if statResult != nil && statResult.ExitCode == 0 {
 				fmt.Sscanf(strings.TrimSpace(statResult.Stdout), "%d", &currentSize)
@@ -728,7 +921,7 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 				// Verify file size matches (with retries for slow filesystems)
 				var finalSize int64
 				for retry := 0; retry < 3; retry++ {
-					finalStatResult, _ := tgtSSHClient.RunCommand(ctx, fmt.Sprintf("stat -c %%s %q 2>/dev/null", targetVzdumpPath))
+					finalStatResult, _ := tgtSSHClient.RunCommand(ctx, "stat -c %s "+shellQuote(targetVzdumpPath)+" 2>/dev/null")
 					if finalStatResult != nil && finalStatResult.ExitCode == 0 {
 						fmt.Sscanf(strings.TrimSpace(finalStatResult.Stdout), "%d", &finalSize)
 						if finalSize >= totalSize || totalSize == 0 {
@@ -745,7 +938,7 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 					if logResult != nil {
 						scpLog = logResult.Stdout
 					}
-					_, _ = tgtSSHClient.RunCommand(ctx, fmt.Sprintf("rm -f %q", targetVzdumpPath))
+					_, _ = tgtSSHClient.RunCommand(ctx, "rm -f "+shellQuote(targetVzdumpPath))
 					handleError("transferring", fmt.Errorf("scp fehlgeschlagen (nur %s von %s übertragen). Log: %s",
 						formatBytesLog(finalSize), formatBytesLog(totalSize), scpLog))
 					return
@@ -756,6 +949,27 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 			}
 		}
 	}
+
+	// Verify file integrity via checksum
+	s.broadcastLog(m.ID, "Prüfe Datei-Integrität via SHA256...")
+	srcShaResult, srcShaErr := srcSSHClient.RunCommand(ctx, "sha256sum "+shellQuote(vzdumpPath)+" | awk '{print $1}'")
+	tgtShaResult, tgtShaErr := tgtSSHClient.RunCommand(ctx, "sha256sum "+shellQuote(targetVzdumpPath)+" | awk '{print $1}'")
+
+	if srcShaErr == nil && tgtShaErr == nil && srcShaResult != nil && tgtShaResult != nil {
+		srcHash := strings.TrimSpace(srcShaResult.Stdout)
+		tgtHash := strings.TrimSpace(tgtShaResult.Stdout)
+		if srcHash != "" && tgtHash != "" && srcHash != tgtHash {
+			// Checksum mismatch — file corrupted during transfer
+			_, _ = tgtSSHClient.RunCommand(ctx, "rm -f "+shellQuote(targetVzdumpPath))
+			handleError("transferring", fmt.Errorf("Prüfsummenfehler! Source: %s, Target: %s. Datei wurde während des Transfers beschädigt", srcHash[:16]+"...", tgtHash[:16]+"..."))
+			return
+		}
+		s.broadcastLog(m.ID, fmt.Sprintf("✓ Prüfsumme stimmt überein (SHA256: %s...)", srcHash[:16]))
+	} else {
+		// Checksum couldn't be verified — warn but continue (sha256sum might not be available)
+		s.broadcastLog(m.ID, "⚠ Prüfsummenverifikation nicht möglich — sha256sum nicht verfügbar")
+	}
+
 	s.broadcastLog(m.ID, fmt.Sprintf("✓ Transfer abgeschlossen: %s übertragen", formatBytesLog(m.TransferBytesSent)))
 	s.updatePhase(ctx, m, model.MigrationStatusTransferring, "Transfer abgeschlossen", 80)
 
@@ -811,7 +1025,7 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 	if err != nil {
 		// Restore source config on failure
 		s.rollbackSourceConfig(ctx, srcSSHClient, srcPVENode, m.VMID, m.VMType, sourceConfigBackup)
-		_, _ = tgtSSHClient.RunCommand(ctx, fmt.Sprintf("rm -f %q", targetVzdumpPath))
+		_, _ = tgtSSHClient.RunCommand(ctx, "rm -f "+shellQuote(targetVzdumpPath))
 		handleError("restoring", fmt.Errorf("restore konnte nicht gestartet werden: %w", err))
 		return
 	}
@@ -823,7 +1037,7 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 		taskLog := s.getTaskLogForError(ctx, tgtClient, tgtPVENode, restoreUPID)
 		// Restore source config on failure
 		s.rollbackSourceConfig(ctx, srcSSHClient, srcPVENode, m.VMID, m.VMType, sourceConfigBackup)
-		_, _ = tgtSSHClient.RunCommand(ctx, fmt.Sprintf("rm -f %q", targetVzdumpPath))
+		_, _ = tgtSSHClient.RunCommand(ctx, "rm -f "+shellQuote(targetVzdumpPath))
 		handleError("restoring", fmt.Errorf("restore fehlgeschlagen: %w\n\nTask-Log:\n%s", err, taskLog))
 		return
 	}
@@ -839,19 +1053,50 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 	// Delete vzdump on target
 	if m.CleanupTarget {
 		s.broadcastLog(m.ID, "Lösche Backup-Datei auf Target...")
-		_, _ = tgtSSHClient.RunCommand(ctx, fmt.Sprintf("rm -f %q", targetVzdumpPath))
+		if cleanResult, cleanErr := tgtSSHClient.RunCommand(ctx, "rm -f "+shellQuote(targetVzdumpPath)); cleanErr != nil {
+			s.broadcastLog(m.ID, fmt.Sprintf("⚠ Backup auf Target konnte nicht gelöscht werden: %v", cleanErr))
+		} else if cleanResult != nil && cleanResult.ExitCode != 0 {
+			s.broadcastLog(m.ID, fmt.Sprintf("⚠ Backup auf Target konnte nicht gelöscht werden (exit %d): %s", cleanResult.ExitCode, cleanResult.Stderr))
+		} else {
+			s.broadcastLog(m.ID, "✓ Backup auf Target gelöscht")
+		}
 	}
 
 	// Delete vzdump on source
 	if m.CleanupSource {
 		s.broadcastLog(m.ID, "Lösche Backup-Datei auf Source...")
-		_, _ = srcSSHClient.RunCommand(ctx, fmt.Sprintf("rm -f %q", vzdumpPath))
+		if cleanResult, cleanErr := srcSSHClient.RunCommand(ctx, "rm -f "+shellQuote(vzdumpPath)); cleanErr != nil {
+			s.broadcastLog(m.ID, fmt.Sprintf("⚠ Backup auf Source konnte nicht gelöscht werden: %v", cleanErr))
+		} else if cleanResult != nil && cleanResult.ExitCode != 0 {
+			s.broadcastLog(m.ID, fmt.Sprintf("⚠ Backup auf Source konnte nicht gelöscht werden (exit %d): %s", cleanResult.ExitCode, cleanResult.Stderr))
+		} else {
+			s.broadcastLog(m.ID, "✓ Backup auf Source gelöscht")
+		}
 	}
 
-	// Resume source VM if suspended
-	if m.Mode == model.MigrationModeSuspend {
-		s.broadcastLog(m.ID, "Setze Source-VM fort...")
-		_, _ = srcClient.ResumeVM(ctx, srcPVENode, m.VMID)
+	// Also clean up the vzdump log/notes file (Proxmox creates these alongside the archive)
+	if m.CleanupSource {
+		notesPath := strings.TrimSuffix(vzdumpPath, ".zst") + ".log"
+		_, _ = srcSSHClient.RunCommand(ctx, "rm -f "+shellQuote(notesPath)+" "+shellQuote(vzdumpPath+".notes"))
+	}
+	if m.CleanupTarget {
+		notesPath := strings.TrimSuffix(targetVzdumpPath, ".zst") + ".log"
+		_, _ = tgtSSHClient.RunCommand(ctx, "rm -f "+shellQuote(notesPath)+" "+shellQuote(targetVzdumpPath+".notes"))
+	}
+
+	// Resume source VM if suspended — but only if a different VMID was used on target.
+	// If same VMID: the source config was unregistered (moved to target), so there's nothing to resume.
+	if m.Mode == model.MigrationModeSuspend && m.NewVMID != nil && *m.NewVMID != m.VMID {
+		s.broadcastLog(m.ID, "Setze Source-VM fort (neues VMID auf Target, Source bleibt bestehen)...")
+		if _, err := srcClient.ResumeVM(ctx, srcPVENode, m.VMID); err != nil {
+			slog.Warn("migration: konnte Source-VM nach Migration nicht fortsetzen",
+				slog.Int("vmid", m.VMID), slog.Any("error", err))
+			s.broadcastLog(m.ID, fmt.Sprintf("⚠ Source-VM konnte nicht fortgesetzt werden: %v", err))
+		} else {
+			s.broadcastLog(m.ID, "✓ Source-VM fortgesetzt")
+		}
+	} else if m.Mode == model.MigrationModeSuspend {
+		s.broadcastLog(m.ID, "Source-VM nicht fortgesetzt (VMID wurde zum Target verschoben)")
 	}
 
 	// Mark completed
@@ -1117,7 +1362,13 @@ func (s *Service) findVzdumpStorageWithDiskCheck(ctx context.Context, client *pr
 
 // getDiskFree returns the actual free disk space in bytes for a Proxmox storage via SSH df.
 func (s *Service) getDiskFree(ctx context.Context, sshClient *ssh.Client, storageName string) int64 {
-	// Try to resolve the storage path via pvesm
+	// SECURITY: Validate storage name before using in shell command to prevent injection.
+	if !validStorageName.MatchString(storageName) {
+		slog.Warn("migration: invalid storage name for disk check, skipping",
+			slog.String("storage", storageName))
+		return 0
+	}
+	// Try to resolve the storage path via pvesm (storageName is validated above)
 	result, err := sshClient.RunCommand(ctx, fmt.Sprintf(
 		"df -B1 $(pvesm path %s: 2>/dev/null || echo /var/lib/vz/dump) 2>/dev/null | tail -1 | awk '{print $4}'",
 		storageName))
@@ -1133,12 +1384,12 @@ func (s *Service) getDiskFree(ctx context.Context, sshClient *ssh.Client, storag
 	return freeSpace
 }
 
-// findVzdumpStorage finds a storage capable of holding vzdump backups (without disk check).
-// Used for target-side checks where SSH access may not be needed.
+// findVzdumpStorage finds a backup-capable storage with enough space for the estimated backup size.
+// Returns the storage name with the most available space that fits, or "" if none found.
 func (s *Service) findVzdumpStorage(ctx context.Context, client *proxmox.Client, pveNode string, sshClient *ssh.Client, estimatedSize int64) string {
 	storages, err := client.GetStorage(ctx, pveNode)
 	if err != nil {
-		return "local"
+		return ""
 	}
 
 	type candidate struct {
@@ -1153,17 +1404,24 @@ func (s *Service) findVzdumpStorage(ctx context.Context, client *proxmox.Client,
 		}
 	}
 
-	if len(candidates) > 0 {
-		best := candidates[0]
-		for _, c := range candidates[1:] {
-			if c.available > best.available {
-				best = c
-			}
+	// Pick the storage with the most available space that can hold the backup
+	var best *candidate
+	for i := range candidates {
+		c := &candidates[i]
+		// Skip storages that don't have enough space (if we know the estimated size)
+		if estimatedSize > 0 && c.available > 0 && c.available < estimatedSize {
+			continue
 		}
+		if best == nil || c.available > best.available {
+			best = c
+		}
+	}
+
+	if best != nil {
 		return best.name
 	}
 
-	return "local"
+	return ""
 }
 
 // detachMissingMedia checks VM config for CD/ISO drives and temporarily removes them
@@ -1215,26 +1473,49 @@ func (s *Service) restoreMedia(ctx context.Context, client *proxmox.Client, node
 }
 
 func (s *Service) findVzdumpPath(ctx context.Context, client *proxmox.Client, node string, upid string) (string, error) {
-	entries, err := client.GetTaskLog(ctx, node, upid, 0)
-	if err != nil {
-		return "", err
+	// Retry log fetching a few times since the log may not be immediately complete
+	var entries []proxmox.TaskLogEntry
+	var err error
+	for attempt := 0; attempt < 3; attempt++ {
+		entries, err = client.GetTaskLog(ctx, node, upid, 0)
+		if err == nil && len(entries) > 0 {
+			break
+		}
+		time.Sleep(2 * time.Second)
 	}
-	// Look for "creating archive" or the .vma/.tar file path
+	if err != nil {
+		return "", fmt.Errorf("task log abrufen: %w", err)
+	}
+
+	// Look for vzdump archive paths. Proxmox logs these in various formats:
+	// "creating archive '/var/lib/vz/dump/vzdump-qemu-100-2024_01_15-10_30_00.vma.zst'"
+	// "creating vzdump archive '/path/to/vzdump-lxc-101-...'"
+	// "INFO: archive file size: 1.23GB"
 	for _, e := range entries {
 		text := e.Text
 		if strings.Contains(text, "/vzdump-") {
-			// Extract the path
 			parts := strings.Fields(text)
 			for _, p := range parts {
 				if strings.Contains(p, "/vzdump-") {
-					// Clean up path (remove quotes, trailing chars)
-					p = strings.Trim(p, "'\"")
-					return p, nil
+					// Clean up path (remove quotes, trailing commas, colons)
+					p = strings.Trim(p, "'\",:;")
+					// Validate it looks like a real path AND contains no shell metacharacters
+					// (this path will be used in SSH commands on Proxmox hosts)
+					if strings.HasPrefix(p, "/") && (strings.Contains(p, ".vma") || strings.Contains(p, ".tar")) {
+						if !validVzdumpPath.MatchString(p) {
+							slog.Warn("migration: rejected vzdump path with unsafe characters",
+								slog.String("path", p))
+							continue
+						}
+						return p, nil
+					}
 				}
 			}
 		}
 	}
-	return "", fmt.Errorf("vzdump file path not found in task log")
+	return "", fmt.Errorf("vzdump-Dateipfad nicht im Task-Log gefunden. "+
+		"Möglicherweise wurde das Backup in einem unerwarteten Verzeichnis gespeichert. "+
+		"Bitte die Proxmox-Task-Logs prüfen (UPID: %s)", upid)
 }
 
 func (s *Service) getSSHConfig(node *model.Node) (ssh.SSHConfig, error) {
@@ -1257,6 +1538,7 @@ func (s *Service) getSSHConfig(node *model.Node) (ssh.SSHConfig, error) {
 		Port:       port,
 		User:       user,
 		PrivateKey: privateKey,
+		HostKey:    node.SSHHostKey,
 	}, nil
 }
 
@@ -1390,6 +1672,192 @@ func listStorageNames(storages []proxmox.StorageInfo) string {
 		names = append(names, s.Storage)
 	}
 	return strings.Join(names, ", ")
+}
+
+// checkVMCompatibility reads the VM config and checks for features that are incompatible
+// with migration or require special handling (PCI passthrough, EFI disk, TPM, HA, snapshots,
+// linked clones, cloud-init). Returns warnings (informational) and a blocker error (migration
+// must be aborted).
+func (s *Service) checkVMCompatibility(ctx context.Context, client *proxmox.Client, pveNode string, vmid int, vmType string, mode model.MigrationMode, sshClient *ssh.Client, vmStatus string) (warnings []string, blocker error) {
+	config, err := client.GetVMConfig(ctx, pveNode, vmid, vmType)
+	if err != nil {
+		// Non-fatal: we can't check compatibility but shouldn't block migration
+		slog.Warn("migration: could not read VM config for compatibility check", slog.Any("error", err))
+		warnings = append(warnings, "VM-Konfiguration konnte nicht gelesen werden — Kompatibilitätsprüfung übersprungen")
+		return warnings, nil
+	}
+
+	// 1. PCI Passthrough check (hostpci0, hostpci1, ...)
+	for i := 0; i < 16; i++ {
+		key := fmt.Sprintf("hostpci%d", i)
+		if val, ok := config[key].(string); ok && val != "" {
+			if mode == model.MigrationModeSnapshot {
+				return warnings, fmt.Errorf("VM hat PCI-Passthrough konfiguriert (%s). Snapshot-Modus nicht möglich — bitte 'stop' verwenden", key)
+			}
+			warnings = append(warnings, fmt.Sprintf("VM hat PCI-Passthrough (%s: %s) — Gerät muss auf Ziel-Node verfügbar sein", key, val))
+		}
+	}
+
+	// 2. EFI Disk
+	if val, ok := config["efidisk0"].(string); ok && val != "" {
+		warnings = append(warnings, "VM hat EFI-Disk — wird mit migriert")
+	}
+
+	// 3. TPM State
+	if val, ok := config["tpmstate0"].(string); ok && val != "" {
+		warnings = append(warnings, "VM hat TPM-State — Verschlüsselungskeys könnten nach Migration ungültig sein")
+	}
+
+	// 4. HA Configuration (check via SSH)
+	if sshClient != nil {
+		haResult, haErr := sshClient.RunCommand(ctx, fmt.Sprintf("ha-manager status 2>/dev/null | grep 'vm:%d\\|ct:%d'", vmid, vmid))
+		if haErr == nil && haResult != nil && haResult.ExitCode == 0 && strings.TrimSpace(haResult.Stdout) != "" {
+			return warnings, fmt.Errorf("VM ist in HA-Konfiguration — bitte HA zuerst deaktivieren (ha-manager remove vm:%d)", vmid)
+		}
+	}
+
+	// 5. Snapshots
+	snapshots, snapErr := client.ListSnapshots(ctx, pveNode, vmid, vmType)
+	if snapErr == nil {
+		realSnapshots := 0
+		for _, snap := range snapshots {
+			if snap.Name != "current" {
+				realSnapshots++
+			}
+		}
+		if realSnapshots > 0 {
+			warnings = append(warnings, fmt.Sprintf("VM hat %d Snapshot(s) — diese werden NICHT migriert und gehen verloren", realSnapshots))
+		}
+	}
+
+	// 6. Linked Clones (VM config has a "parent" key)
+	if val, ok := config["parent"].(string); ok && val != "" {
+		return warnings, fmt.Errorf("VM ist ein Linked Clone (parent: %s) — kann nicht ohne Base-Image migriert werden", val)
+	}
+
+	// 7. Cloud-Init Drive (typically ide2 or another ide/sata with "cloudinit" in value)
+	driveKeys := []string{"ide0", "ide1", "ide2", "ide3", "sata0", "sata1", "sata2", "sata3", "scsi0", "scsi1"}
+	for _, key := range driveKeys {
+		if val, ok := config[key].(string); ok && strings.Contains(val, "cloudinit") {
+			warnings = append(warnings, fmt.Sprintf("VM hat Cloud-Init-Drive (%s) — wird neu generiert auf Ziel", key))
+			break
+		}
+	}
+
+	// 8. Running VM + Stop Mode
+	if vmStatus == "running" && mode == model.MigrationModeStop {
+		warnings = append(warnings, "VM wird vor Migration heruntergefahren — Ausfallzeit erwartet")
+	}
+
+	return warnings, nil
+}
+
+// parseVMDiskSizes parses VM config to sum up all disk sizes from disk volume entries.
+// It looks for keys like scsi0, virtio0, sata0, ide0, efidisk0, etc. and parses the
+// size parameter (e.g. "local-zfs:vm-100-disk-0,size=32G" -> 32GB).
+// Returns total disk size in bytes.
+func parseVMDiskSizes(config map[string]interface{}) int64 {
+	var totalBytes int64
+
+	diskPrefixes := []string{"scsi", "virtio", "sata", "ide", "efidisk"}
+
+	for key, raw := range config {
+		val, ok := raw.(string)
+		if !ok || val == "" {
+			continue
+		}
+
+		// Check if key matches a disk pattern (scsi0, virtio1, sata2, ide3, efidisk0, etc.)
+		isDisk := false
+		for _, prefix := range diskPrefixes {
+			if strings.HasPrefix(key, prefix) {
+				rest := strings.TrimPrefix(key, prefix)
+				if _, err := strconv.Atoi(rest); err == nil {
+					isDisk = true
+					break
+				}
+			}
+		}
+		if !isDisk {
+			continue
+		}
+
+		// Skip non-disk entries (media=cdrom, cloudinit, none)
+		if strings.Contains(val, "media=cdrom") || strings.Contains(val, "cloudinit") || val == "none" {
+			continue
+		}
+
+		// Parse size from config value: "storage:volume,size=32G,other=..."
+		size := parseSizeFromDiskValue(val)
+		if size > 0 {
+			totalBytes += size
+		}
+	}
+
+	return totalBytes
+}
+
+// parseSizeFromDiskValue extracts the disk size in bytes from a Proxmox disk config value.
+// Examples:
+//   - "local-zfs:vm-100-disk-0,size=32G" -> 32 * 1024^3
+//   - "ceph:vm-100-disk-0,size=64G,iothread=1" -> 64 * 1024^3
+//   - "local-lvm:vm-200-disk-0,size=512M" -> 512 * 1024^2
+//   - "local:100/vm-100-disk-0.qcow2,size=10G" -> 10 * 1024^3
+func parseSizeFromDiskValue(val string) int64 {
+	// Find size= parameter
+	parts := strings.Split(val, ",")
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if strings.HasPrefix(part, "size=") {
+			sizeStr := strings.TrimPrefix(part, "size=")
+			return parseSizeString(sizeStr)
+		}
+	}
+	return 0
+}
+
+// parseSizeString parses a human-readable size string (e.g. "32G", "512M", "1T", "1024K")
+// into bytes.
+func parseSizeString(s string) int64 {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0
+	}
+
+	// Extract numeric part and unit
+	unit := s[len(s)-1]
+	numStr := s[:len(s)-1]
+
+	var multiplier int64
+	switch unit {
+	case 'K', 'k':
+		multiplier = 1024
+	case 'M', 'm':
+		multiplier = 1024 * 1024
+	case 'G', 'g':
+		multiplier = 1024 * 1024 * 1024
+	case 'T', 't':
+		multiplier = 1024 * 1024 * 1024 * 1024
+	default:
+		// No unit — try parsing whole string as bytes
+		numStr = s
+		multiplier = 1
+	}
+
+	// Support decimal values (e.g. "1.5G")
+	if strings.Contains(numStr, ".") {
+		var f float64
+		if _, err := fmt.Sscanf(numStr, "%f", &f); err == nil {
+			return int64(f * float64(multiplier))
+		}
+		return 0
+	}
+
+	n, err := strconv.ParseInt(numStr, 10, 64)
+	if err != nil {
+		return 0
+	}
+	return n * multiplier
 }
 
 func formatBytesLog(bytes int64) string {

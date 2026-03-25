@@ -3,7 +3,8 @@ package handler
 import (
 	"errors"
 	"fmt"
-	"io"
+	"log/slog"
+	"net/http"
 
 	apiPkg "github.com/antigravity/prometheus/internal/api/response"
 	"github.com/antigravity/prometheus/internal/model"
@@ -236,26 +237,32 @@ func (h *BackupHandler) RestoreBackup(c echo.Context) error {
 
 // DownloadBackup handles GET /backups/:id/download.
 // It generates and streams a tar.gz archive of all files in the backup.
+// The archive is streamed directly to the client to avoid buffering in memory.
 func (h *BackupHandler) DownloadBackup(c echo.Context) error {
 	backupID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		return apiPkg.BadRequest(c, "invalid backup id")
 	}
 
-	reader, err := h.restoreService.GenerateArchive(c.Request().Context(), backupID)
-	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			return apiPkg.NotFound(c, "backup not found")
-		}
-		return apiPkg.InternalError(c, "failed to generate backup archive")
-	}
-
+	// Set response headers BEFORE streaming — once we start writing the body,
+	// we can no longer send an HTTP error status.
 	c.Response().Header().Set("Content-Type", "application/gzip")
 	c.Response().Header().Set("Content-Disposition",
 		fmt.Sprintf("attachment; filename=\"backup-%s.tar.gz\"", backupID.String()))
+	c.Response().WriteHeader(http.StatusOK)
 
-	_, err = io.Copy(c.Response().Writer, reader)
-	return err
+	// Stream the archive directly to the response writer
+	if err := h.restoreService.GenerateArchive(c.Request().Context(), backupID, c.Response().Writer); err != nil {
+		// Headers are already sent — we cannot change the HTTP status anymore.
+		// Log the error for server-side diagnostics; the client will receive
+		// a truncated/corrupt archive and should detect it on extraction.
+		slog.Error("Fehler beim Streamen des Backup-Archivs",
+			slog.String("backup_id", backupID.String()),
+			slog.Any("error", err),
+		)
+	}
+
+	return nil
 }
 
 // CreateVzdumpBackup handles POST /nodes/:id/vzdump.

@@ -424,6 +424,7 @@ func (s *ScanScheduler) runnerForNode(ctx context.Context, nodeID uuid.UUID) (SS
 		Port:       node.SSHPort,
 		User:       node.SSHUser,
 		PrivateKey: node.SSHPrivateKey,
+		HostKey:    node.SSHHostKey,
 	}
 
 	client, err := s.sshPool.Get(nodeID.String(), cfg)

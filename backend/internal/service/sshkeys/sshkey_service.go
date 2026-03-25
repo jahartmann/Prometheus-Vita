@@ -118,6 +118,7 @@ func (s *Service) deployKey(ctx context.Context, nodeID uuid.UUID, key *model.SS
 		Port:       node.SSHPort,
 		User:       node.SSHUser,
 		PrivateKey: privateKey,
+		HostKey:    node.SSHHostKey,
 	})
 	if err != nil {
 		return fmt.Errorf("ssh connection: %w", err)

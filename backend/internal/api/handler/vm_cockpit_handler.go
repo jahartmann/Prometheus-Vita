@@ -64,13 +64,19 @@ type VMCockpitHandler struct {
 	permSvc        *vmService.PermissionService
 	jwtSvc         *auth.JWTService
 	upgrader       websocket.Upgrader
+	tlsConfig      *tls.Config // TLS config for Proxmox WebSocket connections
 }
 
-func NewVMCockpitHandler(nodeSvc *nodeService.Service, permSvc *vmService.PermissionService, jwtSvc *auth.JWTService, allowedOrigins []string) *VMCockpitHandler {
+func NewVMCockpitHandler(nodeSvc *nodeService.Service, permSvc *vmService.PermissionService, jwtSvc *auth.JWTService, allowedOrigins []string, tlsCfg *tls.Config) *VMCockpitHandler {
+	// Default to insecure TLS if no config provided (backward compat)
+	if tlsCfg == nil {
+		tlsCfg = &tls.Config{InsecureSkipVerify: true}
+	}
 	h := &VMCockpitHandler{
-		nodeSvc: nodeSvc,
-		permSvc: permSvc,
-		jwtSvc:  jwtSvc,
+		nodeSvc:   nodeSvc,
+		permSvc:   permSvc,
+		jwtSvc:    jwtSvc,
+		tlsConfig: tlsCfg,
 	}
 	h.upgrader = websocket.Upgrader{
 		ReadBufferSize:  4096,
@@ -557,9 +563,9 @@ func (h *VMCockpitHandler) HandleShell(c echo.Context) error {
 	}
 	defer browserConn.Close()
 
-	// Connect to Proxmox terminal WebSocket
+	// Connect to Proxmox terminal WebSocket using configured TLS
 	dialer := websocket.Dialer{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		TLSClientConfig: h.tlsConfig,
 	}
 	pveHeaders := http.Header{}
 	pveHeaders.Set("Cookie", fmt.Sprintf("PVEAuthCookie=%s", termProxy.Ticket))

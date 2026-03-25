@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -19,6 +20,12 @@ type Config struct {
 	Telegram   TelegramConfig
 	Briefing   BriefingConfig
 	RateLimit  RateLimitConfig
+	Proxmox    ProxmoxConfig
+}
+
+type ProxmoxConfig struct {
+	TLSInsecure bool   // PROXMOX_TLS_INSECURE, default true (backward compat)
+	TLSCACert   string // PROXMOX_TLS_CA_CERT, path to custom CA cert file
 }
 
 type RateLimitConfig struct {
@@ -70,7 +77,13 @@ type DatabaseConfig struct {
 
 func (d DatabaseConfig) DSN() string {
 	return fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=%s",
-		d.User, d.Password, d.Host, d.Port, d.DBName, d.SSLMode)
+		d.User, url.QueryEscape(d.Password), d.Host, d.Port, d.DBName, d.SSLMode)
+}
+
+// SafeDSN returns the DSN with the password redacted, safe for logging.
+func (d DatabaseConfig) SafeDSN() string {
+	return fmt.Sprintf("postgres://%s:***@%s:%d/%s?sslmode=%s",
+		d.User, d.Host, d.Port, d.DBName, d.SSLMode)
 }
 
 type RedisConfig struct {
@@ -160,6 +173,10 @@ func Load() (*Config, error) {
 		RateLimit: RateLimitConfig{
 			RequestsPerMinute: getEnvInt("RATE_LIMIT_RPM", 300),
 			Enabled:           getEnv("RATE_LIMIT_ENABLED", "true") == "true",
+		},
+		Proxmox: ProxmoxConfig{
+			TLSInsecure: getEnv("PROXMOX_TLS_INSECURE", "true") == "true",
+			TLSCACert:   getEnv("PROXMOX_TLS_CA_CERT", ""),
 		},
 	}
 

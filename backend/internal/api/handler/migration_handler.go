@@ -93,7 +93,15 @@ func (h *MigrationHandler) Cancel(c echo.Context) error {
 		return apiPkg.BadRequest(c, "invalid migration id")
 	}
 
-	if err := h.service.CancelMigration(c.Request().Context(), id); err != nil {
+	// Extract caller identity for ownership check
+	var userID *uuid.UUID
+	if uid, ok := c.Get(middleware.ContextKeyUserID).(uuid.UUID); ok {
+		userID = &uid
+	}
+	role, _ := c.Get(middleware.ContextKeyRole).(model.UserRole)
+	isAdmin := role == model.RoleAdmin
+
+	if err := h.service.CancelMigration(c.Request().Context(), id, userID, isAdmin); err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
 			return apiPkg.NotFound(c, "migration not found")
 		}
