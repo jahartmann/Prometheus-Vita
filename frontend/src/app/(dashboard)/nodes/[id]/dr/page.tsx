@@ -31,7 +31,7 @@ const scenarios = [
   { value: "disk_failure", label: "Festplattenausfall" },
   { value: "network_failure", label: "Netzwerkausfall" },
   { value: "cluster_recovery", label: "Cluster-Wiederherstellung" },
-  { value: "full_restore", label: "Vollstaendige Wiederherstellung" },
+  { value: "full_restore", label: "Vollständige Wiederherstellung" },
 ];
 
 export default function NodeDRPage() {
@@ -215,7 +215,7 @@ export default function NodeDRPage() {
             <div className="flex gap-2">
               <Select value={selectedScenario} onValueChange={setSelectedScenario}>
                 <SelectTrigger className="w-[220px]">
-                  <SelectValue placeholder="Szenario waehlen..." />
+                  <SelectValue placeholder="Szenario wählen..." />
                 </SelectTrigger>
                 <SelectContent>
                   {scenarios.map((s) => (
@@ -244,7 +244,7 @@ export default function NodeDRPage() {
         <CardContent>
           {runbooks.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              Noch keine Runbooks erstellt. Waehlen Sie ein Szenario und generieren Sie ein Runbook.
+              Noch keine Runbooks erstellt. Wählen Sie ein Szenario und generieren Sie ein Runbook.
             </p>
           ) : (
             <div className="space-y-4">

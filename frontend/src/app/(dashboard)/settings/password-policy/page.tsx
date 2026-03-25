@@ -53,7 +53,7 @@ export default function PasswordPolicyPage() {
     setSuccess("");
 
     if (minLength > maxLength) {
-      setError("Mindestlaenge darf nicht groesser als Maximallaenge sein");
+      setError("Mindestlänge darf nicht größer als Maximallänge sein");
       return;
     }
 
@@ -97,8 +97,8 @@ export default function PasswordPolicyPage() {
             <div>
               <CardTitle>Passwort-Richtlinie</CardTitle>
               <CardDescription>
-                Legen Sie fest, welche Anforderungen Passwoerter erfuellen muessen.
-                Diese gelten fuer alle Benutzer bei Erstellung und Passwortaenderung.
+                Legen Sie fest, welche Anforderungen Passwörter erfuellen müssen.
+                Diese gelten für alle Benutzer bei Erstellung und Passwortänderung.
               </CardDescription>
             </div>
           </div>
@@ -107,7 +107,7 @@ export default function PasswordPolicyPage() {
           {/* Length */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="minLength">Mindestlaenge</Label>
+              <Label htmlFor="minLength">Mindestlänge</Label>
               <Input
                 id="minLength"
                 type="number"
@@ -118,7 +118,7 @@ export default function PasswordPolicyPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="maxLength">Maximallaenge</Label>
+              <Label htmlFor="maxLength">Maximallänge</Label>
               <Input
                 id="maxLength"
                 type="number"
@@ -135,7 +135,7 @@ export default function PasswordPolicyPage() {
             <Label className="text-base">Zeichenanforderungen</Label>
             <div className="space-y-2">
               <ToggleRow
-                label="Grossbuchstaben erforderlich (A-Z)"
+                label="Großbuchstaben erforderlich (A-Z)"
                 checked={requireUppercase}
                 onChange={setRequireUppercase}
               />
@@ -174,7 +174,7 @@ export default function PasswordPolicyPage() {
             <p className="text-xs font-medium text-muted-foreground mb-1">Vorschau der Anforderung:</p>
             <p className="text-sm">
               Mindestens {minLength} Zeichen
-              {requireUppercase && ", 1 Grossbuchstabe"}
+              {requireUppercase && ", 1 Großbuchstabe"}
               {requireLowercase && ", 1 Kleinbuchstabe"}
               {requireDigit && ", 1 Ziffer"}
               {requireSpecial && ", 1 Sonderzeichen"}

@@ -170,7 +170,7 @@ export function RRDBandwidth({ nodeId }: RRDBandwidthProps) {
             </div>
           ) : chartData.length === 0 ? (
             <div className="flex h-[300px] items-center justify-center text-sm text-muted-foreground">
-              Keine RRD-Daten verfuegbar
+              Keine RRD-Daten verfügbar
             </div>
           ) : (
             <ResponsiveContainer width="100%" height={250}>

@@ -113,7 +113,7 @@ export const useMigrationStore = create<MigrationState>()((set, get) => ({
         migrationLogs: newLogs,
       };
     });
-    toast.success("Migration geloescht");
+    toast.success("Migration gelöscht");
   },
 
   retryMigration: async (migration: VMMigration) => {

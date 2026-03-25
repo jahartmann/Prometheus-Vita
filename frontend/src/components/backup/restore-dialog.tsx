@@ -228,7 +228,7 @@ export function RestoreDialog({ backupId, open, onOpenChange }: RestoreDialogPro
         <DialogHeader>
           <DialogTitle>Backup wiederherstellen</DialogTitle>
           <DialogDescription>
-            Dateien aus dem Backup zur Wiederherstellung auswaehlen.
+            Dateien aus dem Backup zur Wiederherstellung auswählen.
           </DialogDescription>
         </DialogHeader>
 
@@ -262,7 +262,7 @@ export function RestoreDialog({ backupId, open, onOpenChange }: RestoreDialogPro
                 onChange={(e) => setDryRun(e.target.checked)}
                 className="rounded border-input"
               />
-              Dry-Run (Vorschau ohne Aenderungen)
+              Dry-Run (Vorschau ohne Änderungen)
             </Label>
             <Badge variant={dryRun ? "outline" : "destructive"}>
               {dryRun ? "Simulation" : "Live"}
@@ -270,7 +270,7 @@ export function RestoreDialog({ backupId, open, onOpenChange }: RestoreDialogPro
           </div>
 
           <p className="text-xs text-muted-foreground">
-            {selectedPaths.size} Datei(en) ausgewaehlt
+            {selectedPaths.size} Datei(en) ausgewählt
           </p>
 
           {result && (
@@ -301,7 +301,7 @@ export function RestoreDialog({ backupId, open, onOpenChange }: RestoreDialogPro
             variant={dryRun ? "default" : "destructive"}
           >
             {isRestoring
-              ? "Wird ausgefuehrt..."
+              ? "Wird ausgeführt..."
               : dryRun
                 ? "Vorschau anzeigen"
                 : "Wiederherstellen"}

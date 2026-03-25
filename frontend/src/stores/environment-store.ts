@@ -68,13 +68,13 @@ export const useEnvironmentStore = create<EnvironmentState>()((set, get) => ({
       set((state) => ({
         environments: state.environments.filter((e) => e.id !== id),
       }));
-      toast.success("Umgebung geloescht");
+      toast.success("Umgebung gelöscht");
       // Refresh the list after deletion
       get().fetchEnvironments();
     } catch {
-      toast.error("Umgebung konnte nicht geloescht werden");
-      set({ error: "Umgebung konnte nicht geloescht werden" });
-      throw new Error("Umgebung konnte nicht geloescht werden");
+      toast.error("Umgebung konnte nicht gelöscht werden");
+      set({ error: "Umgebung konnte nicht gelöscht werden" });
+      throw new Error("Umgebung konnte nicht gelöscht werden");
     }
   },
 

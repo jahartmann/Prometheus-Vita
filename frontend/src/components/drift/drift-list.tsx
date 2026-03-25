@@ -81,7 +81,7 @@ export function DriftList({ checks, nodeNames, isLoading }: DriftListProps) {
           <TableRow>
             <TableHead>Status</TableHead>
             <TableHead>Node</TableHead>
-            <TableHead>Aenderungen</TableHead>
+            <TableHead>Änderungen</TableHead>
             <TableHead>Severity</TableHead>
             <TableHead>KI</TableHead>
             <TableHead>Zeitpunkt</TableHead>
@@ -116,13 +116,13 @@ export function DriftList({ checks, nodeNames, isLoading }: DriftListProps) {
                         <>
                           <AlertTriangle className="h-4 w-4 text-yellow-500" />
                           <span className="text-sm">
-                            {check.changed_files > 0 && `${check.changed_files} geaendert`}
+                            {check.changed_files > 0 && `${check.changed_files} geändert`}
                             {check.added_files > 0 && `${check.changed_files > 0 ? ", " : ""}${check.added_files} neu`}
                             {check.removed_files > 0 && `${(check.changed_files + check.added_files) > 0 ? ", " : ""}${check.removed_files} entfernt`}
                           </span>
                         </>
                       ) : (
-                        <span className="text-sm text-muted-foreground">Keine Aenderungen</span>
+                        <span className="text-sm text-muted-foreground">Keine Änderungen</span>
                       )}
                     </div>
                   ) : check.status === "failed" ? (

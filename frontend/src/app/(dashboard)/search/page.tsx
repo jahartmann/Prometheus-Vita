@@ -222,10 +222,10 @@ export default function SearchPage() {
     const pages: Omit<SearchResult, "id" | "category">[] = [
       {
         title: "Dashboard",
-        subtitle: "Uebersicht aller Nodes und KPIs",
+        subtitle: "Übersicht aller Nodes und KPIs",
         href: "/",
         icon: LayoutGrid,
-        tags: ["home", "start", "uebersicht", "dashboard"],
+        tags: ["home", "start", "übersicht", "dashboard"],
       },
       {
         title: "Monitoring",
@@ -250,7 +250,7 @@ export default function SearchPage() {
       },
       {
         title: "Disaster Recovery",
-        subtitle: "Notfallplaene und Readiness",
+        subtitle: "Notfallpläne und Readiness",
         href: "/disaster-recovery",
         icon: Shield,
         tags: ["notfall", "recovery", "disaster"],
@@ -285,7 +285,7 @@ export default function SearchPage() {
       },
       {
         title: "AI Chat",
-        subtitle: "KI-Assistent fuer Infrastruktur",
+        subtitle: "KI-Assistent für Infrastruktur",
         href: "/chat",
         icon: Sparkles,
         tags: ["ki", "ai", "assistent", "frage", "chat"],
@@ -299,7 +299,7 @@ export default function SearchPage() {
       },
       {
         title: "Sicherheit",
-        subtitle: "Security-Uebersicht und Events",
+        subtitle: "Security-Übersicht und Events",
         href: "/security",
         icon: ShieldCheck,
         tags: ["sicherheit", "security", "firewall"],
@@ -351,17 +351,17 @@ export default function SearchPage() {
       {
         title: "Node-Verwaltung",
         href: "/settings/nodes",
-        tags: ["node", "hinzufuegen", "server"],
+        tags: ["node", "hinzufügen", "server"],
       },
       {
         title: "API-Tokens",
         href: "/settings/api-tokens",
-        tags: ["api", "token", "key", "schluessel"],
+        tags: ["api", "token", "key", "schlüssel"],
       },
       {
         title: "SSH-Keys",
         href: "/settings/ssh-keys",
-        tags: ["ssh", "schluessel", "key"],
+        tags: ["ssh", "schlüssel", "key"],
       },
       {
         title: "Benachrichtigungen",
@@ -557,7 +557,7 @@ export default function SearchPage() {
 
   const statusLabels: Record<string, string> = {
     online: "Online",
-    running: "Laeuft",
+    running: "Läuft",
     offline: "Offline",
     stopped: "Gestoppt",
     warning: "Warnung",
@@ -691,7 +691,7 @@ export default function SearchPage() {
                   onClick={clearRecentSearches}
                   className="text-xs text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  Alle loeschen
+                  Alle löschen
                 </button>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -722,7 +722,7 @@ export default function SearchPage() {
           <div className="space-y-3">
             <h3 className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
               <Sparkles className="h-4 w-4" />
-              Vorschlaege
+              Vorschläge
             </h3>
             <div className="flex flex-wrap gap-2">
               {suggestions.map((s, i) => (
@@ -745,7 +745,7 @@ export default function SearchPage() {
           <Search className="h-12 w-12 text-muted-foreground/30" />
           <p className="text-lg font-medium">Keine Ergebnisse</p>
           <p className="text-sm text-muted-foreground">
-            Keine Treffer fuer &ldquo;{query}&rdquo;. Versuche andere
+            Keine Treffer für &ldquo;{query}&rdquo;. Versuche andere
             Suchbegriffe.
           </p>
         </div>
@@ -754,7 +754,7 @@ export default function SearchPage() {
           {/* Result count */}
           <p className="text-sm text-muted-foreground">
             {results.length} {results.length === 1 ? "Ergebnis" : "Ergebnisse"}{" "}
-            fuer &ldquo;{debouncedQuery}&rdquo;
+            für &ldquo;{debouncedQuery}&rdquo;
           </p>
 
           {grouped.map((group) => {
@@ -896,13 +896,13 @@ export default function SearchPage() {
           <kbd className="rounded border bg-muted px-1.5 py-0.5 font-mono text-[10px]">
             Enter
           </kbd>
-          Oeffnen
+          Öffnen
         </span>
         <span className="flex items-center gap-1">
           <kbd className="rounded border bg-muted px-1.5 py-0.5 font-mono text-[10px]">
             Esc
           </kbd>
-          Zuruecksetzen
+          Zurücksetzen
         </span>
       </div>
     </div>

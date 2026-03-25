@@ -82,9 +82,9 @@ export function AddNodeDialog({ open, onOpenChange }: AddNodeDialogProps) {
       addNode(response.data);
       onOpenChange(false);
       resetForm();
-      toast.success("Node hinzugefuegt");
+      toast.success("Node hinzugefügt");
     } catch {
-      toast.error("Fehler beim Hinzufuegen des Nodes");
+      toast.error("Fehler beim Hinzufügen des Nodes");
     }
     setIsSubmitting(false);
   };
@@ -114,7 +114,7 @@ export function AddNodeDialog({ open, onOpenChange }: AddNodeDialogProps) {
     >
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Node hinzufuegen</DialogTitle>
+          <DialogTitle>Node hinzufügen</DialogTitle>
           <DialogDescription>
             Verbinden Sie einen neuen Proxmox Node mit Prometheus.
           </DialogDescription>
@@ -244,10 +244,10 @@ export function AddNodeDialog({ open, onOpenChange }: AddNodeDialogProps) {
               {isSubmitting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Wird hinzugefuegt...
+                  Wird hinzugefügt...
                 </>
               ) : (
-                "Hinzufuegen"
+                "Hinzufügen"
               )}
             </Button>
           </DialogFooter>

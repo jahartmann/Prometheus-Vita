@@ -40,7 +40,7 @@ export function ChangePasswordDialog({ user, open, onOpenChange, onSuccess }: Ch
     if (!user) return;
 
     if (newPassword !== confirmPassword) {
-      setError("Passwoerter stimmen nicht ueberein");
+      setError("Passwörter stimmen nicht überein");
       return;
     }
 
@@ -59,7 +59,7 @@ export function ChangePasswordDialog({ user, open, onOpenChange, onSuccess }: Ch
       onSuccess();
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { error?: string } } };
-      setError(axiosErr.response?.data?.error || "Passwort konnte nicht geaendert werden");
+      setError(axiosErr.response?.data?.error || "Passwort konnte nicht geändert werden");
     } finally {
       setIsLoading(false);
     }
@@ -70,9 +70,9 @@ export function ChangePasswordDialog({ user, open, onOpenChange, onSuccess }: Ch
       <DialogContent>
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>Passwort aendern</DialogTitle>
+            <DialogTitle>Passwort ändern</DialogTitle>
             <DialogDescription>
-              Passwort fuer &quot;{user?.username}&quot; aendern.
+              Passwort für &quot;{user?.username}&quot; ändern.
             </DialogDescription>
           </DialogHeader>
 
@@ -103,7 +103,7 @@ export function ChangePasswordDialog({ user, open, onOpenChange, onSuccess }: Ch
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="confirm-password">Passwort bestaetigen</Label>
+              <Label htmlFor="confirm-password">Passwort bestätigen</Label>
               <Input
                 id="confirm-password"
                 type="password"
@@ -119,7 +119,7 @@ export function ChangePasswordDialog({ user, open, onOpenChange, onSuccess }: Ch
               Abbrechen
             </Button>
             <Button type="submit" disabled={isLoading || !newPassword || !confirmPassword}>
-              {isLoading ? "Speichere..." : "Passwort aendern"}
+              {isLoading ? "Speichere..." : "Passwort ändern"}
             </Button>
           </DialogFooter>
         </form>

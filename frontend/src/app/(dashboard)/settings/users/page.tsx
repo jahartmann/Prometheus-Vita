@@ -158,14 +158,14 @@ export default function UsersSettingsPage() {
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => setPasswordUser(user)}>
                             <Key className="mr-2 h-4 w-4" />
-                            Passwort aendern
+                            Passwort ändern
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={() => setDeleteTarget(user)}
                             className="text-destructive"
                           >
                             <Trash2 className="mr-2 h-4 w-4" />
-                            Loeschen
+                            Löschen
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -193,9 +193,9 @@ export default function UsersSettingsPage() {
       <ConfirmDialog
         open={!!deleteTarget}
         onOpenChange={(open) => !open && setDeleteTarget(null)}
-        title="Benutzer loeschen?"
-        description="Diese Aktion kann nicht rueckgaengig gemacht werden."
-        confirmLabel="Loeschen"
+        title="Benutzer löschen?"
+        description="Diese Aktion kann nicht rückgängig gemacht werden."
+        confirmLabel="Löschen"
         variant="destructive"
         onConfirm={() => {
           setDeleteUser(deleteTarget);

@@ -35,9 +35,9 @@ export function GenerateKeyDialog({ nodeId, open, onOpenChange, onSuccess }: Gen
       onSuccess();
       onOpenChange(false);
       setName("");
-      toast.success("SSH-Schluessel generiert");
+      toast.success("SSH-Schlüssel generiert");
     } catch {
-      toast.error("Fehler beim Generieren des Schluessels");
+      toast.error("Fehler beim Generieren des Schlüssels");
     } finally {
       setSaving(false);
     }
@@ -47,7 +47,7 @@ export function GenerateKeyDialog({ nodeId, open, onOpenChange, onSuccess }: Gen
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>SSH-Schluessel generieren</DialogTitle>
+          <DialogTitle>SSH-Schlüssel generieren</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
@@ -56,7 +56,7 @@ export function GenerateKeyDialog({ nodeId, open, onOpenChange, onSuccess }: Gen
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="z.B. deploy-key-prod" />
           </div>
           <div className="space-y-2">
-            <Label>Schluesseltyp</Label>
+            <Label>Schlüsseltyp</Label>
             <select
               value={keyType}
               onChange={(e) => setKeyType(e.target.value)}

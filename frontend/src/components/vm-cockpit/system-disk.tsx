@@ -48,7 +48,7 @@ export function SystemDisk() {
       {disks.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-xl border border-dashed py-12">
           <p className="text-muted-foreground">
-            Keine Speicherinformationen verfuegbar
+            Keine Speicherinformationen verfügbar
           </p>
         </div>
       ) : (
@@ -90,7 +90,7 @@ export function SystemDisk() {
                     </span>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    {disk.avail} verfuegbar
+                    {disk.avail} verfügbar
                   </p>
                 </CardContent>
               </Card>

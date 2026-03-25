@@ -44,7 +44,7 @@ export function LiveTraffic() {
       <div className="flex items-center gap-3">
         <Select value={selectedNode} onValueChange={setSelectedNode}>
           <SelectTrigger className="w-64">
-            <SelectValue placeholder="Node waehlen" />
+            <SelectValue placeholder="Node wählen" />
           </SelectTrigger>
           <SelectContent>
             {nodes.map((n) => (

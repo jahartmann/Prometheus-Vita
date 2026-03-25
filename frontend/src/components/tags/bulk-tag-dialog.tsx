@@ -283,7 +283,7 @@ export function BulkTagDialog({
             {/* Left panel: Tag selection */}
             <div className="w-56 shrink-0 space-y-3 overflow-y-auto">
               <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Tag auswaehlen
+                Tag auswählen
               </Label>
               <div className="space-y-1">
                 {tags.map((tag) => (
@@ -378,7 +378,7 @@ export function BulkTagDialog({
             {/* Right panel: VM selection */}
             <div className="flex-1 min-h-0 flex flex-col space-y-2">
               <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                VMs auswaehlen
+                VMs auswählen
               </Label>
               <div className="relative">
                 <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
@@ -456,7 +456,7 @@ export function BulkTagDialog({
                   <p className="text-sm text-muted-foreground text-center py-8">
                     {vmSearch
                       ? "Keine VMs gefunden"
-                      : "Keine VMs auf den Nodes verfuegbar"}
+                      : "Keine VMs auf den Nodes verfügbar"}
                   </p>
                 )}
               </div>
@@ -478,7 +478,7 @@ export function BulkTagDialog({
                 {selectedTag.name}
               </Badge>
             )}
-            <span>{selectedVMs.size} VMs ausgewaehlt</span>
+            <span>{selectedVMs.size} VMs ausgewählt</span>
           </div>
           <div className="flex gap-2">
             <Button

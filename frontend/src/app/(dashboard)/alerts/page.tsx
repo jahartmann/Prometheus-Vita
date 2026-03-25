@@ -39,19 +39,19 @@ const severityConfig: Record<
   { label: string; icon: typeof AlertTriangle; color: string; badgeVariant: "destructive" | "default" | "secondary" | "outline" }
 > = {
   triggered: {
-    label: "Ausgeloest",
+    label: "Ausgelöst",
     icon: XCircle,
     color: "text-red-500",
     badgeVariant: "destructive",
   },
   acknowledged: {
-    label: "Bestaetigt",
+    label: "Bestätigt",
     icon: AlertTriangle,
     color: "text-yellow-500",
     badgeVariant: "default",
   },
   resolved: {
-    label: "Geloest",
+    label: "Gelöst",
     icon: CheckCircle2,
     color: "text-green-500",
     badgeVariant: "secondary",
@@ -127,14 +127,14 @@ export default function AlertsPage() {
         <div>
           <h2 className="text-xl font-bold">Alerts</h2>
           <p className="text-sm text-muted-foreground">
-            Uebersicht aller ausgeloesten Alarme und Vorfaelle.
+            Übersicht aller ausgelösten Alarme und Vorfälle.
           </p>
         </div>
         <div className="flex gap-2">
           {triggeredCount > 0 && (
             <Button variant="outline" size="sm" onClick={handleAcknowledgeAll}>
               <CheckCircle2 className="mr-2 h-4 w-4" />
-              Alle bestaetigen ({triggeredCount})
+              Alle bestätigen ({triggeredCount})
             </Button>
           )}
           <Button
@@ -155,26 +155,26 @@ export default function AlertsPage() {
         <KpiCard
           title="Gesamt"
           value={incidents.length}
-          subtitle="Vorfaelle"
+          subtitle="Vorfälle"
           icon={Bell}
           color="blue"
         />
         <KpiCard
-          title="Ausgeloest"
+          title="Ausgelöst"
           value={triggeredCount}
           subtitle="Offene Alarme"
           icon={XCircle}
           color="red"
         />
         <KpiCard
-          title="Bestaetigt"
+          title="Bestätigt"
           value={acknowledgedCount}
           subtitle="In Bearbeitung"
           icon={AlertTriangle}
           color="orange"
         />
         <KpiCard
-          title="Geloest"
+          title="Gelöst"
           value={resolvedCount}
           subtitle="Abgeschlossen"
           icon={Shield}
@@ -185,23 +185,23 @@ export default function AlertsPage() {
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-base">Vorfaelle</CardTitle>
+            <CardTitle className="text-base">Vorfälle</CardTitle>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger className="w-[180px]" aria-label="Status filtern">
                 <SelectValue placeholder="Status filtern" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Alle Status</SelectItem>
-                <SelectItem value="triggered">Ausgeloest</SelectItem>
-                <SelectItem value="acknowledged">Bestaetigt</SelectItem>
-                <SelectItem value="resolved">Geloest</SelectItem>
+                <SelectItem value="triggered">Ausgelöst</SelectItem>
+                <SelectItem value="acknowledged">Bestätigt</SelectItem>
+                <SelectItem value="resolved">Gelöst</SelectItem>
               </SelectContent>
             </Select>
           </div>
         </CardHeader>
         <CardContent className="p-0">
           {isLoading ? (
-            <div className="space-y-3 p-4">
+            <div className="space-y-3 p-4" aria-busy="true" aria-label="Vorfälle werden geladen">
               {Array.from({ length: 5 }).map((_, i) => (
                 <Skeleton key={i} className="h-12 w-full" />
               ))}
@@ -209,11 +209,11 @@ export default function AlertsPage() {
           ) : filtered.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16">
               <Info className="mb-4 h-12 w-12 text-muted-foreground" />
-              <p className="text-lg font-medium">Keine Vorfaelle</p>
+              <p className="text-lg font-medium">Keine Vorfälle</p>
               <p className="mt-1 text-sm text-muted-foreground">
                 {statusFilter === "all"
                   ? "Es sind derzeit keine Alarme vorhanden."
-                  : "Keine Vorfaelle mit diesem Status."}
+                  : "Keine Vorfälle mit diesem Status."}
               </p>
             </div>
           ) : (
@@ -223,8 +223,8 @@ export default function AlertsPage() {
                   <TableHead>Status</TableHead>
                   <TableHead>Zeitpunkt</TableHead>
                   <TableHead>Stufe</TableHead>
-                  <TableHead>Bestaetigt</TableHead>
-                  <TableHead>Geloest</TableHead>
+                  <TableHead>Bestätigt</TableHead>
+                  <TableHead>Gelöst</TableHead>
                   <TableHead className="text-right">Aktionen</TableHead>
                 </TableRow>
               </TableHeader>
@@ -264,7 +264,7 @@ export default function AlertsPage() {
                               size="sm"
                               onClick={() => handleAcknowledge(incident.id)}
                             >
-                              Bestaetigen
+                              Bestätigen
                             </Button>
                           )}
                           {(incident.status === "triggered" ||
@@ -274,7 +274,7 @@ export default function AlertsPage() {
                               size="sm"
                               onClick={() => handleResolve(incident.id)}
                             >
-                              Loesen
+                              Lösen
                             </Button>
                           )}
                         </div>

@@ -47,7 +47,7 @@ export default function NodeNetworkPage() {
         <h1 className="text-2xl font-bold">Netzwerk - {node.name}</h1>
       </div>
 
-      {/* RRD-basierte Bandbreite - die zuverlaessige Quelle */}
+      {/* RRD-basierte Bandbreite - die zuverlässige Quelle */}
       <RRDBandwidth nodeId={nodeId} />
 
       {/* Netzwerk-Interfaces */}

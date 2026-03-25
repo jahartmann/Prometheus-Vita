@@ -336,7 +336,7 @@ export default function ClusterDashboardPage() {
           <CardContent>
             {chartData.length === 0 ? (
               <div className="flex h-[350px] items-center justify-center text-sm text-muted-foreground">
-                Keine Daten im gewaehlten Zeitraum.
+                Keine Daten im gewählten Zeitraum.
               </div>
             ) : (
               <ResponsiveContainer width="100%" height={350}>

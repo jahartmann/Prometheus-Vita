@@ -34,7 +34,7 @@ const segmentLabels: Record<string, string> = {
   tags: "Tags",
   isos: "ISOs & Vorlagen",
   reflex: "Reflex-Regeln",
-  dependencies: "Abhaengigkeiten",
+  dependencies: "Abhängigkeiten",
   search: "Suche",
 };
 
@@ -71,11 +71,11 @@ export function Header({ collapsed, onToggleCollapse, onMobileMenuToggle }: Head
     <header className="flex h-14 items-center justify-between border-b bg-card px-4">
       <div className="flex items-center gap-3">
         {/* Mobile menu button */}
-        <Button variant="ghost" size="icon" className="md:hidden" onClick={onMobileMenuToggle}>
+        <Button variant="ghost" size="icon" className="md:hidden" onClick={onMobileMenuToggle} aria-label="Menü öffnen">
           <Menu className="h-5 w-5" />
         </Button>
         {/* Desktop collapse button */}
-        <Button variant="ghost" size="icon" className="hidden md:inline-flex" onClick={onToggleCollapse}>
+        <Button variant="ghost" size="icon" className="hidden md:inline-flex" onClick={onToggleCollapse} aria-label={collapsed ? "Seitenleiste einblenden" : "Seitenleiste ausblenden"}>
           {collapsed ? (
             <PanelLeft className="h-4 w-4" />
           ) : (
@@ -106,7 +106,7 @@ export function Header({ collapsed, onToggleCollapse, onMobileMenuToggle }: Head
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+            <Button variant="ghost" className="relative h-8 w-8 rounded-full" aria-label="Benutzermenü">
               <Avatar className="h-8 w-8">
                 <AvatarFallback className="bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 text-xs">
                   {initials}

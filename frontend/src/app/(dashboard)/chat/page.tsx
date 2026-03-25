@@ -248,7 +248,7 @@ export default function ChatPage() {
                 size="icon"
                 className="h-8 w-8 shrink-0"
                 onClick={() => setSidebarOpen(true)}
-                title="Sidebar oeffnen"
+                title="Sidebar öffnen"
               >
                 <PanelLeftOpen className="h-4 w-4" />
               </Button>
@@ -271,7 +271,7 @@ export default function ChatPage() {
             <Link href="/settings/agent">
               <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-muted-foreground hover:text-foreground">
                 <Settings className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Modell aendern</span>
+                <span className="hidden sm:inline">Modell ändern</span>
               </Button>
             </Link>
           </div>

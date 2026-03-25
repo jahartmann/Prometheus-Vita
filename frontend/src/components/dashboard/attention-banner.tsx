@@ -80,7 +80,7 @@ export function AttentionBanner() {
           <AlertTriangle className="h-4 w-4 text-orange-500" />
           <h3 className="text-sm font-semibold">Was braucht Aufmerksamkeit</h3>
           <p className="text-xs text-muted-foreground">
-            Signale die Beachtung brauchen bevor sie Workloads beeintraechtigen.
+            Signale die Beachtung brauchen bevor sie Workloads beeinträchtigen.
           </p>
         </div>
         <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[11px] font-medium text-white">

@@ -26,12 +26,12 @@ export default function SettingsNodesPage() {
         <div>
           <h2 className="text-lg font-semibold">Node-Verwaltung</h2>
           <p className="text-sm text-muted-foreground">
-            Proxmox Nodes hinzufuegen und verwalten.
+            Proxmox Nodes hinzufügen und verwalten.
           </p>
         </div>
         <Button onClick={() => setAddOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
-          Node hinzufuegen
+          Node hinzufügen
         </Button>
       </div>
 
@@ -54,7 +54,7 @@ export default function SettingsNodesPage() {
               onClick={() => setAddOpen(true)}
             >
               <Plus className="mr-2 h-4 w-4" />
-              Ersten Node hinzufuegen
+              Ersten Node hinzufügen
             </Button>
           </CardContent>
         </Card>
@@ -85,6 +85,7 @@ export default function SettingsNodesPage() {
                   size="icon"
                   className="text-destructive hover:text-destructive"
                   onClick={() => setDeleteNode(node)}
+                  aria-label={`${node.name} löschen`}
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>

@@ -25,7 +25,7 @@ const typeIcons: Record<string, typeof ArrowDown> = {
 
 const typeLabels: Record<string, string> = {
   downsize: "Verkleinern",
-  upsize: "Vergroessern",
+  upsize: "Vergrößern",
   optimal: "Optimal",
 };
 

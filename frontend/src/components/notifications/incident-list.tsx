@@ -29,9 +29,9 @@ const statusVariant: Record<IncidentStatus, "default" | "secondary" | "destructi
 };
 
 const statusLabel: Record<IncidentStatus, string> = {
-  triggered: "Ausgeloest",
-  acknowledged: "Bestaetigt",
-  resolved: "Geloest",
+  triggered: "Ausgelöst",
+  acknowledged: "Bestätigt",
+  resolved: "Gelöst",
 };
 
 const formatDate = (dateStr?: string | null) => {
@@ -69,7 +69,7 @@ export function IncidentList({ incidents, isLoading, onRefresh }: IncidentListPr
                 <TableHead>Vorfall-ID</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Stufe</TableHead>
-                <TableHead>Ausgeloest</TableHead>
+                <TableHead>Ausgelöst</TableHead>
                 <TableHead>Letzte Eskalation</TableHead>
                 <TableHead className="w-48">Aktionen</TableHead>
               </TableRow>
@@ -84,7 +84,7 @@ export function IncidentList({ incidents, isLoading, onRefresh }: IncidentListPr
               ) : incidents.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                    Keine Vorfaelle vorhanden.
+                    Keine Vorfälle vorhanden.
                   </TableCell>
                 </TableRow>
               ) : (
@@ -120,7 +120,7 @@ export function IncidentList({ incidents, isLoading, onRefresh }: IncidentListPr
                             size="sm"
                             onClick={() => handleAcknowledge(incident.id)}
                           >
-                            Bestaetigen
+                            Bestätigen
                           </Button>
                         )}
                         {incident.status !== "resolved" && (
@@ -129,7 +129,7 @@ export function IncidentList({ incidents, isLoading, onRefresh }: IncidentListPr
                             size="sm"
                             onClick={() => handleResolve(incident.id)}
                           >
-                            Loesen
+                            Lösen
                           </Button>
                         )}
                       </div>

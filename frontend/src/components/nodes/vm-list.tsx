@@ -283,7 +283,7 @@ export function VmList({ vms, nodeId, onRefresh }: VmListProps) {
         toast.success(`${vm.name} ${actionLabels[action]}`);
         refreshAfterAction();
       } catch {
-        toast.error(`Aktion fehlgeschlagen fuer ${vm.name}`);
+        toast.error(`Aktion fehlgeschlagen für ${vm.name}`);
       } finally {
         setActionLoading(null);
       }
@@ -337,7 +337,7 @@ export function VmList({ vms, nodeId, onRefresh }: VmListProps) {
         <div className="flex items-center gap-2 rounded-lg border bg-muted/50 p-3">
           <CheckSquare className="h-4 w-4 text-primary" />
           <span className="text-sm font-medium">
-            {selectedVmIds.size} VMs ausgewaehlt
+            {selectedVmIds.size} VMs ausgewählt
           </span>
           <div className="ml-auto flex gap-2">
             <Button
@@ -617,7 +617,7 @@ export function VmList({ vms, nodeId, onRefresh }: VmListProps) {
             <AlertDialogDescription>
               VM &quot;{stopConfirmVm?.name}&quot; (ID: {stopConfirmVm?.vmid}) wirklich
               stoppen? Dies entspricht einem harten Ausschalten und kann zu
-              Datenverlust fuehren.
+              Datenverlust führen.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -644,11 +644,11 @@ export function VmList({ vms, nodeId, onRefresh }: VmListProps) {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Bulk-Aktion ausfuehren?</AlertDialogTitle>
+            <AlertDialogTitle>Bulk-Aktion ausführen?</AlertDialogTitle>
             <AlertDialogDescription>
               {selectedVmIds.size} VMs werden mit der Aktion &quot;{bulkAction}&quot;
-              ausgefuehrt. {bulkAction === "stop" &&
-                "Dies entspricht einem harten Ausschalten und kann zu Datenverlust fuehren."}
+              ausgeführt. {bulkAction === "stop" &&
+                "Dies entspricht einem harten Ausschalten und kann zu Datenverlust führen."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -668,7 +668,7 @@ export function VmList({ vms, nodeId, onRefresh }: VmListProps) {
               {bulkLoading ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : null}
-              Ausfuehren
+              Ausführen
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

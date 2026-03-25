@@ -75,11 +75,11 @@ export const useVMGroupStore = create<VMGroupState>()((set, get) => ({
   deleteGroup: async (id) => {
     try {
       await vmGroupApi.delete(id);
-      toast.success("VM-Gruppe geloescht");
+      toast.success("VM-Gruppe gelöscht");
       await get().fetchGroups();
     } catch (err: unknown) {
       const message =
-        err instanceof Error ? err.message : "VM-Gruppe konnte nicht geloescht werden";
+        err instanceof Error ? err.message : "VM-Gruppe konnte nicht gelöscht werden";
       toast.error(message);
     }
   },
@@ -87,12 +87,12 @@ export const useVMGroupStore = create<VMGroupState>()((set, get) => ({
   addMember: async (groupId, nodeId, vmid) => {
     try {
       await vmGroupApi.addMember(groupId, { node_id: nodeId, vmid });
-      toast.success("VM zur Gruppe hinzugefuegt");
+      toast.success("VM zur Gruppe hinzugefügt");
       await get().fetchMembers(groupId);
       await get().fetchGroups();
     } catch (err: unknown) {
       const message =
-        err instanceof Error ? err.message : "VM konnte nicht zur Gruppe hinzugefuegt werden";
+        err instanceof Error ? err.message : "VM konnte nicht zur Gruppe hinzugefügt werden";
       toast.error(message);
     }
   },

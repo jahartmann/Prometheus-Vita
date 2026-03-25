@@ -273,7 +273,7 @@ export function VMPermissionMatrix() {
           </div>
           {changes.size > 0 && (
             <div className="flex items-center gap-2 ml-auto">
-              <Badge variant="secondary">{changes.size} Aenderungen</Badge>
+              <Badge variant="secondary">{changes.size} Änderungen</Badge>
               <Button
                 variant="outline"
                 size="sm"
@@ -408,7 +408,7 @@ export function VMPermissionMatrix() {
         </div>
         <div className="flex items-center gap-1">
           <div className="w-3 h-3 bg-yellow-50 dark:bg-yellow-900/10 border rounded" />
-          <span>Ungespeicherte Aenderung</span>
+          <span>Ungespeicherte Änderung</span>
         </div>
       </div>
     </div>

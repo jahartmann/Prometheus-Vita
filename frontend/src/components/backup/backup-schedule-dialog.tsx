@@ -45,7 +45,7 @@ export function BackupScheduleDialog({ nodeId, open, onOpenChange }: BackupSched
 
   const handleDelete = async (id: string) => {
     await scheduleApi.deleteSchedule(id);
-    toast.success("Zeitplan geloescht");
+    toast.success("Zeitplan gelöscht");
     fetchSchedules(nodeId);
   };
 
@@ -60,7 +60,7 @@ export function BackupScheduleDialog({ nodeId, open, onOpenChange }: BackupSched
       <Card className="w-full max-w-lg">
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle>Backup-Zeitplaene</CardTitle>
+            <CardTitle>Backup-Zeitpläne</CardTitle>
             <Button variant="ghost" onClick={() => onOpenChange(false)}>
               Schliessen
             </Button>
@@ -81,7 +81,7 @@ export function BackupScheduleDialog({ nodeId, open, onOpenChange }: BackupSched
                     <p className="text-xs text-muted-foreground mt-1">
                       Aufbewahrung: {s.retention_count} |{" "}
                       {s.next_run_at
-                        ? `Naechster Lauf: ${new Date(s.next_run_at).toLocaleString("de-DE")}`
+                        ? `Nächster Lauf: ${new Date(s.next_run_at).toLocaleString("de-DE")}`
                         : ""}
                     </p>
                   </div>

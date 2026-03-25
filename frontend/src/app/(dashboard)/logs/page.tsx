@@ -220,7 +220,7 @@ export default function ClusterLogsPage() {
         style={{ minHeight: "300px" }}>
         {filteredLines.length === 0 && !isLoading && (
           <div className="flex items-center justify-center h-24 text-zinc-600 text-sm">
-            Keine Log-Eintraege gefunden
+            Keine Log-Einträge gefunden
           </div>
         )}
         {isLoading && filteredLines.length === 0 && (

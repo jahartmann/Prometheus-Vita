@@ -35,9 +35,9 @@ export function EnvironmentList() {
   const handleDelete = async (id: string) => {
     try {
       await deleteEnvironment(id);
-      toast.success("Umgebung geloescht");
+      toast.success("Umgebung gelöscht");
     } catch {
-      toast.error("Fehler beim Loeschen der Umgebung");
+      toast.error("Fehler beim Löschen der Umgebung");
     }
   };
 
@@ -104,7 +104,7 @@ export function EnvironmentList() {
                         className="text-destructive"
                       >
                         <Trash2 className="mr-2 h-4 w-4" />
-                        Loeschen
+                        Löschen
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>

@@ -142,7 +142,7 @@ export function FilesTab() {
         currentPath === "/"
           ? `/${entry.name}`
           : `${currentPath}/${entry.name}`;
-      if (confirm(`"${entry.name}" wirklich loeschen?`)) {
+      if (confirm(`"${entry.name}" wirklich löschen?`)) {
         deleteEntry(path);
       }
     },
@@ -355,8 +355,8 @@ export function FilesTab() {
                   <TableHead className="w-[40%]">Name</TableHead>
                   <TableHead>Rechte</TableHead>
                   <TableHead>Besitzer</TableHead>
-                  <TableHead className="text-right">Groesse</TableHead>
-                  <TableHead>Geaendert</TableHead>
+                  <TableHead className="text-right">Größe</TableHead>
+                  <TableHead>Geändert</TableHead>
                   <TableHead className="w-[80px]" />
                 </TableRow>
               </TableHeader>
@@ -452,7 +452,7 @@ export function FilesTab() {
                             variant="ghost"
                             size="icon"
                             className="h-7 w-7 text-destructive hover:text-destructive"
-                            title="Loeschen"
+                            title="Löschen"
                             onClick={() => handleDelete(entry)}
                           >
                             <Trash2 className="h-3.5 w-3.5" />

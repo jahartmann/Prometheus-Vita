@@ -117,10 +117,10 @@ export function SnapshotDialog({
     setActionLoading(snapname);
     try {
       await vmApi.deleteSnapshot(nodeId, vmid, vmType, snapname);
-      toast.success(`Snapshot "${snapname}" geloescht`);
+      toast.success(`Snapshot "${snapname}" gelöscht`);
       await loadSnapshots();
     } catch {
-      toast.error("Snapshot konnte nicht geloescht werden");
+      toast.error("Snapshot konnte nicht gelöscht werden");
     } finally {
       setActionLoading(null);
       setConfirmAction(null);
@@ -200,7 +200,7 @@ export function SnapshotDialog({
                         onClick={() =>
                           setConfirmAction({ type: "delete", snapname: snap.name })
                         }
-                        title="Loeschen"
+                        title="Löschen"
                         className="text-destructive hover:text-destructive"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -272,12 +272,12 @@ export function SnapshotDialog({
             <AlertDialogTitle>
               {confirmAction?.type === "rollback"
                 ? "Snapshot wiederherstellen?"
-                : "Snapshot loeschen?"}
+                : "Snapshot löschen?"}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {confirmAction?.type === "rollback"
-                ? `Snapshot "${confirmAction.snapname}" wiederherstellen? Die VM wird auf diesen Zustand zurueckgesetzt.`
-                : `Snapshot "${confirmAction?.snapname}" wirklich loeschen? Diese Aktion kann nicht rueckgaengig gemacht werden.`}
+                ? `Snapshot "${confirmAction.snapname}" wiederherstellen? Die VM wird auf diesen Zustand zurückgesetzt.`
+                : `Snapshot "${confirmAction?.snapname}" wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -297,7 +297,7 @@ export function SnapshotDialog({
                   : undefined
               }
             >
-              {confirmAction?.type === "rollback" ? "Wiederherstellen" : "Loeschen"}
+              {confirmAction?.type === "rollback" ? "Wiederherstellen" : "Löschen"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

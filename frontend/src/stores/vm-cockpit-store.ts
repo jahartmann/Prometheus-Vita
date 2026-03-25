@@ -204,7 +204,7 @@ export const useVMCockpitStore = create<VMCockpitState>()((set, get) => ({
     if (!vm || !nodeId) return;
     try {
       await vmCockpitApi.deleteFile(nodeId, vm.vmid, path, vm.type);
-      toast.success("Geloescht");
+      toast.success("Gelöscht");
       get().navigateTo(get().currentPath);
     } catch (error) {
       const err = extractCockpitError(error);

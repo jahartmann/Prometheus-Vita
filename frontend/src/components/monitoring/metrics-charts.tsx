@@ -52,7 +52,7 @@ export function MetricsCharts({ metrics }: MetricsChartsProps) {
       <Card>
         <CardContent className="flex h-[300px] items-center justify-center">
           <p className="text-sm text-muted-foreground">
-            Keine Metriken-Daten verfuegbar.
+            Keine Metriken-Daten verfügbar.
           </p>
         </CardContent>
       </Card>

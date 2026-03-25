@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
-import { Activity, Cpu, MemoryStick, HardDrive, Server, Monitor, Box, RefreshCw } from "lucide-react";
+import { Activity, Cpu, MemoryStick, HardDrive, Server, Monitor, Box, RefreshCw, AlertCircle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -26,7 +26,7 @@ function timeSince(date: Date): string {
 }
 
 export default function MonitoringPage() {
-  const { nodes, nodeStatus, isLoading, fetchNodes, fetchNodeStatus } = useNodeStore();
+  const { nodes, nodeStatus, isLoading, error, fetchNodes, fetchNodeStatus } = useNodeStore();
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [displayTime, setDisplayTime] = useState("");
   const pollRef = useRef<ReturnType<typeof setInterval>>(undefined);
@@ -98,11 +98,11 @@ export default function MonitoringPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground" role="status" aria-live="polite">
             <span className={cn(
               "h-2 w-2 rounded-full",
               isConnected ? "bg-green-500" : "bg-red-500"
-            )} />
+            )} aria-hidden="true" />
             <span>{isConnected ? "Live" : "Polling"}</span>
             {lastUpdated && (
               <span>&middot; Aktualisiert {displayTime}</span>
@@ -122,12 +122,22 @@ export default function MonitoringPage() {
 
       <Tabs defaultValue="overview">
         <TabsList>
-          <TabsTrigger value="overview">Uebersicht</TabsTrigger>
+          <TabsTrigger value="overview">Übersicht</TabsTrigger>
           <TabsTrigger value="traffic">Live Traffic</TabsTrigger>
           <TabsTrigger value="alerts">Alerts</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview">
+          {!isLoading && error && (
+            <div className="mb-4 rounded-lg border border-destructive/50 bg-destructive/10 p-4 flex items-center gap-3">
+              <AlertCircle className="h-5 w-5 text-destructive shrink-0" />
+              <div>
+                <p className="font-medium text-destructive">Verbindungsfehler</p>
+                <p className="text-sm text-muted-foreground">Daten konnten nicht geladen werden. Automatischer Retry in 30s.</p>
+              </div>
+            </div>
+          )}
+
           {/* Summary Cards */}
           <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-5">
             <Card>
@@ -185,7 +195,7 @@ export default function MonitoringPage() {
 
           {/* Node Status Grid */}
           {isLoading ? (
-            <div className="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div className="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-3" aria-busy="true" aria-label="Nodes werden geladen">
               {Array.from({ length: 3 }).map((_, i) => (
                 <Skeleton key={i} className="h-48 w-full" />
               ))}
@@ -282,7 +292,7 @@ export default function MonitoringPage() {
                           </div>
                         ) : (
                           <p className="text-sm text-muted-foreground">
-                            Keine Statusdaten verfuegbar.
+                            Keine Statusdaten verfügbar.
                           </p>
                         )}
                       </CardContent>

@@ -142,9 +142,9 @@ export default function NotificationsSettingsPage() {
     try {
       await notificationApi.deleteChannel(id);
       fetchChannels();
-      toast.success("Kanal geloescht");
+      toast.success("Kanal gelöscht");
     } catch {
-      toast.error("Fehler beim Loeschen des Kanals");
+      toast.error("Fehler beim Löschen des Kanals");
     }
   };
 
@@ -165,9 +165,9 @@ export default function NotificationsSettingsPage() {
     try {
       await alertApi.deleteRule(id);
       fetchAlertRules();
-      toast.success("Regel geloescht");
+      toast.success("Regel gelöscht");
     } catch {
-      toast.error("Fehler beim Loeschen der Regel");
+      toast.error("Fehler beim Löschen der Regel");
     }
   };
 
@@ -177,7 +177,7 @@ export default function NotificationsSettingsPage() {
       fetchAlertRules();
       toast.success(rule.is_active ? "Regel deaktiviert" : "Regel aktiviert");
     } catch {
-      toast.error("Fehler beim Aendern der Regel");
+      toast.error("Fehler beim Ändern der Regel");
     }
   };
 
@@ -185,9 +185,9 @@ export default function NotificationsSettingsPage() {
     try {
       await escalationApi.deletePolicy(id);
       fetchPolicies();
-      toast.success("Richtlinie geloescht");
+      toast.success("Richtlinie gelöscht");
     } catch {
-      toast.error("Fehler beim Loeschen der Richtlinie");
+      toast.error("Fehler beim Löschen der Richtlinie");
     }
   };
 
@@ -206,7 +206,7 @@ export default function NotificationsSettingsPage() {
       <div>
         <h2 className="text-lg font-semibold">Benachrichtigungen</h2>
         <p className="text-sm text-muted-foreground">
-          Kanaele, Alert-Regeln und Benachrichtigungsverlauf verwalten.
+          Kanäle, Alert-Regeln und Benachrichtigungsverlauf verwalten.
         </p>
       </div>
 
@@ -216,11 +216,11 @@ export default function NotificationsSettingsPage() {
 
       <Tabs defaultValue="channels">
         <TabsList>
-          <TabsTrigger value="channels">Kanaele</TabsTrigger>
+          <TabsTrigger value="channels">Kanäle</TabsTrigger>
           <TabsTrigger value="rules">Alert-Regeln</TabsTrigger>
           <TabsTrigger value="reflexes">Reflexe</TabsTrigger>
           <TabsTrigger value="escalation">Eskalation</TabsTrigger>
-          <TabsTrigger value="incidents">Vorfaelle</TabsTrigger>
+          <TabsTrigger value="incidents">Vorfälle</TabsTrigger>
           <TabsTrigger value="history">Verlauf</TabsTrigger>
         </TabsList>
 
@@ -255,7 +255,7 @@ export default function NotificationsSettingsPage() {
                   ) : channels.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                        Keine Kanaele konfiguriert.
+                        Keine Kanäle konfiguriert.
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -304,7 +304,7 @@ export default function NotificationsSettingsPage() {
                                 className="text-destructive"
                               >
                                 <Trash2 className="mr-2 h-4 w-4" />
-                                Loeschen
+                                Löschen
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
@@ -401,7 +401,7 @@ export default function NotificationsSettingsPage() {
                                 className="text-destructive"
                               >
                                 <Trash2 className="mr-2 h-4 w-4" />
-                                Loeschen
+                                Löschen
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
@@ -502,7 +502,7 @@ export default function NotificationsSettingsPage() {
                                 className="text-destructive"
                               >
                                 <Trash2 className="mr-2 h-4 w-4" />
-                                Loeschen
+                                Löschen
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
@@ -585,7 +585,7 @@ export default function NotificationsSettingsPage() {
                                 className="text-destructive"
                               >
                                 <Trash2 className="mr-2 h-4 w-4" />
-                                Loeschen
+                                Löschen
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>

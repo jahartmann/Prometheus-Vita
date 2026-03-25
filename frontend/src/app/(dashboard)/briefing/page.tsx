@@ -208,7 +208,7 @@ export default function BriefingPage() {
         </div>
         <Card>
           <CardContent className="py-8 text-center text-muted-foreground">
-            {error || "Keine Daten verfuegbar"}
+            {error || "Keine Daten verfügbar"}
           </CardContent>
         </Card>
       </div>
@@ -235,7 +235,7 @@ export default function BriefingPage() {
     actions.push({
       icon: XCircle,
       title: `${data.nodes_offline} Node${data.nodes_offline > 1 ? "s" : ""} offline`,
-      description: "Offline-Nodes umgehend pruefen und wiederherstellen",
+      description: "Offline-Nodes umgehend prüfen und wiederherstellen",
       href: "/monitoring",
       severity: "critical",
     });
@@ -244,10 +244,10 @@ export default function BriefingPage() {
     const critical = anomalies.filter((a) => a.severity === "critical").length;
     actions.push({
       icon: AlertTriangle,
-      title: `${anomalies.length} Anomalie${anomalies.length > 1 ? "n" : ""} pruefen`,
+      title: `${anomalies.length} Anomalie${anomalies.length > 1 ? "n" : ""} prüfen`,
       description: critical > 0
         ? `${critical} davon kritisch - sofortige Untersuchung empfohlen`
-        : "Ungewoehnliche Metriken erkannt - Analyse empfohlen",
+        : "Ungewöhnliche Metriken erkannt - Analyse empfohlen",
       href: "#anomalies",
       severity: critical > 0 ? "critical" : "warning",
     });
@@ -259,7 +259,7 @@ export default function BriefingPage() {
     actions.push({
       icon: Timer,
       title: `Ressourcen-Engpass in ${minDays} Tagen erwartet`,
-      description: `${predictions.length} Vorhersage${predictions.length > 1 ? "n" : ""} zeigen bevorstehende Schwellwertuebrschreitungen`,
+      description: `${predictions.length} Vorhersage${predictions.length > 1 ? "n" : ""} zeigen bevorstehende Schwellwertüberschreitungen`,
       href: "#predictions",
       severity: minDays <= 7 ? "critical" : "warning",
     });
@@ -268,7 +268,7 @@ export default function BriefingPage() {
     actions.push({
       icon: Cpu,
       title: "Cluster stark ausgelastet (CPU)",
-      description: `Durchschnittliche CPU-Last bei ${data.avg_cpu.toFixed(1)}% - Entlastung pruefen`,
+      description: `Durchschnittliche CPU-Last bei ${data.avg_cpu.toFixed(1)}% - Entlastung prüfen`,
       href: "/monitoring",
       severity: "warning",
     });
@@ -277,7 +277,7 @@ export default function BriefingPage() {
     actions.push({
       icon: MemoryStick,
       title: "Cluster stark ausgelastet (RAM)",
-      description: `Durchschnittliche RAM-Nutzung bei ${data.avg_ram.toFixed(1)}% - Optimierung pruefen`,
+      description: `Durchschnittliche RAM-Nutzung bei ${data.avg_ram.toFixed(1)}% - Optimierung prüfen`,
       href: "/monitoring",
       severity: "warning",
     });
@@ -473,7 +473,7 @@ export default function BriefingPage() {
                               onClick={() => handleResolve(a.id)}
                               className="h-7 text-xs"
                             >
-                              {resolvingIds.has(a.id) ? "..." : "Aufloesen"}
+                              {resolvingIds.has(a.id) ? "..." : "Auflösen"}
                             </Button>
                           </div>
                         </div>
@@ -553,7 +553,7 @@ export default function BriefingPage() {
               {predictions.length === 0 ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
                   <CheckCircle2 className="h-4 w-4 text-green-500" />
-                  Keine kritischen Vorhersagen — Ressourcen im gruenen Bereich
+                  Keine kritischen Vorhersagen — Ressourcen im grünen Bereich
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -719,7 +719,7 @@ export default function BriefingPage() {
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground">Keine Daten verfuegbar</p>
+              <p className="text-sm text-muted-foreground">Keine Daten verfügbar</p>
             )}
           </CardContent>
         </Card>
@@ -785,7 +785,7 @@ export default function BriefingPage() {
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base">
             <Server className="h-4 w-4 text-muted-foreground" />
-            Node-Uebersicht
+            Node-Übersicht
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -859,7 +859,7 @@ export default function BriefingPage() {
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base">
             <HardDrive className="h-4 w-4 text-muted-foreground" />
-            Speicher-Uebersicht
+            Speicher-Übersicht
           </CardTitle>
         </CardHeader>
         <CardContent>

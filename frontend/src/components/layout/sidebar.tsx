@@ -92,7 +92,7 @@ const sections: NavSection[] = [
     label: "System",
     items: [
       { label: "Topologie", href: "/topology", icon: GitBranch, matchPrefix: "/topology" },
-      { label: "Abhaengigkeiten", href: "/dependencies", icon: Link2, matchPrefix: "/dependencies" },
+      { label: "Abhängigkeiten", href: "/dependencies", icon: Link2, matchPrefix: "/dependencies" },
       { label: "Reflex-Regeln", href: "/reflex", icon: Zap, matchPrefix: "/reflex" },
       { label: "Tags", href: "/tags", icon: Tag, matchPrefix: "/tags" },
       { label: "ISOs & Vorlagen", href: "/isos", icon: Disc, matchPrefix: "/isos" },
@@ -102,7 +102,7 @@ const sections: NavSection[] = [
 ];
 
 const nodeSubItems = [
-  { label: "Uebersicht", path: "", icon: LayoutDashboard },
+  { label: "Übersicht", path: "", icon: LayoutDashboard },
   { label: "VMs & Container", path: "vms", icon: Monitor },
   { label: "Monitoring", path: "monitoring", icon: BarChart3 },
   { label: "Netzwerk", path: "network", icon: Network },
@@ -182,7 +182,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
   };
 
   const sidebarContent = (
-    <aside className="flex h-screen w-60 flex-col bg-sidebar border-r border-border">
+    <aside className="flex h-screen w-60 flex-col bg-sidebar border-r border-border" role="navigation" aria-label="Hauptnavigation">
       {/* Logo */}
       <div className="flex h-14 items-center gap-2 px-4">
         <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-900 dark:bg-white">
@@ -272,7 +272,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
               className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-sidebar-muted transition-colors hover:bg-accent hover:text-foreground"
             >
               <Plus className="h-3.5 w-3.5 shrink-0" />
-              <span>Server hinzufuegen</span>
+              <span>Server hinzufügen</span>
             </button>
           </CollapsibleContent>
         </Collapsible>
@@ -328,7 +328,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
       <div className="md:hidden">
         {mobileOpen && (
           <>
-            <div className="fixed inset-0 z-40 bg-black/50" onClick={onMobileClose} />
+            <div className="fixed inset-0 z-40 bg-black/50" onClick={onMobileClose} aria-hidden="true" />
             <div className="fixed inset-y-0 left-0 z-50 w-60">
               {sidebarContent}
             </div>

@@ -45,7 +45,7 @@ export const useDriftStore = create<DriftState>()((set) => ({
         nodeChecks: { ...state.nodeChecks, [nodeId]: data },
       }));
     } catch {
-      // nicht verfuegbar
+      // nicht verfügbar
     }
   },
 
@@ -69,12 +69,12 @@ export const useDriftStore = create<DriftState>()((set) => ({
   ignoreDrift: async (checkId: string, filePath: string) => {
     try {
       await driftApi.ignoreDrift(checkId, filePath);
-      toast.success("Aenderung ignoriert");
+      toast.success("Änderung ignoriert");
       // Refresh the list
       const resp = await driftApi.listAll();
       set({ checks: toArray<DriftCheck>(resp.data) });
     } catch {
-      toast.error("Aenderung konnte nicht ignoriert werden");
+      toast.error("Änderung konnte nicht ignoriert werden");
     }
   },
 

@@ -45,9 +45,9 @@ export function KeyList({ nodeId, onGenerate }: KeyListProps) {
     try {
       await sshKeyApi.deploy(nodeId, keyId);
       fetchKeys();
-      toast.success("SSH-Schluessel deployed");
+      toast.success("SSH-Schlüssel deployed");
     } catch {
-      toast.error("Fehler beim Deployen des Schluessels");
+      toast.error("Fehler beim Deployen des Schlüssels");
     }
   };
 
@@ -55,9 +55,9 @@ export function KeyList({ nodeId, onGenerate }: KeyListProps) {
     try {
       await sshKeyApi.delete(nodeId, keyId);
       fetchKeys();
-      toast.success("SSH-Schluessel geloescht");
+      toast.success("SSH-Schlüssel gelöscht");
     } catch {
-      toast.error("Fehler beim Loeschen des Schluessels");
+      toast.error("Fehler beim Löschen des Schlüssels");
     }
   };
 
@@ -66,7 +66,7 @@ export function KeyList({ nodeId, onGenerate }: KeyListProps) {
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Key className="h-4 w-4" />
-          <span className="font-medium">SSH-Schluessel</span>
+          <span className="font-medium">SSH-Schlüssel</span>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={fetchKeys}>
@@ -74,7 +74,7 @@ export function KeyList({ nodeId, onGenerate }: KeyListProps) {
             Aktualisieren
           </Button>
           <Button size="sm" onClick={onGenerate}>
-            Schluessel generieren
+            Schlüssel generieren
           </Button>
         </div>
       </div>
@@ -101,7 +101,7 @@ export function KeyList({ nodeId, onGenerate }: KeyListProps) {
           ) : keys.length === 0 ? (
             <TableRow>
               <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                Keine SSH-Schluessel vorhanden.
+                Keine SSH-Schlüssel vorhanden.
               </TableCell>
             </TableRow>
           ) : (
@@ -132,7 +132,7 @@ export function KeyList({ nodeId, onGenerate }: KeyListProps) {
                         <Upload className="h-4 w-4" />
                       </Button>
                     )}
-                    <Button variant="ghost" size="icon" onClick={() => handleDelete(key.id)} title="Loeschen">
+                    <Button variant="ghost" size="icon" onClick={() => handleDelete(key.id)} title="Löschen">
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
                   </div>

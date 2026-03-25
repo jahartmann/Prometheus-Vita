@@ -65,7 +65,7 @@ export function DashboardOverview() {
           <Button variant="outline" size="sm" asChild>
             <Link href="/settings/nodes">
               <Plus className="mr-2 h-4 w-4" />
-              Server hinzufuegen
+              Server hinzufügen
             </Link>
           </Button>
         </div>

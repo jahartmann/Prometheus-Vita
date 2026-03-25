@@ -19,10 +19,10 @@ interface DriftDetailDialogProps {
 }
 
 const statusLabel: Record<string, string> = {
-  added: "Hinzugefuegt",
+  added: "Hinzugefügt",
   removed: "Entfernt",
-  modified: "Geaendert",
-  unchanged: "Unveraendert",
+  modified: "Geändert",
+  unchanged: "Unverändert",
 };
 
 const statusColor: Record<string, "default" | "secondary" | "outline"> = {
@@ -143,12 +143,12 @@ export function DriftDetailDialog({ check, open, onOpenChange }: DriftDetailDial
 
         <div className="space-y-2 text-sm mb-4">
           <p className="text-muted-foreground">
-            Geprueft: {new Date(check.checked_at).toLocaleString("de-DE")} |{" "}
+            Geprüft: {new Date(check.checked_at).toLocaleString("de-DE")} |{" "}
             {check.total_files} Dateien total
           </p>
           <div className="flex gap-2">
-            {check.changed_files > 0 && <Badge variant="outline">{check.changed_files} geaendert</Badge>}
-            {check.added_files > 0 && <Badge variant="default">{check.added_files} hinzugefuegt</Badge>}
+            {check.changed_files > 0 && <Badge variant="outline">{check.changed_files} geändert</Badge>}
+            {check.added_files > 0 && <Badge variant="default">{check.added_files} hinzugefügt</Badge>}
             {check.removed_files > 0 && <Badge variant="secondary">{check.removed_files} entfernt</Badge>}
           </div>
           {check.baseline_updated_at && (
@@ -199,7 +199,7 @@ export function DriftDetailDialog({ check, open, onOpenChange }: DriftDetailDial
         )}
 
         {filtered.length === 0 ? (
-          <p className="text-muted-foreground text-sm">Keine geaenderten Dateien.</p>
+          <p className="text-muted-foreground text-sm">Keine geänderten Dateien.</p>
         ) : (
           <div className="space-y-3">
             {filtered.map((file) => (

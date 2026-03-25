@@ -101,7 +101,7 @@ export function SnapshotAnalysis({ snapshots: propSnapshots }: SnapshotAnalysisP
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                {oldSnapshots.length} Snapshots aelter als 30 Tage ({formatBytes(oldTotalSize)})
+                {oldSnapshots.length} Snapshots älter als 30 Tage ({formatBytes(oldTotalSize)})
               </TooltipContent>
             </Tooltip>
           )}
@@ -116,11 +116,11 @@ export function SnapshotAnalysis({ snapshots: propSnapshots }: SnapshotAnalysisP
           </div>
           <div className="rounded-lg border p-3 text-center">
             <p className="text-lg font-bold">{formatBytes(totalSize)}</p>
-            <p className="text-xs text-muted-foreground">Geschaetzte Groesse</p>
+            <p className="text-xs text-muted-foreground">Geschätzte Größe</p>
           </div>
           <div className="rounded-lg border p-3 text-center">
             <p className="text-lg font-bold text-amber-600">{oldSnapshots.length}</p>
-            <p className="text-xs text-muted-foreground">Aelter als 30 Tage</p>
+            <p className="text-xs text-muted-foreground">Älter als 30 Tage</p>
           </div>
         </div>
 
@@ -188,7 +188,7 @@ export function SnapshotAnalysis({ snapshots: propSnapshots }: SnapshotAnalysisP
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">
                 Diese belegen ca. {formatBytes(oldTotalSize)} Speicherplatz.
-                Eine regelmaessige Bereinigung wird empfohlen.
+                Eine regelmäßige Bereinigung wird empfohlen.
               </p>
             </div>
           </div>

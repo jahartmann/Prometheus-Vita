@@ -122,7 +122,7 @@ export function EscalationPolicyDialog({
             {isEdit ? "Eskalationsrichtlinie bearbeiten" : "Neue Eskalationsrichtlinie"}
           </DialogTitle>
           <DialogDescription>
-            Definieren Sie Stufen mit Verzoegerungen und Benachrichtigungskanaelen.
+            Definieren Sie Stufen mit Verzögerungen und Benachrichtigungskanälen.
           </DialogDescription>
         </DialogHeader>
 
@@ -162,7 +162,7 @@ export function EscalationPolicyDialog({
                 </div>
 
                 <div className="space-y-1">
-                  <Label className="text-xs">Verzoegerung (Sekunden)</Label>
+                  <Label className="text-xs">Verzögerung (Sekunden)</Label>
                   <Input
                     type="number"
                     value={step.delay_seconds}
@@ -172,7 +172,7 @@ export function EscalationPolicyDialog({
 
                 {channels.length > 0 && (
                   <div className="space-y-1">
-                    <Label className="text-xs">Kanaele</Label>
+                    <Label className="text-xs">Kanäle</Label>
                     <div className="space-y-1 rounded border p-2">
                       {channels.map((ch) => (
                         <label key={ch.id} className="flex items-center gap-2 text-xs cursor-pointer">

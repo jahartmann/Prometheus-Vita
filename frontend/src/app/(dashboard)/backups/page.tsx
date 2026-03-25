@@ -31,6 +31,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { KpiCard } from "@/components/ui/kpi-card";
 import { useNodeStore } from "@/stores/node-store";
 import { backupApi, scheduleApi, toArray } from "@/lib/api";
@@ -51,7 +62,7 @@ const statusVariant: Record<string, "default" | "success" | "destructive" | "out
 
 const statusLabel: Record<string, string> = {
   pending: "Ausstehend",
-  running: "Laeuft",
+  running: "Läuft",
   completed: "Abgeschlossen",
   failed: "Fehlgeschlagen",
 };
@@ -73,6 +84,7 @@ export default function BackupsPage() {
   const { nodes, fetchNodes } = useNodeStore();
   const [backups, setBackups] = useState<ConfigBackup[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedBackup, setSelectedBackup] = useState<ConfigBackup | null>(null);
   const [restoreBackupId, setRestoreBackupId] = useState<string | null>(null);
   const [vzdumpOpen, setVzdumpOpen] = useState(false);
@@ -88,6 +100,7 @@ export default function BackupsPage() {
   const [schedulesLoading, setSchedulesLoading] = useState(false);
   const [scheduleNodeId, setScheduleNodeId] = useState("");
   const [isCreatingSchedule, setIsCreatingSchedule] = useState(false);
+  const [activeTab, setActiveTab] = useState("backups");
 
   useEffect(() => {
     fetchNodes();
@@ -99,8 +112,11 @@ export default function BackupsPage() {
       const response = await backupApi.listAll();
       const data = toArray<ConfigBackup>(response.data);
       setBackups(data);
+      setLoadError(null);
     } catch (e) {
       console.error('Failed to load backups:', e);
+      const message = e instanceof Error ? e.message : "Fehler beim Laden der Backups";
+      setLoadError(message);
       setBackups([]);
     } finally {
       setIsLoading(false);
@@ -110,6 +126,14 @@ export default function BackupsPage() {
   useEffect(() => {
     loadBackups();
   }, []);
+
+  // Auto-refresh when backups are running or pending
+  useEffect(() => {
+    const hasRunning = backups.some(b => b.status === 'running' || b.status === 'pending');
+    if (!hasRunning) return;
+    const timer = setInterval(loadBackups, 5000);
+    return () => clearInterval(timer);
+  }, [backups]);
 
   const loadAllSchedules = async () => {
     if (nodes.length === 0) return;
@@ -170,7 +194,7 @@ export default function BackupsPage() {
       await backupApi.deleteBackup(backupId);
       setBackups((prev) => prev.filter((b) => b.id !== backupId));
       setDeleteConfirm(null);
-      toast.success("Backup geloescht");
+      toast.success("Backup gelöscht");
     } catch (e) {
       console.error('Failed to delete backup:', e);
     }
@@ -184,9 +208,12 @@ export default function BackupsPage() {
         backup_type: "manual",
         notes: createNotes || undefined,
       });
-      toast.success("Backup wird erstellt");
+      toast.success("Backup wird erstellt", {
+        description: "Der Fortschritt wird in der Liste angezeigt.",
+      });
       setCreateNotes("");
       setCreateNodeId("");
+      setActiveTab("backups");
       loadBackups();
     } catch (e) {
       console.error('Failed to create backup:', e);
@@ -214,7 +241,7 @@ export default function BackupsPage() {
   const handleDeleteSchedule = async (id: string) => {
     try {
       await scheduleApi.deleteSchedule(id);
-      toast.success("Zeitplan geloescht");
+      toast.success("Zeitplan gelöscht");
       loadAllSchedules();
     } catch (e) {
       console.error('Failed to delete schedule:', e);
@@ -249,7 +276,7 @@ export default function BackupsPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Backups</h1>
           <p className="text-muted-foreground">
-            Zentrale Verwaltung aller Konfigurations-Backups, Zeitplaene und Vzdump-Sicherungen.
+            Zentrale Verwaltung aller Konfigurations-Backups, Zeitpläne und Vzdump-Sicherungen.
           </p>
         </div>
         <div className="flex gap-2">
@@ -269,7 +296,7 @@ export default function BackupsPage() {
         <KpiCard
           title="Backups gesamt"
           value={backups.length}
-          subtitle={`${formatBytes(totalSize)} Gesamtgroesse`}
+          subtitle={`${formatBytes(totalSize)} Gesamtgröße`}
           icon={Archive}
           color="blue"
         />
@@ -288,15 +315,15 @@ export default function BackupsPage() {
           color={failedCount > 0 ? "red" : "green"}
         />
         <KpiCard
-          title="Aktive Zeitplaene"
+          title="Aktive Zeitpläne"
           value={activeSchedules}
-          subtitle={`${allSchedules.length} Zeitplaene gesamt`}
+          subtitle={`${allSchedules.length} Zeitpläne gesamt`}
           icon={Calendar}
           color="orange"
         />
       </div>
 
-      <Tabs defaultValue="backups">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="backups">
             Konfig-Backups
@@ -307,7 +334,7 @@ export default function BackupsPage() {
             )}
           </TabsTrigger>
           <TabsTrigger value="schedules">
-            Zeitplaene
+            Zeitpläne
             {allSchedules.length > 0 && (
               <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0">
                 {allSchedules.length}
@@ -319,8 +346,21 @@ export default function BackupsPage() {
 
         {/* Backups Tab */}
         <TabsContent value="backups" className="space-y-4">
+          {!isLoading && loadError && (
+            <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 flex items-center gap-3">
+              <AlertCircle className="h-5 w-5 text-destructive shrink-0" />
+              <div className="flex-1">
+                <p className="font-medium text-destructive">Fehler beim Laden der Backups</p>
+                <p className="text-sm text-muted-foreground">{loadError}</p>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => loadBackups()}>
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Erneut versuchen
+              </Button>
+            </div>
+          )}
           {isLoading ? (
-            <div className="space-y-3">
+            <div className="space-y-3" aria-busy="true" aria-label="Backups werden geladen">
               {Array.from({ length: 3 }).map((_, i) => (
                 <Skeleton key={i} className="h-24 w-full" />
               ))}
@@ -407,6 +447,7 @@ export default function BackupsPage() {
                                 variant="ghost"
                                 size="icon"
                                 title="Details anzeigen"
+                                aria-label="Details anzeigen"
                                 onClick={() => setSelectedBackup(backup)}
                               >
                                 <Eye className="h-4 w-4" />
@@ -417,6 +458,7 @@ export default function BackupsPage() {
                                     variant="ghost"
                                     size="icon"
                                     title="Wiederherstellen"
+                                    aria-label="Wiederherstellen"
                                     onClick={() => setRestoreBackupId(backup.id)}
                                   >
                                     <RotateCcw className="h-4 w-4" />
@@ -425,41 +467,38 @@ export default function BackupsPage() {
                                     variant="ghost"
                                     size="icon"
                                     title="Herunterladen"
+                                    aria-label="Herunterladen"
                                     onClick={() => handleDownload(backup.id)}
                                   >
                                     <Download className="h-4 w-4" />
                                   </Button>
                                 </>
                               )}
-                              {deleteConfirm === backup.id ? (
-                                <div className="flex items-center gap-1">
-                                  <Button
-                                    variant="destructive"
-                                    size="sm"
-                                    className="text-xs h-8"
-                                    onClick={() => handleDelete(backup.id)}
-                                  >
-                                    Ja
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="text-xs h-8"
-                                    onClick={() => setDeleteConfirm(null)}
-                                  >
-                                    Nein
-                                  </Button>
-                                </div>
-                              ) : (
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  title="Loeschen"
-                                  onClick={() => setDeleteConfirm(backup.id)}
-                                >
-                                  <Trash2 className="h-4 w-4 text-destructive" />
-                                </Button>
-                              )}
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                title="Löschen"
+                                aria-label="Löschen"
+                                onClick={() => setDeleteConfirm(backup.id)}
+                              >
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                              <AlertDialog open={deleteConfirm === backup.id} onOpenChange={(open) => !open && setDeleteConfirm(null)}>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Backup löschen?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      Backup v{backup.version} von {getNodeName(backup.node_id)} wird unwiderruflich gelöscht.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                                    <AlertDialogAction onClick={() => handleDelete(backup.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                                      Löschen
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
                             </div>
                           </div>
                         </div>
@@ -484,7 +523,7 @@ export default function BackupsPage() {
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-16">
                 <Calendar className="mb-4 h-12 w-12 text-muted-foreground" />
-                <p className="text-lg font-medium">Keine Zeitplaene vorhanden</p>
+                <p className="text-lg font-medium">Keine Zeitpläne vorhanden</p>
                 <p className="mt-1 text-sm text-muted-foreground">
                   Erstellen Sie einen automatischen Backup-Zeitplan.
                 </p>
@@ -517,7 +556,7 @@ export default function BackupsPage() {
                               )}
                               {s.next_run_at && (
                                 <span className="text-primary">
-                                  Naechster Lauf: {new Date(s.next_run_at).toLocaleString("de-DE")}
+                                  Nächster Lauf: {new Date(s.next_run_at).toLocaleString("de-DE")}
                                 </span>
                               )}
                             </div>
@@ -529,6 +568,7 @@ export default function BackupsPage() {
                             <Button
                               variant="ghost"
                               size="icon"
+                              aria-label="Zeitplan löschen"
                               onClick={() => handleDeleteSchedule(s.id)}
                             >
                               <Trash2 className="h-4 w-4 text-destructive" />
@@ -550,9 +590,10 @@ export default function BackupsPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
+                <Label htmlFor="schedule-node-select">Server</Label>
                 <Select value={scheduleNodeId} onValueChange={setScheduleNodeId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Server auswaehlen..." />
+                  <SelectTrigger id="schedule-node-select">
+                    <SelectValue placeholder="Server auswählen..." />
                   </SelectTrigger>
                   <SelectContent>
                     {onlineNodes.map((n) => (
@@ -578,13 +619,13 @@ export default function BackupsPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                Sichert die Konfigurationsdateien des ausgewaehlten Servers (z.B. /etc/pve, /etc/network, Crontabs).
+                Sichert die Konfigurationsdateien des ausgewählten Servers (z.B. /etc/pve, /etc/network, Crontabs).
               </p>
               <div className="space-y-2">
-                <label className="text-sm font-medium">Server</label>
+                <Label htmlFor="create-node-select">Server</Label>
                 <Select value={createNodeId} onValueChange={setCreateNodeId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Server auswaehlen..." />
+                  <SelectTrigger id="create-node-select">
+                    <SelectValue placeholder="Server auswählen..." />
                   </SelectTrigger>
                   <SelectContent>
                     {onlineNodes.map((n) => (
@@ -596,8 +637,9 @@ export default function BackupsPage() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">Notizen (optional)</label>
+                <Label htmlFor="create-notes">Notizen (optional)</Label>
                 <textarea
+                  id="create-notes"
                   className="w-full rounded-md border bg-background px-3 py-2 text-sm min-h-[80px] resize-y"
                   rows={3}
                   value={createNotes}

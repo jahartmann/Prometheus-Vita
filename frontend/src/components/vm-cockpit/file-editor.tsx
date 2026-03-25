@@ -98,14 +98,14 @@ export function FileEditor({
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="sm" onClick={onClose}>
           <ArrowLeft className="mr-1.5 h-3.5 w-3.5" />
-          Zurueck
+          Zurück
         </Button>
         <div className="flex items-center gap-2 min-w-0 flex-1">
           <FileCode className="h-4 w-4 text-muted-foreground shrink-0" />
           <span className="font-mono text-sm truncate">{path}</span>
           {hasChanges && (
             <Badge variant="warning" className="shrink-0">
-              Geaendert
+              Geändert
             </Badge>
           )}
         </div>
@@ -146,7 +146,7 @@ export function FileEditor({
         <Card>
           <CardHeader className="py-3 px-4">
             <CardTitle className="text-sm flex items-center gap-2">
-              Aenderungen
+              Änderungen
               <Badge variant="success" className="text-xs">
                 +{diff.added}
               </Badge>

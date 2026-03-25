@@ -59,7 +59,7 @@ export function PredictionCard() {
               <div>Schwellenwert: {p.threshold}%</div>
               {p.days_until_threshold != null && (
                 <div className="col-span-2 font-medium text-foreground">
-                  Geschaetzte Tage bis Schwellenwert:{" "}
+                  Geschätzte Tage bis Schwellenwert:{" "}
                   {(p.days_until_threshold ?? 0).toFixed(1)}
                 </div>
               )}

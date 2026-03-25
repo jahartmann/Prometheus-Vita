@@ -33,7 +33,7 @@ export function NodeGrid() {
       <div className="flex flex-col items-center justify-center rounded-xl border border-dashed py-12">
         <p className="text-muted-foreground">Keine Nodes konfiguriert.</p>
         <p className="mt-1 text-sm text-muted-foreground">
-          Fuegen Sie Ihren ersten Proxmox Node unter Einstellungen hinzu.
+          Fügen Sie Ihren ersten Proxmox Node unter Einstellungen hinzu.
         </p>
       </div>
     );

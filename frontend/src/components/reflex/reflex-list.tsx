@@ -17,7 +17,7 @@ const actionLabels: Record<string, string> = {
   restart_service: "Service neustarten",
   clear_cache: "Cache leeren",
   notify: "Benachrichtigung",
-  run_command: "Befehl ausfuehren",
+  run_command: "Befehl ausführen",
   start_vm: "VM starten",
   stop_vm: "VM stoppen",
   scale_up: "Hochskalieren",
@@ -174,7 +174,7 @@ export function ReflexList() {
                           </span>
                           <span>Cooldown: {rule.cooldown_seconds}s</span>
                           {rule.trigger_count > 0 && (
-                            <span>{rule.trigger_count}x ausgeloest</span>
+                            <span>{rule.trigger_count}x ausgelöst</span>
                           )}
                           {rule.last_triggered_at && (
                             <span>
@@ -227,7 +227,7 @@ export function ReflexList() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            title="Loeschen"
+                            title="Löschen"
                             onClick={() => setDeleteConfirm(rule.id)}
                           >
                             <Trash2 className="h-4 w-4 text-destructive" />

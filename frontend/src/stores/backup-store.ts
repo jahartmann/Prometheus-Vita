@@ -61,11 +61,11 @@ export const useBackupStore = create<BackupState>()((set, get) => ({
       set((state) => ({
         backups: state.backups.filter((b) => b.id !== backupId),
       }));
-      toast.success("Backup geloescht");
+      toast.success("Backup gelöscht");
     } catch {
-      toast.error("Backup konnte nicht geloescht werden");
-      set({ error: "Backup konnte nicht geloescht werden" });
-      throw new Error("Backup konnte nicht geloescht werden");
+      toast.error("Backup konnte nicht gelöscht werden");
+      set({ error: "Backup konnte nicht gelöscht werden" });
+      throw new Error("Backup konnte nicht gelöscht werden");
     }
   },
 
@@ -75,8 +75,8 @@ export const useBackupStore = create<BackupState>()((set, get) => ({
       const response = await scheduleApi.listSchedules(nodeId);
       set({ schedules: toArray<BackupSchedule>(response.data), isLoadingSchedules: false });
     } catch {
-      toast.error("Zeitplaene konnten nicht geladen werden");
-      set({ error: "Zeitplaene konnten nicht geladen werden", isLoadingSchedules: false });
+      toast.error("Zeitpläne konnten nicht geladen werden");
+      set({ error: "Zeitpläne konnten nicht geladen werden", isLoadingSchedules: false });
     }
   },
 }));

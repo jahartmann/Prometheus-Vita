@@ -55,9 +55,9 @@ export function TokenList({ refreshKey }: TokenListProps) {
     try {
       await gatewayApi.deleteToken(id);
       fetchTokens();
-      toast.success("Token geloescht");
+      toast.success("Token gelöscht");
     } catch {
-      toast.error("Fehler beim Loeschen des Tokens");
+      toast.error("Fehler beim Löschen des Tokens");
     }
   };
 
@@ -76,7 +76,7 @@ export function TokenList({ refreshKey }: TokenListProps) {
         <TableHeader>
           <TableRow>
             <TableHead>Name</TableHead>
-            <TableHead>Praefix</TableHead>
+            <TableHead>Präfix</TableHead>
             <TableHead>Status</TableHead>
             <TableHead>Berechtigungen</TableHead>
             <TableHead>Zuletzt benutzt</TableHead>
@@ -137,7 +137,7 @@ export function TokenList({ refreshKey }: TokenListProps) {
                         <Ban className="h-4 w-4 text-yellow-500" />
                       </Button>
                     )}
-                    <Button variant="ghost" size="icon" onClick={() => handleDelete(token.id)} title="Loeschen">
+                    <Button variant="ghost" size="icon" onClick={() => handleDelete(token.id)} title="Löschen">
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
                   </div>

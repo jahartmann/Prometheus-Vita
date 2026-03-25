@@ -68,9 +68,9 @@ export function TagManager() {
     try {
       await tagApi.delete(id);
       fetchTags();
-      toast.success("Tag geloescht");
+      toast.success("Tag gelöscht");
     } catch {
-      toast.error("Fehler beim Loeschen des Tags");
+      toast.error("Fehler beim Löschen des Tags");
     }
   };
 

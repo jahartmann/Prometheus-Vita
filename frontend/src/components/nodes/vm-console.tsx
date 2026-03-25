@@ -63,7 +63,7 @@ export function VmConsole({
             Konsole: {vmName} (ID: {vmid})
           </DialogTitle>
           <DialogDescription>
-            Oeffnet die Proxmox-Konsole in einem neuen Tab.
+            Öffnet die Proxmox-Konsole in einem neuen Tab.
           </DialogDescription>
         </DialogHeader>
 
@@ -87,11 +87,11 @@ export function VmConsole({
             ) : (
               <ExternalLink className="mr-2 h-4 w-4" />
             )}
-            Konsole oeffnen
+            Konsole öffnen
           </Button>
 
           <p className="text-xs text-muted-foreground">
-            Die Konsole wird ueber die Proxmox-noVNC-Oberflaeche im Browser geoeffnet.
+            Die Konsole wird über die Proxmox-noVNC-Oberfläche im Browser geöffnet.
           </p>
         </div>
       </DialogContent>

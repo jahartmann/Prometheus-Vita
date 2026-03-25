@@ -31,7 +31,7 @@ export function extractCockpitError(error: unknown): VMCockpitError {
     errorCode: "NETWORK_ERROR",
     message: "Verbindung zum Server fehlgeschlagen",
     details: "Der Server ist nicht erreichbar oder die Anfrage wurde abgebrochen.",
-    hint: "Pruefen Sie Ihre Netzwerkverbindung und versuchen Sie es erneut.",
+    hint: "Prüfen Sie Ihre Netzwerkverbindung und versuchen Sie es erneut.",
   };
 }
 

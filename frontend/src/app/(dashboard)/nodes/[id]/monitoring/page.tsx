@@ -325,7 +325,7 @@ export default function NodeMonitoringPage() {
         <TabsList>
           <TabsTrigger value="overview">
             <Activity className="mr-1.5 h-4 w-4" />
-            Uebersicht
+            Übersicht
           </TabsTrigger>
           <TabsTrigger value="cpu">
             <Cpu className="mr-1.5 h-4 w-4" />
@@ -345,7 +345,7 @@ export default function NodeMonitoringPage() {
           </TabsTrigger>
         </TabsList>
 
-        {/* ====== Tab 1: Uebersicht ====== */}
+        {/* ====== Tab 1: Übersicht ====== */}
         <TabsContent value="overview" className="space-y-6">
           <ErrorBoundary>
             <KPICards
@@ -771,7 +771,7 @@ export default function NodeMonitoringPage() {
         {/* ====== Tab 4: Netzwerk ====== */}
         <TabsContent value="network" className="space-y-6">
           <ErrorBoundary>
-            {/* RRD-basierte Bandbreite - zuverlaessige Quelle */}
+            {/* RRD-basierte Bandbreite - zuverlässige Quelle */}
             <RRDBandwidth nodeId={nodeId} />
 
             {/* Top-Talker VMs */}

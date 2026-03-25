@@ -229,7 +229,7 @@ export function StorageOverview({ nodeId, status }: StorageOverviewProps) {
                 <HardDrive className="h-5 w-5 text-zinc-600 dark:text-zinc-400" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Verfuegbar</p>
+                <p className="text-sm text-muted-foreground">Verfügbar</p>
                 <p className="text-xl font-bold">{formatBytes(freeSpace)}</p>
               </div>
             </div>
@@ -311,7 +311,7 @@ export function StorageOverview({ nodeId, status }: StorageOverviewProps) {
                   </div>
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
                     <span>Belegt: {formatBytes(pool.used)}</span>
-                    <span>Verfuegbar: {formatBytes(pool.available)}</span>
+                    <span>Verfügbar: {formatBytes(pool.available)}</span>
                     <span>Gesamt: {formatBytes(pool.total)}</span>
                   </div>
                   <div className="flex items-center justify-between">

@@ -55,7 +55,7 @@ function describeAction(method: string, path: string): string {
   if (method === "AGENT") {
     const toolLabels: Record<string, string> = {
       list_nodes: "KI: Nodes abgefragt",
-      node_status: "KI: Node-Status geprueft",
+      node_status: "KI: Node-Status geprüft",
       get_vms: "KI: VMs abgefragt",
       get_metrics: "KI: Metriken abgefragt",
       create_backup: "KI: Backup erstellt",
@@ -67,12 +67,12 @@ function describeAction(method: string, path: string): string {
       get_predictions: "KI: Vorhersagen abgefragt",
       get_anomalies: "KI: Anomalien abgefragt",
       get_briefing: "KI: Briefing abgefragt",
-      check_drift: "KI: Drift geprueft",
-      check_updates: "KI: Updates geprueft",
+      check_drift: "KI: Drift geprüft",
+      check_updates: "KI: Updates geprüft",
       rightsizing: "KI: Rightsizing analysiert",
       save_knowledge: "KI: Wissen gespeichert",
       recall_knowledge: "KI: Wissen abgerufen",
-      run_ssh_command: "KI: SSH-Befehl ausgefuehrt",
+      run_ssh_command: "KI: SSH-Befehl ausgeführt",
     };
     return toolLabels[path] || `KI: ${path}`;
   }
@@ -85,13 +85,13 @@ function describeAction(method: string, path: string): string {
     [/^auth\/refresh$/, { POST: "Token erneuert" }],
     [/^auth\/me$/, { GET: "Profil abgerufen" }],
     [/^users$/, { GET: "Benutzerliste abgerufen", POST: "Benutzer erstellt" }],
-    [/^users\/[^/]+$/, { GET: "Benutzer angezeigt", PUT: "Benutzer bearbeitet", DELETE: "Benutzer geloescht" }],
-    [/^users\/[^/]+\/password$/, { POST: "Passwort geaendert" }],
-    [/^nodes$/, { GET: "Nodes abgerufen", POST: "Node hinzugefuegt" }],
+    [/^users\/[^/]+$/, { GET: "Benutzer angezeigt", PUT: "Benutzer bearbeitet", DELETE: "Benutzer gelöscht" }],
+    [/^users\/[^/]+\/password$/, { POST: "Passwort geändert" }],
+    [/^nodes$/, { GET: "Nodes abgerufen", POST: "Node hinzugefügt" }],
     [/^nodes\/[^/]+$/, { GET: "Node angezeigt", PUT: "Node bearbeitet", DELETE: "Node entfernt" }],
     [/^nodes\/[^/]+\/status$/, { GET: "Node-Status abgerufen" }],
     [/^nodes\/[^/]+\/vms$/, { GET: "VMs abgerufen" }],
-    [/^nodes\/[^/]+\/vms\/[^/]+\/(start|stop|restart|shutdown)$/, { POST: "VM-Aktion ausgefuehrt" }],
+    [/^nodes\/[^/]+\/vms\/[^/]+\/(start|stop|restart|shutdown)$/, { POST: "VM-Aktion ausgeführt" }],
     [/^nodes\/[^/]+\/backup$/, { POST: "Backup erstellt" }],
     [/^nodes\/[^/]+\/backups$/, { GET: "Backups abgerufen" }],
     [/^backups\/[^/]+\/restore$/, { POST: "Backup wiederhergestellt" }],
@@ -99,23 +99,23 @@ function describeAction(method: string, path: string): string {
     [/^nodes\/[^/]+\/network/, { GET: "Netzwerk abgerufen" }],
     [/^nodes\/[^/]+\/storage/, { GET: "Storage abgerufen" }],
     [/^chat$/, { POST: "Chat-Nachricht gesendet" }],
-    [/^chat\/conversations/, { GET: "Chat-Verlauf abgerufen", DELETE: "Chat geloescht" }],
+    [/^chat\/conversations/, { GET: "Chat-Verlauf abgerufen", DELETE: "Chat gelöscht" }],
     [/^reflexes$/, { GET: "Reflex-Regeln abgerufen", POST: "Reflex-Regel erstellt" }],
-    [/^reflexes\/[^/]+$/, { GET: "Reflex-Regel angezeigt", PUT: "Reflex-Regel bearbeitet", DELETE: "Reflex-Regel geloescht" }],
-    [/^agent\/config$/, { GET: "KI-Einstellungen abgerufen", PUT: "KI-Einstellungen geaendert" }],
+    [/^reflexes\/[^/]+$/, { GET: "Reflex-Regel angezeigt", PUT: "Reflex-Regel bearbeitet", DELETE: "Reflex-Regel gelöscht" }],
+    [/^agent\/config$/, { GET: "KI-Einstellungen abgerufen", PUT: "KI-Einstellungen geändert" }],
     [/^notifications/, { GET: "Benachrichtigungen abgerufen", POST: "Benachrichtigung erstellt" }],
     [/^security/, { GET: "Sicherheitsereignisse abgerufen" }],
-    [/^gateway\/tokens/, { GET: "API-Tokens abgerufen", POST: "API-Token erstellt", DELETE: "API-Token geloescht" }],
+    [/^gateway\/tokens/, { GET: "API-Tokens abgerufen", POST: "API-Token erstellt", DELETE: "API-Token gelöscht" }],
     [/^gateway\/audit/, { GET: "Audit-Log abgerufen" }],
     [/^drift/, { GET: "Drift-Check abgerufen", POST: "Drift-Check gestartet" }],
     [/^briefing/, { GET: "Briefing abgerufen" }],
     [/^predictions/, { GET: "Vorhersagen abgerufen" }],
     [/^anomalies/, { GET: "Anomalien abgerufen" }],
     [/^topology/, { GET: "Topologie abgerufen" }],
-    [/^ssh-keys/, { GET: "SSH-Keys abgerufen", POST: "SSH-Key erstellt", DELETE: "SSH-Key geloescht" }],
+    [/^ssh-keys/, { GET: "SSH-Keys abgerufen", POST: "SSH-Key erstellt", DELETE: "SSH-Key gelöscht" }],
     [/^environments/, { GET: "Environments abgerufen", POST: "Environment erstellt" }],
     [/^tags/, { GET: "Tags abgerufen", POST: "Tag erstellt" }],
-    [/^password-policy/, { GET: "Passwort-Policy abgerufen", PUT: "Passwort-Policy geaendert" }],
+    [/^password-policy/, { GET: "Passwort-Policy abgerufen", PUT: "Passwort-Policy geändert" }],
     [/^migrations/, { GET: "Migrationen abgerufen", POST: "Migration gestartet" }],
   ];
 
@@ -243,7 +243,7 @@ export default function AuditLogPage() {
             ) : filteredEntries.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                  Keine Eintraege vorhanden.
+                  Keine Einträge vorhanden.
                 </TableCell>
               </TableRow>
             ) : (
@@ -298,7 +298,7 @@ export default function AuditLogPage() {
             disabled={offset === 0}
           >
             <ChevronLeft className="mr-1 h-4 w-4" />
-            Zurueck
+            Zurück
           </Button>
           <Button
             variant="outline"

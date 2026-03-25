@@ -28,7 +28,7 @@ export function ConfirmDialog({
   onOpenChange,
   title,
   description,
-  confirmLabel = "Bestaetigen",
+  confirmLabel = "Bestätigen",
   cancelLabel = "Abbrechen",
   variant = "default",
   onConfirm,

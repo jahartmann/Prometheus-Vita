@@ -25,9 +25,9 @@ export default function SSHKeysPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-lg font-semibold">SSH-Schluesselverwaltung</h2>
+        <h2 className="text-lg font-semibold">SSH-Schlüsselverwaltung</h2>
         <p className="text-sm text-muted-foreground">
-          SSH-Schluessel fuer Nodes generieren, deployen und verwalten.
+          SSH-Schlüssel für Nodes generieren, deployen und verwalten.
         </p>
       </div>
 
@@ -37,7 +37,7 @@ export default function SSHKeysPage() {
           onChange={(e) => setSelectedNode(e.target.value)}
           className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
         >
-          <option value="">Node waehlen...</option>
+          <option value="">Node wählen...</option>
           {nodes.map((node) => (
             <option key={node.id} value={node.id}>
               {node.name}
@@ -58,7 +58,7 @@ export default function SSHKeysPage() {
       ) : (
         <Card>
           <CardContent className="p-8 text-center text-muted-foreground">
-            Bitte waehlen Sie einen Node aus.
+            Bitte wählen Sie einen Node aus.
           </CardContent>
         </Card>
       )}

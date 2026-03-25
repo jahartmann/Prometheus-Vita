@@ -35,7 +35,7 @@ const INITIAL_STEPS: ProgressStep[] = [
   { label: "Authentifiziere bei Proxmox...", status: "pending" },
   { label: "Erstelle API-Token...", status: "pending" },
   { label: "Konfiguriere SSH-Zugang...", status: "pending" },
-  { label: "Pruefe Verbindung...", status: "pending" },
+  { label: "Prüfe Verbindung...", status: "pending" },
   { label: "Fertig!", status: "pending" },
 ];
 
@@ -156,7 +156,7 @@ export function OnboardNodeDialog({ open, onOpenChange }: OnboardNodeDialogProps
       const message =
         err instanceof Error
           ? err.message
-          : "Onboarding fehlgeschlagen. Bitte pruefen Sie die Zugangsdaten.";
+          : "Onboarding fehlgeschlagen. Bitte prüfen Sie die Zugangsdaten.";
 
       // Try to extract error from axios response
       let apiMessage = message;
@@ -343,7 +343,7 @@ export function OnboardNodeDialog({ open, onOpenChange }: OnboardNodeDialogProps
                       setShowManualDialog(true);
                     }}
                   >
-                    Erweitert: Manuell mit API-Token hinzufuegen &rarr;
+                    Erweitert: Manuell mit API-Token hinzufügen &rarr;
                   </button>
                 </div>
               </DialogFooter>
@@ -401,7 +401,7 @@ export function OnboardNodeDialog({ open, onOpenChange }: OnboardNodeDialogProps
                       setError(null);
                     }}
                   >
-                    Zurueck
+                    Zurück
                   </Button>
                 </DialogFooter>
               )}
