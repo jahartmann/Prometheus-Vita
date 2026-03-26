@@ -34,12 +34,8 @@ export default function NodeDetailPage() {
     if (!nodeId) return;
     const controller = new AbortController();
     const load = () => {
-      fetchNodeStatus(nodeId, { signal: controller.signal }).catch((e: unknown) => {
-        if (e instanceof Error && e.name === 'CanceledError') return;
-      });
-      fetchNodeVMs(nodeId, { signal: controller.signal }).catch((e: unknown) => {
-        if (e instanceof Error && e.name === 'CanceledError') return;
-      });
+      fetchNodeStatus(nodeId).catch(() => {});
+      fetchNodeVMs(nodeId).catch(() => {});
     };
     const token = useAuthStore.getState().accessToken;
     if (token) {

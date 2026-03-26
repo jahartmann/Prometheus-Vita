@@ -119,22 +119,22 @@ export default function NodeMonitoringPage() {
 
     Promise.all([
       metricsApi
-        .getHistory(nodeId, since.toISOString(), new Date().toISOString(), { signal })
+        .getHistory(nodeId, since.toISOString(), new Date().toISOString())
         .then((res) => setMetrics(toArray<MetricsRecord>(res.data)))
         .catch((e) => { if ((e as { name?: string })?.name !== 'CanceledError') setMetrics([]); }),
       metricsApi
-        .getSummary(nodeId, period, { signal })
+        .getSummary(nodeId, period)
         .then((res) => setSummary(res.data ?? null))
         .catch((e) => { if ((e as { name?: string })?.name !== 'CanceledError') setSummary(null); }),
       metricsApi
-        .getNodeRRD(nodeId, periodConfig.rrdTimeframe, { signal })
+        .getNodeRRD(nodeId, periodConfig.rrdTimeframe)
         .then((res) => setRrdData(toArray<RRDDataPoint>(res.data)))
         .catch((e) => { if ((e as { name?: string })?.name !== 'CanceledError') setRrdData([]); }),
     ]).then(() => { if (!signal.aborted) setLastUpdated(new Date()); });
 
     // Fetch anomalies and predictions
-    anomalyApi.listByNode(nodeId, { signal }).then((d) => setAnomalies(d as AnomalyRecord[])).catch((e) => { if ((e as { name?: string })?.name !== 'CanceledError') setAnomalies([]); });
-    predictionApi.listByNode(nodeId, { signal }).then((d) => setPredictions(d as MaintenancePrediction[])).catch((e) => { if ((e as { name?: string })?.name !== 'CanceledError') setPredictions([]); });
+    anomalyApi.listByNode(nodeId).then((d) => setAnomalies(d as AnomalyRecord[])).catch((e) => { if ((e as { name?: string })?.name !== 'CanceledError') setAnomalies([]); });
+    predictionApi.listByNode(nodeId).then((d) => setPredictions(d as MaintenancePrediction[])).catch((e) => { if ((e as { name?: string })?.name !== 'CanceledError') setPredictions([]); });
 
     return () => controller.abort();
   }, [nodeId, period]);
@@ -154,7 +154,7 @@ export default function NodeMonitoringPage() {
     Promise.all(
       fetchVMs.map((vm) =>
         metricsApi
-          .getVMMetrics(nodeId, vm.vmid, since.toISOString(), new Date().toISOString(), { signal: controller.signal })
+          .getVMMetrics(nodeId, vm.vmid, since.toISOString(), new Date().toISOString())
           .then((res) => ({
             vmid: vm.vmid,
             records: toArray<VMMetricsRecord>(res.data),
