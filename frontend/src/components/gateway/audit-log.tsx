@@ -51,6 +51,7 @@ export function AuditLog() {
         </Button>
       </div>
 
+      <div className="overflow-x-auto">
       <Table>
         <TableHeader>
           <TableRow>
@@ -72,7 +73,7 @@ export function AuditLog() {
           ) : entries.length === 0 ? (
             <TableRow>
               <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                Keine Audit-Eintraege vorhanden.
+                Keine Audit-Einträge vorhanden.
               </TableCell>
             </TableRow>
           ) : (
@@ -99,6 +100,7 @@ export function AuditLog() {
           )}
         </TableBody>
       </Table>
+      </div>
     </div>
   );
 }

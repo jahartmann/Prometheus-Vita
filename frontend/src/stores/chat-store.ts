@@ -170,8 +170,8 @@ export const useChatStore = create<ChatState>()((set, get) => ({
         conversations: s.conversations.filter((c) => c.id !== id),
       }));
     } catch {
-      toast.error("Konversation konnte nicht geloescht werden");
-      set({ error: "Konversation konnte nicht geloescht werden" });
+      toast.error("Konversation konnte nicht gelöscht werden");
+      set({ error: "Konversation konnte nicht gelöscht werden" });
     }
   },
 }));

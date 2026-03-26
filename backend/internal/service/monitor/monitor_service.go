@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"math"
 	"time"
 
@@ -69,7 +70,10 @@ func (s *Service) GetAllNodesStatus(ctx context.Context) ([]NodeStatusSummary, e
 		}
 
 		if node.IsOnline {
-			status, _ := s.GetCachedStatus(ctx, node.ID)
+			status, err := s.GetCachedStatus(ctx, node.ID)
+			if err != nil {
+				slog.Warn("failed to get cached status", slog.String("node_id", node.ID.String()), slog.Any("error", err))
+			}
 			summary.Status = status
 		}
 

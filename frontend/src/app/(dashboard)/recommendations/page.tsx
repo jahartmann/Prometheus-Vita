@@ -166,7 +166,7 @@ export default function RecommendationsPage() {
           <div>
             <h2 className="text-xl font-bold">Empfehlungen</h2>
             <p className="text-sm text-muted-foreground">
-              Kontextbewusste Optimierungsvorschlaege fuer Ihre VMs.
+              Kontextbewusste Optimierungsvorschläge für Ihre VMs.
             </p>
           </div>
           <Button variant="outline" onClick={fetchData} disabled={isLoading}>
@@ -187,14 +187,14 @@ export default function RecommendationsPage() {
           <KpiCard
             title="Handlung empfohlen"
             value={actionCount}
-            subtitle={`${downsizeCount} verkleinern, ${upsizeCount} vergroessern`}
+            subtitle={`${downsizeCount} verkleinern, ${upsizeCount} vergrößern`}
             icon={TrendingDown}
             color="orange"
           />
           <KpiCard
             title="Einsparpotenzial"
             value={savingsCount}
-            subtitle="VMs ueberprovisioniert"
+            subtitle="VMs überprovisioniert"
             icon={Coins}
             color="green"
           />
@@ -221,7 +221,7 @@ export default function RecommendationsPage() {
             variant={filter === "action" ? "default" : "outline"}
             onClick={() => setFilter("action")}
           >
-            Handlung noetig ({actionCount})
+            Handlung nötig ({actionCount})
           </Button>
           <Button
             size="sm"
@@ -271,7 +271,7 @@ export default function RecommendationsPage() {
           <Card>
             <CardContent className="py-12 text-center text-muted-foreground">
               {isLoading
-                ? "Analyse laeuft..."
+                ? "Analyse läuft..."
                 : "Keine Empfehlungen vorhanden. Starten Sie eine Analyse."}
             </CardContent>
           </Card>

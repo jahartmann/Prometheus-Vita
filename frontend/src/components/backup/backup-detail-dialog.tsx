@@ -45,16 +45,16 @@ const statusVariant: Record<string, "default" | "success" | "destructive" | "out
 
 const statusLabel: Record<string, string> = {
   pending: "Ausstehend",
-  running: "Laeuft",
+  running: "Läuft",
   completed: "Abgeschlossen",
   failed: "Fehlgeschlagen",
 };
 
 const diffStatusConfig: Record<string, { label: string; color: string; bg: string; icon: typeof Plus }> = {
-  added: { label: "Hinzugefuegt", color: "text-green-600", bg: "bg-green-500/10 border-green-500/20", icon: Plus },
+  added: { label: "Hinzugefügt", color: "text-green-600", bg: "bg-green-500/10 border-green-500/20", icon: Plus },
   removed: { label: "Entfernt", color: "text-red-600", bg: "bg-red-500/10 border-red-500/20", icon: Minus },
-  modified: { label: "Geaendert", color: "text-amber-600", bg: "bg-amber-500/10 border-amber-500/20", icon: Edit3 },
-  unchanged: { label: "Unveraendert", color: "text-muted-foreground", bg: "bg-muted", icon: CheckCircle },
+  modified: { label: "Geändert", color: "text-amber-600", bg: "bg-amber-500/10 border-amber-500/20", icon: Edit3 },
+  unchanged: { label: "Unverändert", color: "text-muted-foreground", bg: "bg-muted", icon: CheckCircle },
 };
 
 export function BackupDetailDialog({ backup, open, onOpenChange }: BackupDetailDialogProps) {
@@ -168,7 +168,7 @@ export function BackupDetailDialog({ backup, open, onOpenChange }: BackupDetailD
             </TabsTrigger>
             <TabsTrigger value="diff" className="flex items-center gap-1.5">
               <GitBranch className="h-3.5 w-3.5" />
-              Aenderungen
+              Änderungen
               {changedDiffs.length > 0 && (
                 <Badge variant="outline" className="ml-1 text-[10px] px-1 py-0">
                   {changedDiffs.length}
@@ -201,7 +201,7 @@ export function BackupDetailDialog({ backup, open, onOpenChange }: BackupDetailD
                     <thead>
                       <tr className="border-b bg-muted/50">
                         <th className="text-left px-3 py-2 font-medium">Dateipfad</th>
-                        <th className="text-right px-3 py-2 font-medium w-24">Groesse</th>
+                        <th className="text-right px-3 py-2 font-medium w-24">Größe</th>
                         <th className="text-center px-3 py-2 font-medium w-24">Rechte</th>
                         <th className="text-center px-3 py-2 font-medium w-24">Besitzer</th>
                       </tr>
@@ -249,12 +249,12 @@ export function BackupDetailDialog({ backup, open, onOpenChange }: BackupDetailD
                     <div className="flex gap-3 text-sm">
                       {addedCount > 0 && (
                         <span className="flex items-center gap-1 text-green-600">
-                          <Plus className="h-3.5 w-3.5" /> {addedCount} hinzugefuegt
+                          <Plus className="h-3.5 w-3.5" /> {addedCount} hinzugefügt
                         </span>
                       )}
                       {modifiedCount > 0 && (
                         <span className="flex items-center gap-1 text-amber-600">
-                          <Edit3 className="h-3.5 w-3.5" /> {modifiedCount} geaendert
+                          <Edit3 className="h-3.5 w-3.5" /> {modifiedCount} geändert
                         </span>
                       )}
                       {removedCount > 0 && (
@@ -268,8 +268,8 @@ export function BackupDetailDialog({ backup, open, onOpenChange }: BackupDetailD
                   {changedDiffs.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
                       <CheckCircle className="h-10 w-10 mb-2 text-green-500" />
-                      <p className="font-medium">Keine Aenderungen</p>
-                      <p className="text-sm">Seit dem letzten Backup hat sich nichts geaendert.</p>
+                      <p className="font-medium">Keine Änderungen</p>
+                      <p className="text-sm">Seit dem letzten Backup hat sich nichts geändert.</p>
                     </div>
                   ) : (
                     changedDiffs.map((d) => {
@@ -325,7 +325,7 @@ export function BackupDetailDialog({ backup, open, onOpenChange }: BackupDetailD
               ) : (
                 <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
                   <BookOpen className="h-10 w-10 mb-2" />
-                  <p className="font-medium">Kein Recovery Guide verfuegbar</p>
+                  <p className="font-medium">Kein Recovery Guide verfügbar</p>
                   <p className="text-sm mt-1">
                     Dieser wird automatisch nach Abschluss eines Backups generiert.
                   </p>

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 
 	"github.com/antigravity/prometheus/internal/ssh"
@@ -104,6 +105,20 @@ func (fc *FileCollector) listDirectory(ctx context.Context, client *ssh.Client, 
 // collectSingleFile reads the content, permissions, ownership, and size of a
 // single file on the remote node, then computes a SHA-256 hash of its content.
 func (fc *FileCollector) collectSingleFile(ctx context.Context, client *ssh.Client, filePath string) (*CollectedFile, error) {
+	// Check file size first to avoid reading oversized files
+	sizeResult, err := client.RunCommand(ctx, fmt.Sprintf("stat -c %%s %q 2>/dev/null || echo 0", filePath))
+	if err == nil {
+		size, _ := strconv.ParseInt(strings.TrimSpace(sizeResult.Stdout), 10, 64)
+		const maxFileSize = 10 * 1024 * 1024 // 10 MB
+		if size > maxFileSize {
+			slog.Warn("skipping oversized config file",
+				slog.String("path", filePath),
+				slog.Int64("size_bytes", size),
+			)
+			return nil, fmt.Errorf("file %s exceeds max size (%d bytes)", filePath, size)
+		}
+	}
+
 	// Read file content
 	content, err := client.CopyFrom(ctx, filePath)
 	if err != nil {

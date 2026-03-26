@@ -181,7 +181,7 @@ export function VMNetworkTraffic({ nodeId }: VMNetworkTrafficProps) {
               <div className="p-6 text-center text-sm text-muted-foreground">Lade...</div>
             ) : vmTraffic.length === 0 ? (
               <div className="p-6 text-center text-sm text-muted-foreground">
-                Keine VM-Traffic-Daten verfuegbar.
+                Keine VM-Traffic-Daten verfügbar.
               </div>
             ) : (
               <table className="w-full text-sm">
@@ -296,7 +296,7 @@ export function VMNetworkTraffic({ nodeId }: VMNetworkTrafficProps) {
           <CardContent>
             {selectedVMChartData.length === 0 ? (
               <div className="flex h-[250px] items-center justify-center text-sm text-muted-foreground">
-                Keine Daten fuer diese VM.
+                Keine Daten für diese VM.
               </div>
             ) : (
               <ResponsiveContainer width="100%" height={250}>

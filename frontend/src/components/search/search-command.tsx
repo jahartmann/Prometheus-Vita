@@ -135,9 +135,9 @@ export function SearchCommand() {
         category: "navigation" as SearchCategory,
         icon: LayoutDashboard,
         label: "Dashboard",
-        description: "Uebersicht aller Nodes und KPIs",
+        description: "Übersicht aller Nodes und KPIs",
         href: "/",
-        tags: ["home", "start", "uebersicht", "kpi"],
+        tags: ["home", "start", "übersicht", "kpi"],
       },
       {
         id: "nav-nodes",
@@ -171,7 +171,7 @@ export function SearchCommand() {
         category: "navigation" as SearchCategory,
         icon: Newspaper,
         label: "Morning Briefing",
-        description: "Taegliche Zusammenfassung",
+        description: "Tägliche Zusammenfassung",
         href: "/briefing",
         tags: ["morgen", "zusammenfassung", "bericht", "daily"],
       },
@@ -180,7 +180,7 @@ export function SearchCommand() {
         category: "navigation" as SearchCategory,
         icon: Shield,
         label: "Disaster Recovery",
-        description: "Notfallplaene und Readiness",
+        description: "Notfallpläne und Readiness",
         href: "/disaster-recovery",
         tags: ["notfall", "wiederherstellung", "recovery", "runbook"],
       },
@@ -225,7 +225,7 @@ export function SearchCommand() {
         category: "navigation" as SearchCategory,
         icon: MessageSquare,
         label: "AI Chat",
-        description: "KI-Assistent fuer Infrastrukturfragen",
+        description: "KI-Assistent für Infrastrukturfragen",
         href: "/chat",
         tags: ["ki", "ai", "assistent", "frage"],
       },
@@ -260,10 +260,10 @@ export function SearchCommand() {
         id: "action-add-node",
         category: "actions" as SearchCategory,
         icon: Zap,
-        label: "Neuen Node hinzufuegen",
+        label: "Neuen Node hinzufügen",
         description: "Proxmox-Node onboarden",
         href: "/settings/nodes",
-        tags: ["node", "hinzufuegen", "neu", "onboard"],
+        tags: ["node", "hinzufügen", "neu", "onboard"],
       },
       {
         id: "action-backup-now",
@@ -311,7 +311,7 @@ export function SearchCommand() {
         icon: Zap,
         label: "API-Tokens",
         href: "/settings/api-tokens",
-        tags: ["api", "token", "key", "schluessel"],
+        tags: ["api", "token", "key", "schlüssel"],
       },
       {
         id: "settings-ssh",
@@ -319,7 +319,7 @@ export function SearchCommand() {
         icon: Shield,
         label: "SSH-Keys",
         href: "/settings/ssh-keys",
-        tags: ["ssh", "key", "schluessel"],
+        tags: ["ssh", "key", "schlüssel"],
       },
       {
         id: "settings-env",
@@ -518,7 +518,7 @@ export function SearchCommand() {
                 onClick={() => setQuery("")}
                 className="rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-accent"
               >
-                Loeschen
+                Löschen
               </button>
             )}
             <kbd className="hidden rounded border bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground sm:inline-block">
@@ -534,7 +534,7 @@ export function SearchCommand() {
             {flatResults.length === 0 && query.trim() && (
               <div className="flex flex-col items-center gap-2 py-8 text-center text-sm text-muted-foreground">
                 <Search className="h-8 w-8 opacity-30" />
-                <p>Keine Ergebnisse fuer &ldquo;{query}&rdquo;</p>
+                <p>Keine Ergebnisse für &ldquo;{query}&rdquo;</p>
                 <p className="text-xs">
                   Versuche andere Begriffe oder weniger spezifische Suche
                 </p>
@@ -585,7 +585,7 @@ export function SearchCommand() {
                       {isActive && (
                         <div className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
                           <CornerDownLeft className="h-3 w-3" />
-                          <span>Oeffnen</span>
+                          <span>Öffnen</span>
                         </div>
                       )}
                     </button>
@@ -608,7 +608,7 @@ export function SearchCommand() {
                 <kbd className="rounded border bg-muted px-1 py-0.5 font-mono text-[10px]">
                   ↵
                 </kbd>
-                Oeffnen
+                Öffnen
               </span>
               <span className="flex items-center gap-1">
                 <kbd className="rounded border bg-muted px-1 py-0.5 font-mono text-[10px]">

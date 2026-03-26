@@ -6,12 +6,29 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
+	"math"
 	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 )
+
+// maxResponseSize limits the size of Proxmox API responses to prevent OOM
+// on malformed or proxied responses. 10 MB is generous for any PVE endpoint.
+const maxResponseSize = 10 * 1024 * 1024
+
+// validVMTypes lists accepted VM type values for Proxmox API calls.
+var validVMTypes = map[string]bool{"qemu": true, "lxc": true}
+
+// validateVMType returns an error if vmType is not "qemu" or "lxc".
+func validateVMType(vmType string) error {
+	if !validVMTypes[vmType] {
+		return fmt.Errorf("ungültiger VM-Typ %q (erlaubt: qemu, lxc)", vmType)
+	}
+	return nil
+}
 
 type Client struct {
 	baseURL    string
@@ -20,7 +37,11 @@ type Client struct {
 	httpClient *http.Client
 }
 
-func NewClient(hostname string, port int, tokenID, tokenSecret string) *Client {
+func NewClient(hostname string, port int, tokenID, tokenSecret string, tlsCfg *tls.Config) *Client {
+	if tlsCfg == nil {
+		slog.Warn("Proxmox TLS-Verifikation deaktiviert – Verbindung ist anfällig für MITM-Angriffe", slog.String("host", hostname))
+		tlsCfg = &tls.Config{InsecureSkipVerify: true}
+	}
 	return &Client{
 		baseURL:    fmt.Sprintf("https://%s:%d/api2/json", hostname, port),
 		tokenID:    tokenID,
@@ -28,7 +49,7 @@ func NewClient(hostname string, port int, tokenID, tokenSecret string) *Client {
 		httpClient: &http.Client{
 			Timeout: 120 * time.Second,
 			Transport: &http.Transport{
-				TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
+				TLSClientConfig:       tlsCfg,
 				DialContext:           (&net.Dialer{Timeout: 15 * time.Second}).DialContext,
 				TLSHandshakeTimeout:   15 * time.Second,
 				ResponseHeaderTimeout: 60 * time.Second,
@@ -53,16 +74,22 @@ func (c *Client) doRequest(ctx context.Context, method, path string) (json.RawMe
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize))
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
 	}
 
 	if resp.StatusCode == 401 || resp.StatusCode == 403 {
-		return nil, fmt.Errorf("authentication failed (HTTP %d) for %s: %s", resp.StatusCode, path, string(body))
+		return nil, fmt.Errorf("authentication failed (HTTP %d) for %s: %s", resp.StatusCode, path, truncateBody(body))
+	}
+	if resp.StatusCode == 500 && strings.Contains(string(body), "QEMU guest agent is not running") {
+		return nil, fmt.Errorf("QEMU Guest Agent ist nicht aktiv auf der VM (Pfad: %s). Bitte qemu-guest-agent installieren und starten", path)
+	}
+	if resp.StatusCode == 500 && strings.Contains(string(body), "not running") {
+		return nil, fmt.Errorf("VM/CT ist nicht aktiv (HTTP 500 für %s): %s", path, truncateBody(body))
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("API error %d on %s: %s", resp.StatusCode, path, string(body))
+		return nil, fmt.Errorf("API error %d on %s: %s", resp.StatusCode, path, truncateBody(body))
 	}
 
 	var result struct {
@@ -73,6 +100,15 @@ func (c *Client) doRequest(ctx context.Context, method, path string) (json.RawMe
 	}
 
 	return result.Data, nil
+}
+
+// truncateBody limits error body output to 500 chars to prevent log flooding.
+func truncateBody(body []byte) string {
+	s := string(body)
+	if len(s) > 500 {
+		return s[:500] + "... (truncated)"
+	}
+	return s
 }
 
 func (c *Client) GetVersion(ctx context.Context) (*VersionInfo, error) {
@@ -134,11 +170,39 @@ func (c *Client) GetNodeStatus(ctx context.Context, node string) (*NodeStatus, e
 		}
 	}
 
+	// Ensure LoadAvg always has exactly 3 elements (1min, 5min, 15min)
+	for len(loadAvg) < 3 {
+		loadAvg = append(loadAvg, 0)
+	}
+	if len(loadAvg) > 3 {
+		loadAvg = loadAvg[:3]
+	}
+
+	// Validate CPU is in valid range
+	cpuUsage := raw.CPU * 100
+	if math.IsNaN(cpuUsage) || math.IsInf(cpuUsage, 0) || cpuUsage < 0 {
+		cpuUsage = 0
+	}
+	if cpuUsage > 100 {
+		cpuUsage = 100 // Cap at 100% (can happen with overcommit)
+	}
+
+	// Validate memory values are non-negative and consistent
+	if raw.Memory.Total < 0 {
+		raw.Memory.Total = 0
+	}
+	if raw.Memory.Used < 0 {
+		raw.Memory.Used = 0
+	}
+	if raw.Memory.Used > raw.Memory.Total {
+		raw.Memory.Used = raw.Memory.Total
+	}
+
 	return &NodeStatus{
 		Node:       node,
 		Status:     "online",
 		Uptime:     raw.Uptime,
-		CPUUsage:   raw.CPU * 100,
+		CPUUsage:   cpuUsage,
 		CPUCores:   raw.CPUInfo.CPUs,
 		CPUModel:   raw.CPUInfo.Model,
 		MemTotal:   raw.Memory.Total,
@@ -200,9 +264,11 @@ func (c *Client) GetNodes(ctx context.Context) ([]string, error) {
 
 func (c *Client) GetVMs(ctx context.Context, node string) ([]VMInfo, error) {
 	var allVMs []VMInfo
+	var qemuErr, lxcErr error
 
-	// Fetch QEMU VMs - continue even if this fails
-	if qemuData, err := c.doRequest(ctx, http.MethodGet, fmt.Sprintf("/nodes/%s/qemu", node)); err == nil {
+	// Fetch QEMU VMs - continue even if this fails (LXC might still work)
+	qemuData, qemuErr := c.doRequest(ctx, http.MethodGet, fmt.Sprintf("/nodes/%s/qemu", node))
+	if qemuErr == nil {
 		var qemuVMs []VMInfo
 		if err := json.Unmarshal(qemuData, &qemuVMs); err == nil {
 			for i := range qemuVMs {
@@ -212,8 +278,9 @@ func (c *Client) GetVMs(ctx context.Context, node string) ([]VMInfo, error) {
 		}
 	}
 
-	// Fetch LXC containers - continue even if this fails
-	if lxcData, err := c.doRequest(ctx, http.MethodGet, fmt.Sprintf("/nodes/%s/lxc", node)); err == nil {
+	// Fetch LXC containers - continue even if this fails (QEMU might have worked)
+	lxcData, lxcErr := c.doRequest(ctx, http.MethodGet, fmt.Sprintf("/nodes/%s/lxc", node))
+	if lxcErr == nil {
 		var lxcCTs []VMInfo
 		if err := json.Unmarshal(lxcData, &lxcCTs); err == nil {
 			for i := range lxcCTs {
@@ -221,6 +288,22 @@ func (c *Client) GetVMs(ctx context.Context, node string) ([]VMInfo, error) {
 			}
 			allVMs = append(allVMs, lxcCTs...)
 		}
+	}
+
+	// If BOTH endpoints failed, the node is likely unreachable or the PVE name is wrong.
+	// Return an error so the caller can trigger fallback logic.
+	if qemuErr != nil && lxcErr != nil {
+		return nil, fmt.Errorf("beide VM-Endpunkte fehlgeschlagen für Node '%s': QEMU: %v, LXC: %v", node, qemuErr, lxcErr)
+	}
+
+	// Log partial failures so operators can see incomplete data
+	if qemuErr != nil && lxcErr == nil {
+		slog.Warn("VM-Abfrage teilweise fehlgeschlagen: QEMU-Endpunkt nicht erreichbar",
+			slog.String("node", node), slog.Any("error", qemuErr))
+	}
+	if lxcErr != nil && qemuErr == nil {
+		slog.Warn("VM-Abfrage teilweise fehlgeschlagen: LXC-Endpunkt nicht erreichbar",
+			slog.String("node", node), slog.Any("error", lxcErr))
 	}
 
 	return allVMs, nil
@@ -264,6 +347,17 @@ func (c *Client) GetStorage(ctx context.Context, node string) ([]StorageInfo, er
 		}
 		if s.Total > 0 {
 			s.UsagePercent = float64(s.Used) / float64(s.Total) * 100
+		}
+		// Cap usage percent at valid range (thin-provisioned storage can report Available > Total)
+		if s.UsagePercent < 0 {
+			s.UsagePercent = 0
+		}
+		if s.UsagePercent > 100 {
+			s.UsagePercent = 100
+		}
+		// Ensure Available is non-negative
+		if s.Available < 0 {
+			s.Available = 0
 		}
 		storages = append(storages, s)
 	}
@@ -316,17 +410,26 @@ func (c *Client) doRequestWithBody(ctx context.Context, method, path string, par
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("execute request: %w", err)
+		return nil, fmt.Errorf("execute request %s %s: %w", method, path, err)
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize))
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
 	}
 
+	if resp.StatusCode == 401 || resp.StatusCode == 403 {
+		return nil, fmt.Errorf("authentication failed (HTTP %d) for %s: %s", resp.StatusCode, path, truncateBody(respBody))
+	}
+	if resp.StatusCode == 500 && strings.Contains(string(respBody), "QEMU guest agent is not running") {
+		return nil, fmt.Errorf("QEMU Guest Agent ist nicht aktiv auf der VM (Pfad: %s). Bitte qemu-guest-agent installieren und starten", path)
+	}
+	if resp.StatusCode == 500 && strings.Contains(string(respBody), "not running") {
+		return nil, fmt.Errorf("VM/CT ist nicht aktiv (HTTP 500 für %s): %s", path, truncateBody(respBody))
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("API error %d: %s", resp.StatusCode, string(respBody))
+		return nil, fmt.Errorf("API error %d on %s: %s", resp.StatusCode, path, truncateBody(respBody))
 	}
 
 	var result struct {
@@ -341,6 +444,9 @@ func (c *Client) doRequestWithBody(ctx context.Context, method, path string, par
 
 // StopVM stops a VM/CT on the given node. Returns the task UPID.
 func (c *Client) StopVM(ctx context.Context, node string, vmid int, vmType string) (string, error) {
+	if err := validateVMType(vmType); err != nil {
+		return "", err
+	}
 	path := fmt.Sprintf("/nodes/%s/%s/%d/status/stop", node, vmType, vmid)
 	data, err := c.doRequestWithBody(ctx, http.MethodPost, path, nil)
 	if err != nil {
@@ -355,6 +461,9 @@ func (c *Client) StopVM(ctx context.Context, node string, vmid int, vmType strin
 
 // StartVM starts a VM/CT on the given node. Returns the task UPID.
 func (c *Client) StartVM(ctx context.Context, node string, vmid int, vmType string) (string, error) {
+	if err := validateVMType(vmType); err != nil {
+		return "", err
+	}
 	path := fmt.Sprintf("/nodes/%s/%s/%d/status/start", node, vmType, vmid)
 	data, err := c.doRequestWithBody(ctx, http.MethodPost, path, nil)
 	if err != nil {
@@ -369,6 +478,9 @@ func (c *Client) StartVM(ctx context.Context, node string, vmid int, vmType stri
 
 // ShutdownVM gracefully shuts down a VM/CT. Returns the task UPID.
 func (c *Client) ShutdownVM(ctx context.Context, node string, vmid int, vmType string) (string, error) {
+	if err := validateVMType(vmType); err != nil {
+		return "", err
+	}
 	path := fmt.Sprintf("/nodes/%s/%s/%d/status/shutdown", node, vmType, vmid)
 	data, err := c.doRequestWithBody(ctx, http.MethodPost, path, nil)
 	if err != nil {
@@ -381,7 +493,9 @@ func (c *Client) ShutdownVM(ctx context.Context, node string, vmid int, vmType s
 	return upid, nil
 }
 
-// SuspendVM suspends (pauses) a VM. Returns the task UPID.
+// SuspendVM suspends (pauses) a QEMU VM. Returns the task UPID.
+// NOTE: Proxmox does not support suspending LXC containers — use freeze/unfreeze
+// via lxc-freeze on the host if needed. This function is QEMU-only.
 func (c *Client) SuspendVM(ctx context.Context, node string, vmid int) (string, error) {
 	path := fmt.Sprintf("/nodes/%s/qemu/%d/status/suspend", node, vmid)
 	data, err := c.doRequestWithBody(ctx, http.MethodPost, path, nil)
@@ -411,6 +525,9 @@ func (c *Client) ResumeVM(ctx context.Context, node string, vmid int) (string, e
 
 // GetVMConfig returns the raw VM configuration as key-value pairs.
 func (c *Client) GetVMConfig(ctx context.Context, node string, vmid int, vmType string) (map[string]interface{}, error) {
+	if err := validateVMType(vmType); err != nil {
+		return nil, err
+	}
 	path := fmt.Sprintf("/nodes/%s/%s/%d/config", node, vmType, vmid)
 	data, err := c.doRequest(ctx, http.MethodGet, path)
 	if err != nil {
@@ -425,6 +542,9 @@ func (c *Client) GetVMConfig(ctx context.Context, node string, vmid int, vmType 
 
 // SetVMConfig updates VM configuration parameters.
 func (c *Client) SetVMConfig(ctx context.Context, node string, vmid int, vmType string, params url.Values) error {
+	if err := validateVMType(vmType); err != nil {
+		return err
+	}
 	path := fmt.Sprintf("/nodes/%s/%s/%d/config", node, vmType, vmid)
 	_, err := c.doRequestWithBody(ctx, http.MethodPut, path, params)
 	return err
@@ -461,6 +581,15 @@ func (c *Client) GetTaskLog(ctx context.Context, node string, upid string, start
 
 // CreateVzdump creates a vzdump backup of a VM/CT. Returns the task UPID.
 func (c *Client) CreateVzdump(ctx context.Context, node string, vmid int, opts VzdumpOptions) (string, error) {
+	if vmid <= 0 {
+		return "", fmt.Errorf("ungültige VMID %d für vzdump", vmid)
+	}
+	// Validate vzdump mode (Proxmox supports: stop, suspend, snapshot)
+	validModes := map[string]bool{"stop": true, "suspend": true, "snapshot": true}
+	if opts.Mode != "" && !validModes[opts.Mode] {
+		return "", fmt.Errorf("ungültiger vzdump-Modus %q (erlaubt: stop, suspend, snapshot)", opts.Mode)
+	}
+
 	params := url.Values{}
 	params.Set("vmid", fmt.Sprintf("%d", vmid))
 	if opts.Storage != "" {
@@ -515,32 +644,62 @@ func (c *Client) GetNodeRRDData(ctx context.Context, node string, timeframe stri
 		p := RRDDataPoint{
 			Time: int64(r.Time),
 		}
+		// NOTE: nil fields default to 0 — we cannot distinguish "0% usage" from
+		// "data unavailable" without changing the RRDDataPoint struct to use pointers.
+		// Guard against NaN/Inf values leaking through from Proxmox RRD gaps.
 		if r.CPU != nil {
-			p.CPU = *r.CPU
+			v := *r.CPU
+			if !math.IsNaN(v) && !math.IsInf(v, 0) {
+				p.CPU = v
+			}
 		}
 		if r.NetIn != nil {
-			p.NetIn = *r.NetIn
+			v := *r.NetIn
+			if !math.IsNaN(v) && !math.IsInf(v, 0) {
+				p.NetIn = v
+			}
 		}
 		if r.NetOut != nil {
-			p.NetOut = *r.NetOut
+			v := *r.NetOut
+			if !math.IsNaN(v) && !math.IsInf(v, 0) {
+				p.NetOut = v
+			}
 		}
 		if r.MemUsed != nil {
-			p.MemUsed = int64(*r.MemUsed)
+			v := *r.MemUsed
+			if !math.IsNaN(v) && !math.IsInf(v, 0) {
+				p.MemUsed = int64(v)
+			}
 		}
 		if r.MemTotal != nil {
-			p.MemTotal = int64(*r.MemTotal)
+			v := *r.MemTotal
+			if !math.IsNaN(v) && !math.IsInf(v, 0) {
+				p.MemTotal = int64(v)
+			}
 		}
 		if r.RootUsed != nil {
-			p.RootUsed = int64(*r.RootUsed)
+			v := *r.RootUsed
+			if !math.IsNaN(v) && !math.IsInf(v, 0) {
+				p.RootUsed = int64(v)
+			}
 		}
 		if r.RootTotal != nil {
-			p.RootTotal = int64(*r.RootTotal)
+			v := *r.RootTotal
+			if !math.IsNaN(v) && !math.IsInf(v, 0) {
+				p.RootTotal = int64(v)
+			}
 		}
 		if r.LoadAvg != nil {
-			p.LoadAvg = *r.LoadAvg
+			v := *r.LoadAvg
+			if !math.IsNaN(v) && !math.IsInf(v, 0) {
+				p.LoadAvg = v
+			}
 		}
 		if r.IOWait != nil {
-			p.IOWait = *r.IOWait
+			v := *r.IOWait
+			if !math.IsNaN(v) && !math.IsInf(v, 0) {
+				p.IOWait = v
+			}
 		}
 		points = append(points, p)
 	}
@@ -562,12 +721,16 @@ func (c *Client) GetVMRRDData(ctx context.Context, node string, vmid int, vmType
 }
 
 // GetTicket authenticates via username/password and returns a ticket + CSRF token.
-func GetTicket(ctx context.Context, hostname string, port int, username, password string) (ticket string, csrf string, err error) {
+// If tlsCfg is nil, TLS verification is skipped (insecure, backward compatible).
+func GetTicket(ctx context.Context, hostname string, port int, username, password string, tlsCfg *tls.Config) (ticket string, csrf string, err error) {
+	if tlsCfg == nil {
+		tlsCfg = &tls.Config{InsecureSkipVerify: true}
+	}
 	baseURL := fmt.Sprintf("https://%s:%d/api2/json", hostname, port)
 	httpClient := &http.Client{
 		Timeout: 30 * time.Second,
 		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			TLSClientConfig: tlsCfg,
 		},
 	}
 
@@ -587,13 +750,13 @@ func GetTicket(ctx context.Context, hostname string, port int, username, passwor
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize))
 	if err != nil {
 		return "", "", fmt.Errorf("read ticket response: %w", err)
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", "", fmt.Errorf("ticket auth failed (HTTP %d): %s", resp.StatusCode, string(body))
+		return "", "", fmt.Errorf("ticket auth failed (HTTP %d): %s", resp.StatusCode, truncateBody(body))
 	}
 
 	var result struct {
@@ -614,12 +777,16 @@ func GetTicket(ctx context.Context, hostname string, port int, username, passwor
 }
 
 // CreateAPITokenWithTicket creates an API token using cookie-based ticket authentication.
-func CreateAPITokenWithTicket(ctx context.Context, hostname string, port int, username, ticket, csrf, tokenName string) (tokenID string, tokenSecret string, err error) {
+// If tlsCfg is nil, TLS verification is skipped (insecure, backward compatible).
+func CreateAPITokenWithTicket(ctx context.Context, hostname string, port int, username, ticket, csrf, tokenName string, tlsCfg *tls.Config) (tokenID string, tokenSecret string, err error) {
+	if tlsCfg == nil {
+		tlsCfg = &tls.Config{InsecureSkipVerify: true}
+	}
 	baseURL := fmt.Sprintf("https://%s:%d/api2/json", hostname, port)
 	httpClient := &http.Client{
 		Timeout: 30 * time.Second,
 		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			TLSClientConfig: tlsCfg,
 		},
 	}
 
@@ -641,13 +808,13 @@ func CreateAPITokenWithTicket(ctx context.Context, hostname string, port int, us
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize))
 	if err != nil {
 		return "", "", fmt.Errorf("read token response: %w", err)
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", "", fmt.Errorf("create token failed (HTTP %d): %s", resp.StatusCode, string(body))
+		return "", "", fmt.Errorf("create token failed (HTTP %d): %s", resp.StatusCode, truncateBody(body))
 	}
 
 	var result struct {
@@ -889,19 +1056,39 @@ func (c *Client) GetTermProxy(ctx context.Context, node string, vmid int, vmType
 // RestoreVM restores a VM from a vzdump archive. Returns the task UPID.
 // vmType must be "qemu" or "lxc" to select the correct API endpoint.
 func (c *Client) RestoreVM(ctx context.Context, node string, archive string, storage string, vmid int, vmType string) (string, error) {
+	if err := validateVMType(vmType); err != nil {
+		return "", err
+	}
+	if archive == "" {
+		return "", fmt.Errorf("archive-Pfad darf nicht leer sein")
+	}
+	if storage == "" {
+		return "", fmt.Errorf("target-Storage darf nicht leer sein")
+	}
+	if vmid <= 0 {
+		return "", fmt.Errorf("ungültige VMID %d für Restore", vmid)
+	}
+
 	params := url.Values{}
 	params.Set("archive", archive)
 	params.Set("storage", storage)
 	params.Set("vmid", fmt.Sprintf("%d", vmid))
 	params.Set("force", "1")
 
-	endpoint := "qemu"
-	if vmType == "lxc" {
-		endpoint = "lxc"
-	}
-	data, err := c.doRequestWithBody(ctx, http.MethodPost, fmt.Sprintf("/nodes/%s/%s", node, endpoint), params)
+	data, err := c.doRequestWithBody(ctx, http.MethodPost, fmt.Sprintf("/nodes/%s/%s", node, vmType), params)
 	if err != nil {
-		return "", fmt.Errorf("restore vm %d: %w", vmid, err)
+		// Provide specific guidance for common restore failures
+		errStr := err.Error()
+		if strings.Contains(errStr, "already exists") {
+			return "", fmt.Errorf("restore VM %d: VMID existiert bereits auf dem Ziel-Node. Bitte andere VMID verwenden oder bestehende VM entfernen: %w", vmid, err)
+		}
+		if strings.Contains(errStr, "storage") && strings.Contains(errStr, "not available") {
+			return "", fmt.Errorf("restore VM %d: Zielspeicher '%s' ist nicht verfügbar auf Node '%s': %w", vmid, storage, node, err)
+		}
+		if strings.Contains(errStr, "No space left") {
+			return "", fmt.Errorf("restore VM %d: Nicht genügend Speicherplatz auf '%s': %w", vmid, storage, err)
+		}
+		return "", fmt.Errorf("restore VM %d: %w", vmid, err)
 	}
 	var upid string
 	if err := json.Unmarshal(data, &upid); err != nil {

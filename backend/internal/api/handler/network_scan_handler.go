@@ -2,7 +2,6 @@ package handler
 
 import (
 	"errors"
-	"strconv"
 
 	"github.com/antigravity/prometheus/internal/api/response"
 	"github.com/antigravity/prometheus/internal/model"
@@ -30,18 +29,7 @@ func (h *NetworkScanHandler) ListByNode(c echo.Context) error {
 		return response.BadRequest(c, "invalid node id")
 	}
 
-	limit := 50
-	offset := 0
-	if l := c.QueryParam("limit"); l != "" {
-		if v, err := strconv.Atoi(l); err == nil {
-			limit = v
-		}
-	}
-	if o := c.QueryParam("offset"); o != "" {
-		if v, err := strconv.Atoi(o); err == nil {
-			offset = v
-		}
-	}
+	limit, offset := ParsePagination(c)
 
 	scans, err := h.scanRepo.ListByNode(c.Request().Context(), nodeID, limit, offset)
 	if err != nil {

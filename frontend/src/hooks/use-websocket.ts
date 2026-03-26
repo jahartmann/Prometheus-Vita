@@ -45,7 +45,9 @@ export function useWebSocket({
   }, []);
 
   const connect = useCallback(() => {
-    if (!enabledRef.current || !accessToken) return;
+    // On reconnect, get fresh token from auth store
+    const freshToken = useAuthStore.getState().accessToken;
+    if (!enabledRef.current || !freshToken) return;
     if (document.visibilityState === "hidden") return;
     if (isConnectingRef.current) return;
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
@@ -61,10 +63,10 @@ export function useWebSocket({
     const wsOverride = process.env.NEXT_PUBLIC_WS_URL;
     let wsUrl: string;
     if (wsOverride) {
-      wsUrl = `${wsOverride}${url}?token=${accessToken}`;
+      wsUrl = `${wsOverride}${url}?token=${freshToken}`;
     } else {
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      wsUrl = `${protocol}//${window.location.host}${url}?token=${accessToken}`;
+      wsUrl = `${protocol}//${window.location.host}${url}?token=${freshToken}`;
     }
 
     const ws = new WebSocket(wsUrl);

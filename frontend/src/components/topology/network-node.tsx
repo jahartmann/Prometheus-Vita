@@ -43,7 +43,7 @@ function NetworkNodeComponent({ data }: NodeProps) {
       )}
 
       {d.vmCount !== undefined && d.vmCount > 0 && (
-        <p className="text-[10px] text-muted-foreground mt-0.5">{d.vmCount} Geraete</p>
+        <p className="text-[10px] text-muted-foreground mt-0.5">{d.vmCount} Geräte</p>
       )}
 
       <Handle type="source" position={Position.Right} className="!bg-cyan-500 !w-2 !h-2 !border-2 !border-background" />

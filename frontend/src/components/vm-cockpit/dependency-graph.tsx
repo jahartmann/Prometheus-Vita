@@ -171,7 +171,7 @@ export function DependencyGraph({ nodeId, vmid, fullPage }: DependencyGraphProps
         id: dep.id,
         source: sourceKey,
         target: targetKey,
-        label: dep.dependency_type === "depends_on" ? "haengt ab von" : dep.dependency_type,
+        label: dep.dependency_type === "depends_on" ? "hängt ab von" : dep.dependency_type,
         animated: true,
         style: { stroke: "hsl(var(--muted-foreground))", strokeWidth: 2 },
         markerEnd: {
@@ -263,7 +263,7 @@ export function DependencyGraph({ nodeId, vmid, fullPage }: DependencyGraphProps
       <div className={`flex ${height} items-center justify-center`}>
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">Abhaengigkeiten werden geladen...</p>
+          <p className="text-sm text-muted-foreground">Abhängigkeiten werden geladen...</p>
         </div>
       </div>
     );
@@ -302,12 +302,12 @@ export function DependencyGraph({ nodeId, vmid, fullPage }: DependencyGraphProps
                 <DialogTrigger asChild>
                   <Button size="sm">
                     <Plus className="h-3.5 w-3.5 mr-1" />
-                    Abhaengigkeit
+                    Abhängigkeit
                   </Button>
                 </DialogTrigger>
                 <DialogContent>
                   <DialogHeader>
-                    <DialogTitle>Abhaengigkeit erstellen</DialogTitle>
+                    <DialogTitle>Abhängigkeit erstellen</DialogTitle>
                   </DialogHeader>
                   <CreateDependencyForm
                     defaultNodeId={nodeId}
@@ -327,7 +327,7 @@ export function DependencyGraph({ nodeId, vmid, fullPage }: DependencyGraphProps
       {/* Dependency list */}
       {dependencies.length > 0 && (
         <div className="space-y-2">
-          <h4 className="text-sm font-medium">Abhaengigkeiten ({dependencies.length})</h4>
+          <h4 className="text-sm font-medium">Abhängigkeiten ({dependencies.length})</h4>
           {dependencies.map((dep) => (
             <div
               key={dep.id}
@@ -338,7 +338,7 @@ export function DependencyGraph({ nodeId, vmid, fullPage }: DependencyGraphProps
                   {dep.source_vm_name || `VM ${dep.source_vmid}`}
                 </Badge>
                 <span className="text-muted-foreground">
-                  {dep.dependency_type === "depends_on" ? "haengt ab von" : dep.dependency_type}
+                  {dep.dependency_type === "depends_on" ? "hängt ab von" : dep.dependency_type}
                 </span>
                 <Badge variant="outline" className="text-xs">
                   {dep.target_vm_name || `VM ${dep.target_vmid}`}
@@ -462,12 +462,12 @@ function CreateDependencyForm({
         <Input
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          placeholder="z.B. App benoetigt Datenbank"
+          placeholder="z.B. App benötigt Datenbank"
         />
       </div>
 
       <Button type="submit" className="w-full" disabled={submitting || !sourceVmid || !targetVmid}>
-        {submitting ? "Erstelle..." : "Abhaengigkeit erstellen"}
+        {submitting ? "Erstelle..." : "Abhängigkeit erstellen"}
       </Button>
     </form>
   );

@@ -257,7 +257,7 @@ export default function ISOsPage() {
         </Card>
         <Card>
           <CardContent className="p-4">
-            <p className="text-sm text-muted-foreground">Ueberall synchronisiert</p>
+            <p className="text-sm text-muted-foreground">Überall synchronisiert</p>
             <p className="text-2xl font-bold text-green-500">
               {isos.filter((i) => i.nodes.length >= pveNodes.length).length}
             </p>
@@ -295,7 +295,7 @@ export default function ISOsPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">
-              Verfuegbarkeits-Matrix
+              Verfügbarkeits-Matrix
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
@@ -307,7 +307,7 @@ export default function ISOsPage() {
                       ISO / Vorlage
                     </th>
                     <th className="p-3 text-left font-medium">Format</th>
-                    <th className="p-3 text-right font-medium">Groesse</th>
+                    <th className="p-3 text-right font-medium">Größe</th>
                     <th className="p-3 text-center font-medium">Status</th>
                     {pveNodes.map((node) => (
                       <th
@@ -421,9 +421,9 @@ export default function ISOsPage() {
                 <tr className="border-b">
                   <th className="p-3 text-left font-medium">Name</th>
                   <th className="p-3 text-left font-medium">Format</th>
-                  <th className="p-3 text-right font-medium">Groesse</th>
+                  <th className="p-3 text-right font-medium">Größe</th>
                   <th className="p-3 text-right font-medium">Datum</th>
-                  <th className="p-3 text-center font-medium">Verfuegbarkeit</th>
+                  <th className="p-3 text-center font-medium">Verfügbarkeit</th>
                   <th className="p-3 text-center font-medium">Aktion</th>
                 </tr>
               </thead>
@@ -505,7 +505,7 @@ export default function ISOsPage() {
         {uploadOpen && (
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Lade eine ISO-Datei von einer URL direkt auf ausgewaehlte Nodes
+              Lade eine ISO-Datei von einer URL direkt auf ausgewählte Nodes
               herunter.
             </p>
             <div className="grid gap-4 sm:grid-cols-2">
@@ -639,7 +639,7 @@ export default function ISOsPage() {
             <div>
               <h4 className="text-sm font-medium flex items-center gap-2 mb-2">
                 <AlertTriangle className="h-4 w-4 text-amber-500" />
-                Aelter als 30 Tage ({oldIsos.length})
+                Älter als 30 Tage ({oldIsos.length})
               </h4>
               {oldIsos.length === 0 ? (
                 <p className="text-sm text-muted-foreground pl-6">
@@ -672,8 +672,8 @@ export default function ISOsPage() {
             </div>
 
             <p className="text-xs text-muted-foreground">
-              Hinweis: Das Loeschen von ISOs ist derzeit nur ueber die
-              Proxmox-Oberflaeche moeglich.
+              Hinweis: Das Löschen von ISOs ist derzeit nur über die
+              Proxmox-Oberfläche möglich.
             </p>
           </CardContent>
         )}

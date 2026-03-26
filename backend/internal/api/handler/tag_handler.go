@@ -140,6 +140,9 @@ func (h *TagHandler) GetVMTags(c echo.Context) error {
 	if err != nil {
 		return apiPkg.BadRequest(c, "invalid vmid")
 	}
+	if vmid <= 0 {
+		return apiPkg.BadRequest(c, "vmid must be positive")
+	}
 
 	tags, err := h.tagRepo.GetByVM(c.Request().Context(), nodeID, vmid)
 	if err != nil {
@@ -162,6 +165,9 @@ func (h *TagHandler) AddTagToVM(c echo.Context) error {
 	vmid, err := strconv.Atoi(c.Param("vmid"))
 	if err != nil {
 		return apiPkg.BadRequest(c, "invalid vmid")
+	}
+	if vmid <= 0 {
+		return apiPkg.BadRequest(c, "vmid must be positive")
 	}
 
 	var req struct {
@@ -198,6 +204,9 @@ func (h *TagHandler) RemoveTagFromVM(c echo.Context) error {
 	vmid, err := strconv.Atoi(c.Param("vmid"))
 	if err != nil {
 		return apiPkg.BadRequest(c, "invalid vmid")
+	}
+	if vmid <= 0 {
+		return apiPkg.BadRequest(c, "vmid must be positive")
 	}
 
 	tagID, err := uuid.Parse(c.Param("tagId"))

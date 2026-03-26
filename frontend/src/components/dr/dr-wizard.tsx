@@ -53,7 +53,7 @@ const SCENARIOS: { id: Scenario; label: string; description: string; icon: React
   {
     id: "config-restore",
     label: "Konfiguration wiederherstellen",
-    description: "Proxmox-Konfigurationsdateien aus einem Config-Backup zurueckspielen",
+    description: "Proxmox-Konfigurationsdateien aus einem Config-Backup zurückspielen",
     icon: Settings,
   },
   {
@@ -65,10 +65,10 @@ const SCENARIOS: { id: Scenario; label: string; description: string; icon: React
 ];
 
 const STEP_LABELS = [
-  "Szenario waehlen",
-  "Ressourcen auswaehlen",
+  "Szenario wählen",
+  "Ressourcen auswählen",
   "Anleitung & Checkliste",
-  "Ausfuehrung",
+  "Ausführung",
   "Verifizierung",
 ];
 
@@ -111,16 +111,16 @@ function getInstructions(scenario: Scenario, node: Node | null): { title: string
         {
           title: "1. Backup-Datei lokalisieren",
           steps: [
-            { text: "Pruefen Sie den Backup-Storage auf dem Ziel-Node." },
+            { text: "Prüfen Sie den Backup-Storage auf dem Ziel-Node." },
             { text: "Vzdump-Backups auflisten:", command: `ls -la /var/lib/vz/dump/` },
-            { text: "Oder PBS-Backups pruefen:", command: `proxmox-backup-client list --repository <PBS-SERVER>:<DATASTORE>` },
+            { text: "Oder PBS-Backups prüfen:", command: `proxmox-backup-client list --repository <PBS-SERVER>:<DATASTORE>` },
           ],
         },
         {
           title: "2. VM wiederherstellen",
           steps: [
             { text: "VM aus Backup wiederherstellen:", command: `qmrestore /var/lib/vz/dump/vzdump-qemu-<VMID>-*.vma <VMID>` },
-            { text: "Optional mit Live-Restore (VM startet waehrend Restore):", command: `qmrestore /var/lib/vz/dump/vzdump-qemu-<VMID>-*.vma <VMID> --live-restore` },
+            { text: "Optional mit Live-Restore (VM startet während Restore):", command: `qmrestore /var/lib/vz/dump/vzdump-qemu-<VMID>-*.vma <VMID> --live-restore` },
           ],
         },
         {
@@ -133,7 +133,7 @@ function getInstructions(scenario: Scenario, node: Node | null): { title: string
         {
           title: "4. Nach dem Restore",
           steps: [
-            { text: "VM/CT starten und Netzwerk pruefen." },
+            { text: "VM/CT starten und Netzwerk prüfen." },
             { text: "VM starten:", command: `qm start <VMID>` },
             { text: "Container starten:", command: `pct start <CTID>` },
           ],
@@ -189,8 +189,8 @@ function getInstructions(scenario: Scenario, node: Node | null): { title: string
         {
           title: "1. Config-Backup identifizieren",
           steps: [
-            { text: "Waehlen Sie ein Config-Backup aus der Liste unten aus." },
-            { text: "Das Backup enthaelt Dateien aus /etc/pve/ und weiteren kritischen Pfaden." },
+            { text: "Wählen Sie ein Config-Backup aus der Liste unten aus." },
+            { text: "Das Backup enthält Dateien aus /etc/pve/ und weiteren kritischen Pfaden." },
           ],
         },
         {
@@ -203,9 +203,9 @@ function getInstructions(scenario: Scenario, node: Node | null): { title: string
           ],
         },
         {
-          title: "3. Restore durchfuehren",
+          title: "3. Restore durchführen",
           steps: [
-            { text: "Sie koennen das Config-Backup ueber die Prometheus-API oder manuell zurueckspielen." },
+            { text: "Sie können das Config-Backup über die Prometheus-API oder manuell zurückspielen." },
             { text: "Nach dem Restore: Services neu starten:", command: `systemctl restart pvedaemon pveproxy pvestatd` },
           ],
         },
@@ -214,41 +214,41 @@ function getInstructions(scenario: Scenario, node: Node | null): { title: string
     case "cluster-recovery":
       return [
         {
-          title: "1. Cluster-Status pruefen",
+          title: "1. Cluster-Status prüfen",
           steps: [
             { text: "Status des Clusters ermitteln:" },
             { text: "Cluster-Status anzeigen:", command: `pvecm status` },
-            { text: "Erwartete Votes pruefen:", command: `pvecm expected 1` },
+            { text: "Erwartete Votes prüfen:", command: `pvecm expected 1` },
           ],
         },
         {
           title: "2. Quorum wiederherstellen",
           steps: [
-            { text: "Falls nur ein Node verfuegbar ist, Quorum erzwingen:" },
+            { text: "Falls nur ein Node verfügbar ist, Quorum erzwingen:" },
             { text: "Erwartete Votes setzen:", command: `pvecm expected 1` },
             { text: "Corosync-Konfiguration anpassen:", command: `nano /etc/pve/corosync.conf` },
           ],
         },
         {
-          title: "3. Nodes entfernen/hinzufuegen",
+          title: "3. Nodes entfernen/hinzufügen",
           steps: [
             { text: "Defekten Node aus Cluster entfernen:" },
             { text: "Node entfernen:", command: `pvecm delnode <NODENAME>` },
-            { text: "Neuen Node hinzufuegen:", command: `pvecm add <EXISTING-NODE-IP>` },
+            { text: "Neuen Node hinzufügen:", command: `pvecm add <EXISTING-NODE-IP>` },
           ],
         },
         {
-          title: "4. PBS-Storage pruefen",
+          title: "4. PBS-Storage prüfen",
           steps: [
             { text: "Proxmox Backup Server Anbindung testen:" },
-            { text: "PBS-Verzeichnisstruktur pruefen und Rechte setzen:", command: `chown backup:backup -R /mnt/datastore/<DATASTORE>` },
+            { text: "PBS-Verzeichnisstruktur prüfen und Rechte setzen:", command: `chown backup:backup -R /mnt/datastore/<DATASTORE>` },
             { text: "Datastore verifizieren:", command: `proxmox-backup-manager datastore list` },
           ],
         },
         {
           title: "5. Cluster-Konfiguration verifizieren",
           steps: [
-            { text: "Pruefen Sie, dass alle Nodes synchronisiert sind:" },
+            { text: "Prüfen Sie, dass alle Nodes synchronisiert sind:" },
             { text: "Cluster-Status:", command: `pvecm status` },
             { text: "Node-Liste:", command: `pvecm nodes` },
           ],
@@ -270,7 +270,7 @@ function getVerificationItems(scenario: Scenario): { key: string; label: string 
       return [
         { key: "node-online", label: "Node ist online und erreichbar" },
         { key: "network-ok", label: "Netzwerk korrekt konfiguriert" },
-        { key: "storage-ok", label: "Storage eingebunden und verfuegbar" },
+        { key: "storage-ok", label: "Storage eingebunden und verfügbar" },
         { key: "cluster-ok", label: "Cluster-Mitgliedschaft aktiv" },
         { key: "vms-restored", label: "Alle VMs/CTs wiederhergestellt" },
         { key: "backups-ok", label: "Backup-Jobs laufen wieder" },
@@ -349,7 +349,7 @@ export function DRWizard() {
       setState((s) => ({
         ...s,
         restoreInProgress: false,
-        restoreResult: { success: false, message: "Restore fehlgeschlagen. Pruefen Sie die Logs." },
+        restoreResult: { success: false, message: "Restore fehlgeschlagen. Prüfen Sie die Logs." },
       }));
     }
   };
@@ -424,7 +424,7 @@ export function DRWizard() {
   const renderStep1 = () => (
     <div className="space-y-4">
       <div>
-        <h3 className="text-sm font-medium mb-2">Ziel-Node auswaehlen</h3>
+        <h3 className="text-sm font-medium mb-2">Ziel-Node auswählen</h3>
         <div className="grid gap-2 md:grid-cols-3">
           {nodes.map((node) => (
             <Card
@@ -449,9 +449,9 @@ export function DRWizard() {
 
       {state.scenario === "config-restore" && state.selectedNode && (
         <div>
-          <h3 className="text-sm font-medium mb-2">Config-Backup auswaehlen</h3>
+          <h3 className="text-sm font-medium mb-2">Config-Backup auswählen</h3>
           {backups.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Keine Config-Backups fuer diesen Node verfuegbar.</p>
+            <p className="text-sm text-muted-foreground">Keine Config-Backups für diesen Node verfügbar.</p>
           ) : (
             <div className="space-y-2">
               {backups.map((backup) => (
@@ -513,7 +513,7 @@ export function DRWizard() {
       {state.scenario === "config-restore" && state.selectedBackup ? (
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm">Config-Restore ausfuehren</CardTitle>
+            <CardTitle className="text-sm">Config-Restore ausführen</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm text-muted-foreground">
@@ -531,7 +531,7 @@ export function DRWizard() {
             )}
             <Button onClick={handleConfigRestore} disabled={state.restoreInProgress}>
               {state.restoreInProgress ? (
-                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Restore laeuft...</>
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Restore läuft...</>
               ) : (
                 <><Play className="mr-2 h-4 w-4" />Restore starten</>
               )}
@@ -541,11 +541,11 @@ export function DRWizard() {
       ) : (
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm">Manuelle Ausfuehrung</CardTitle>
+            <CardTitle className="text-sm">Manuelle Ausführung</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              Dieses Szenario erfordert eine manuelle Ausfuehrung direkt auf dem Proxmox-Host.
+              Dieses Szenario erfordert eine manuelle Ausführung direkt auf dem Proxmox-Host.
               Folgen Sie der Anleitung im vorherigen Schritt und verwenden Sie die kopierbaren Befehle.
             </p>
             <div className="rounded-md bg-muted p-3">
@@ -598,7 +598,7 @@ export function DRWizard() {
           <div className="rounded-md bg-green-500/10 p-4 text-center">
             <CheckCircle2 className="mx-auto mb-2 h-8 w-8 text-green-500" />
             <p className="font-medium text-green-700">Wiederherstellung erfolgreich verifiziert!</p>
-            <p className="text-sm text-muted-foreground">Alle Pruefpunkte wurden abgehakt.</p>
+            <p className="text-sm text-muted-foreground">Alle Prüfpunkte wurden abgehakt.</p>
           </div>
         )}
       </div>
@@ -621,7 +621,7 @@ export function DRWizard() {
           onClick={() => setStep(state.step - 1)}
           disabled={state.step === 0}
         >
-          <ChevronLeft className="mr-1 h-4 w-4" /> Zurueck
+          <ChevronLeft className="mr-1 h-4 w-4" /> Zurück
         </Button>
         <Button
           onClick={() => setStep(state.step + 1)}

@@ -111,7 +111,7 @@ export function SmtpConfigCard({ channels, onSaved }: SmtpConfigCardProps) {
           )}
         </div>
         <CardDescription>
-          E-Mail-Benachrichtigungen ueber SMTP versenden.
+          E-Mail-Benachrichtigungen über SMTP versenden.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -150,7 +150,7 @@ export function SmtpConfigCard({ channels, onSaved }: SmtpConfigCardProps) {
               type="password"
               value={smtpPassword}
               onChange={(e) => setSmtpPassword(e.target.value)}
-              placeholder={smtpChannel ? "Unveraendert lassen" : "Passwort"}
+              placeholder={smtpChannel ? "Unverändert lassen" : "Passwort"}
             />
           </div>
         </div>
@@ -166,7 +166,7 @@ export function SmtpConfigCard({ channels, onSaved }: SmtpConfigCardProps) {
         </div>
 
         <div className="space-y-2">
-          <Label>Empfaenger (kommagetrennt)</Label>
+          <Label>Empfänger (kommagetrennt)</Label>
           <Input
             value={toAddresses}
             onChange={(e) => setToAddresses(e.target.value)}
@@ -195,7 +195,7 @@ export function SmtpConfigCard({ channels, onSaved }: SmtpConfigCardProps) {
         {testResult === "error" && (
           <div className="flex items-center gap-2 text-sm text-destructive">
             <XCircle className="h-4 w-4" />
-            Test fehlgeschlagen. Konfiguration pruefen.
+            Test fehlgeschlagen. Konfiguration prüfen.
           </div>
         )}
 

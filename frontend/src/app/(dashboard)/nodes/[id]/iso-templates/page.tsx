@@ -77,7 +77,7 @@ export default function NodeISOTemplatesPage() {
               <tr className="border-b">
                 <th className="p-3 text-left font-medium">Name</th>
                 <th className="p-3 text-left font-medium">Format</th>
-                <th className="p-3 text-right font-medium">Groesse</th>
+                <th className="p-3 text-right font-medium">Größe</th>
                 <th className="p-3 text-right font-medium">Datum</th>
               </tr>
             </thead>
@@ -129,7 +129,7 @@ export default function NodeISOTemplatesPage() {
               <tr className="border-b">
                 <th className="p-3 text-left font-medium">Name</th>
                 <th className="p-3 text-left font-medium">Format</th>
-                <th className="p-3 text-right font-medium">Groesse</th>
+                <th className="p-3 text-right font-medium">Größe</th>
                 <th className="p-3 text-right font-medium">Datum</th>
               </tr>
             </thead>
@@ -185,7 +185,7 @@ export default function NodeISOTemplatesPage() {
                     }
                   }}
                 >
-                  <option value="">Node auswaehlen...</option>
+                  <option value="">Node auswählen...</option>
                   {allNodes
                     .filter((n) => n.id !== nodeId)
                     .map((n) => (
@@ -204,7 +204,7 @@ export default function NodeISOTemplatesPage() {
                     value={syncSelectedVolid}
                     onChange={(e) => setSyncSelectedVolid(e.target.value)}
                   >
-                    <option value="">Datei auswaehlen...</option>
+                    <option value="">Datei auswählen...</option>
                     {syncSourceContent.map((c) => (
                       <option key={c.volid} value={c.volid}>
                         {c.volid} ({formatBytes(c.size)})

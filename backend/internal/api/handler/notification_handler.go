@@ -2,7 +2,7 @@ package handler
 
 import (
 	"errors"
-	"strconv"
+	"log/slog"
 
 	apiPkg "github.com/antigravity/prometheus/internal/api/response"
 	"github.com/antigravity/prometheus/internal/api/middleware"
@@ -119,7 +119,8 @@ func (h *NotificationHandler) TestChannel(c echo.Context) error {
 	}
 
 	if err := h.service.TestChannel(c.Request().Context(), id, "Dies ist eine Test-Benachrichtigung von Prometheus."); err != nil {
-		return apiPkg.BadRequest(c, "test failed: "+err.Error())
+		slog.Error("notification channel test failed", slog.String("channel_id", id.String()), slog.Any("error", err))
+		return apiPkg.BadRequest(c, "test failed")
 	}
 	return apiPkg.Success(c, map[string]string{"message": "test notification sent"})
 }
@@ -127,18 +128,7 @@ func (h *NotificationHandler) TestChannel(c echo.Context) error {
 // History handlers
 
 func (h *NotificationHandler) ListHistory(c echo.Context) error {
-	limit := 50
-	offset := 0
-	if l := c.QueryParam("limit"); l != "" {
-		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 {
-			limit = parsed
-		}
-	}
-	if o := c.QueryParam("offset"); o != "" {
-		if parsed, err := strconv.Atoi(o); err == nil && parsed >= 0 {
-			offset = parsed
-		}
-	}
+	limit, offset := ParsePagination(c)
 
 	entries, err := h.service.ListHistory(c.Request().Context(), limit, offset)
 	if err != nil {

@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -29,11 +30,13 @@ func (j *KeyRotationJob) Interval() time.Duration {
 }
 
 func (j *KeyRotationJob) Run(ctx context.Context) error {
+	var errs []error
+
 	// Check for due rotations
 	dueSchedules, err := j.sshkeySvc.ListDueRotations(ctx)
 	if err != nil {
 		slog.Error("failed to list due rotations", slog.Any("error", err))
-		return nil
+		errs = append(errs, fmt.Errorf("list due rotations: %w", err))
 	}
 
 	rotated := 0
@@ -44,6 +47,7 @@ func (j *KeyRotationJob) Run(ctx context.Context) error {
 				slog.String("node_id", sched.NodeID.String()),
 				slog.Any("error", err),
 			)
+			errs = append(errs, fmt.Errorf("rotate key for node %s: %w", sched.NodeID, err))
 			continue
 		}
 
@@ -52,7 +56,9 @@ func (j *KeyRotationJob) Run(ctx context.Context) error {
 		nextRotation := now.Add(time.Duration(sched.IntervalDays) * 24 * time.Hour)
 		sched.LastRotatedAt = &now
 		sched.NextRotationAt = &nextRotation
-		_ = j.sshkeySvc.UpdateRotationSchedule(ctx, &sched)
+		if err := j.sshkeySvc.UpdateRotationSchedule(ctx, &sched); err != nil {
+			errs = append(errs, fmt.Errorf("update rotation schedule for node %s: %w", sched.NodeID, err))
+		}
 
 		slog.Info("key rotated via schedule",
 			slog.String("node_id", sched.NodeID.String()),
@@ -65,7 +71,7 @@ func (j *KeyRotationJob) Run(ctx context.Context) error {
 	expiringKeys, err := j.sshkeySvc.GetExpiringSoon(ctx, time.Now().UTC().Add(7*24*time.Hour))
 	if err != nil {
 		slog.Error("failed to check expiring keys", slog.Any("error", err))
-		return nil
+		errs = append(errs, fmt.Errorf("check expiring keys: %w", err))
 	}
 
 	if len(expiringKeys) > 0 {
@@ -81,5 +87,8 @@ func (j *KeyRotationJob) Run(ctx context.Context) error {
 		)
 	}
 
+	if len(errs) > 0 {
+		return fmt.Errorf("key rotation: %d errors: %v", len(errs), errs[0])
+	}
 	return nil
 }

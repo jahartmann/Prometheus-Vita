@@ -48,7 +48,7 @@ export default function BrainSettingsPage() {
       const res = await brainApi.list();
       setEntries(toArray<BrainEntry>(res.data));
     } catch {
-      toast.error("Eintraege konnten nicht geladen werden.");
+      toast.error("Einträge konnten nicht geladen werden.");
     } finally {
       setLoading(false);
     }
@@ -96,7 +96,7 @@ export default function BrainSettingsPage() {
       toast.success("Eintrag wurde entfernt.");
       setEntries((prev) => prev.filter((e) => e.id !== id));
     } catch {
-      toast.error("Eintrag konnte nicht geloescht werden.");
+      toast.error("Eintrag konnte nicht gelöscht werden.");
     }
   };
 
@@ -153,7 +153,7 @@ export default function BrainSettingsPage() {
               ) : entries.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                    Keine Eintraege vorhanden.
+                    Keine Einträge vorhanden.
                   </TableCell>
                 </TableRow>
               ) : (

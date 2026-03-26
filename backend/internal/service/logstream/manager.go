@@ -152,6 +152,7 @@ func (m *StreamManager) startWorkerForNode(node *model.Node, priority bool) erro
 		Port:       node.SSHPort,
 		User:       node.SSHUser,
 		PrivateKey: node.SSHPrivateKey,
+		HostKey:    node.SSHHostKey,
 	}
 	if sshCfg.Port == 0 {
 		sshCfg.Port = 22

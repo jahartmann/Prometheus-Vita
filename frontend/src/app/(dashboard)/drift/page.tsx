@@ -34,7 +34,7 @@ function timeAgo(dateStr: string): string {
 
 function severityLabel(severity: number): { text: string; className: string } {
   if (severity >= 7) return { text: "Kritisch", className: "text-red-600 bg-red-50 border-red-200" };
-  if (severity >= 4) return { text: "Pruefen empfohlen", className: "text-amber-600 bg-amber-50 border-amber-200" };
+  if (severity >= 4) return { text: "Prüfen empfohlen", className: "text-amber-600 bg-amber-50 border-amber-200" };
   return { text: "Unkritisch", className: "text-green-600 bg-green-50 border-green-200" };
 }
 
@@ -71,7 +71,7 @@ function DriftCheckRow({
 
           {/* Change Summary */}
           <span className="text-xs text-muted-foreground shrink-0">
-            {totalChanges} {totalChanges === 1 ? "Datei" : "Dateien"} geaendert
+            {totalChanges} {totalChanges === 1 ? "Datei" : "Dateien"} geändert
           </span>
 
           {/* AI Badge */}
@@ -118,7 +118,7 @@ function DriftCheckRow({
                         ? "Neu"
                         : detail.status === "removed"
                         ? "Entfernt"
-                        : "Geaendert"}
+                        : "Geändert"}
                     </Badge>
                     {detail.ai_file_analysis && (
                       <span className="text-muted-foreground ml-auto">
@@ -193,7 +193,7 @@ export default function DriftPage() {
   const bannerConfig = {
     green: {
       icon: CheckCircle2,
-      text: "Alle Konfigurationen stimmen ueberein",
+      text: "Alle Konfigurationen stimmen überein",
       className: "bg-green-50 border-green-200 text-green-800 dark:bg-green-950/30 dark:border-green-800 dark:text-green-300",
       iconClass: "text-green-600 dark:text-green-400",
     },
@@ -247,7 +247,7 @@ export default function DriftPage() {
           <p className="text-xs opacity-75">
             {stats.completed.length} Checks abgeschlossen
             {stats.withDrift.length > 0 &&
-              ` | ${stats.withDrift.length} mit Aenderungen`}
+              ` | ${stats.withDrift.length} mit Änderungen`}
           </p>
         </div>
         <Button

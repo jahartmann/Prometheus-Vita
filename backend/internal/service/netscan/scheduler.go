@@ -247,15 +247,15 @@ func (s *ScanScheduler) scanNode(ctx context.Context, nodeID uuid.UUID, scanType
 
 	// For full scans, check nmap availability (cached per node).
 	if scanType == scanTypeFull {
-		s.mu.RLock()
+		s.mu.Lock()
 		avail, known := s.nmapStatus[nodeID.String()]
-		s.mu.RUnlock()
 		if !known {
+			s.mu.Unlock()
 			avail = CheckNmapAvailable(ctx, runner)
 			s.mu.Lock()
 			s.nmapStatus[nodeID.String()] = avail
-			s.mu.Unlock()
 		}
+		s.mu.Unlock()
 		if !avail {
 			slog.Debug("netscan: nmap not available, skipping full scan",
 				slog.String("node_id", nodeID.String()),
@@ -424,6 +424,7 @@ func (s *ScanScheduler) runnerForNode(ctx context.Context, nodeID uuid.UUID) (SS
 		Port:       node.SSHPort,
 		User:       node.SSHUser,
 		PrivateKey: node.SSHPrivateKey,
+		HostKey:    node.SSHHostKey,
 	}
 
 	client, err := s.sshPool.Get(nodeID.String(), cfg)

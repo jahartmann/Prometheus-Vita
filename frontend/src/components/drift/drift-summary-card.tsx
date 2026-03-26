@@ -49,14 +49,14 @@ export function DriftSummaryCard({ nodeId }: DriftSummaryCardProps) {
             </div>
             <Button variant="outline" size="sm" onClick={handleCheck} disabled={checking}>
               <RefreshCw className={`h-3 w-3 mr-1 ${checking ? "animate-spin" : ""}`} />
-              Pruefen
+              Prüfen
             </Button>
           </div>
 
           {!latest ? (
-            <p className="text-sm text-muted-foreground">Noch kein Drift-Check durchgefuehrt.</p>
+            <p className="text-sm text-muted-foreground">Noch kein Drift-Check durchgeführt.</p>
           ) : latest.status === "running" || latest.status === "pending" ? (
-            <p className="text-sm text-muted-foreground">Check laeuft...</p>
+            <p className="text-sm text-muted-foreground">Check läuft...</p>
           ) : latest.status === "failed" ? (
             <div className="flex items-center gap-2 text-destructive text-sm">
               <AlertTriangle className="h-4 w-4" />
@@ -73,10 +73,10 @@ export function DriftSummaryCard({ nodeId }: DriftSummaryCardProps) {
               </div>
               <div className="flex gap-2 flex-wrap">
                 {latest.changed_files > 0 && (
-                  <Badge variant="secondary">{latest.changed_files} geaendert</Badge>
+                  <Badge variant="secondary">{latest.changed_files} geändert</Badge>
                 )}
                 {latest.added_files > 0 && (
-                  <Badge variant="secondary">{latest.added_files} hinzugefuegt</Badge>
+                  <Badge variant="secondary">{latest.added_files} hinzugefügt</Badge>
                 )}
                 {latest.removed_files > 0 && (
                   <Badge variant="secondary">{latest.removed_files} entfernt</Badge>
@@ -110,7 +110,7 @@ export function DriftSummaryCard({ nodeId }: DriftSummaryCardProps) {
               )}
 
               <p className="text-xs text-muted-foreground">
-                {new Date(latest.checked_at).toLocaleString("de-DE")} - {latest.total_files} Dateien geprueft
+                {new Date(latest.checked_at).toLocaleString("de-DE")} - {latest.total_files} Dateien geprüft
               </p>
             </div>
           ) : (

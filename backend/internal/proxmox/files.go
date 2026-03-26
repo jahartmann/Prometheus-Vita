@@ -7,8 +7,49 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"path"
 	"strings"
 )
+
+// validateFilePath checks that the path is safe for use in VM file operations.
+// Prevents path traversal and command injection via crafted paths.
+// NOTE: This validates for the QEMU guest agent API (form-parameter context).
+// For LXC shell contexts, use shellQuote() additionally.
+func validateFilePath(filePath string) error {
+	if filePath == "" {
+		return fmt.Errorf("Dateipfad darf nicht leer sein")
+	}
+	// Normalize the path to resolve /./foo, //foo, etc.
+	filePath = path.Clean(filePath)
+	if !strings.HasPrefix(filePath, "/") {
+		return fmt.Errorf("Dateipfad muss absolut sein (mit / beginnen): %q", filePath)
+	}
+	// Block path traversal
+	if strings.Contains(filePath, "..") {
+		return fmt.Errorf("Dateipfad darf keine '..' Komponenten enthalten: %q", filePath)
+	}
+	// Block null bytes (can confuse C-based tools)
+	if strings.ContainsRune(filePath, 0) {
+		return fmt.Errorf("Dateipfad enthält ungültige Null-Bytes")
+	}
+	// Block newlines (can break command parsing)
+	if strings.ContainsAny(filePath, "\n\r") {
+		return fmt.Errorf("Dateipfad enthält ungültige Zeilenumbrüche")
+	}
+	// Block shell metacharacters that could be exploited in LXC exec context.
+	// These are safe in QEMU agent API (form params) but dangerous in sh -c commands.
+	if strings.ContainsAny(filePath, "$`|;&<>(){}!\\") {
+		return fmt.Errorf("Dateipfad enthält ungültige Sonderzeichen: %q", filePath)
+	}
+	return nil
+}
+
+// shellQuote wraps a string in single quotes for safe use in POSIX shell commands.
+// Single quotes prevent ALL shell interpretation including $(), ``, etc.
+// Any embedded single quotes are escaped via the '\'' idiom.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
+}
 
 // FileEntry represents a parsed file/directory entry from ls -la output.
 type FileEntry struct {
@@ -26,6 +67,12 @@ type FileEntry struct {
 // For LXC: uses pct pull equivalent via exec + cat.
 // For QEMU: uses qm guest file-read via the guest agent API.
 func (c *Client) ReadFile(ctx context.Context, node string, vmid int, vmType string, path string) (string, error) {
+	if err := validateVMType(vmType); err != nil {
+		return "", err
+	}
+	if err := validateFilePath(path); err != nil {
+		return "", err
+	}
 	if vmType == "lxc" {
 		return c.readFileLXC(ctx, node, vmid, path)
 	}
@@ -75,6 +122,12 @@ func (c *Client) readFileQEMU(ctx context.Context, node string, vmid int, path s
 // For LXC: uses exec with tee.
 // For QEMU: uses qm guest file-write via the guest agent API.
 func (c *Client) WriteFile(ctx context.Context, node string, vmid int, vmType string, path string, content string) error {
+	if err := validateVMType(vmType); err != nil {
+		return err
+	}
+	if err := validateFilePath(path); err != nil {
+		return err
+	}
 	if vmType == "lxc" {
 		return c.writeFileLXC(ctx, node, vmid, path, content)
 	}
@@ -82,16 +135,64 @@ func (c *Client) WriteFile(ctx context.Context, node string, vmid int, vmType st
 }
 
 func (c *Client) writeFileLXC(ctx context.Context, node string, vmid int, path string, content string) error {
+	// For large content, base64 via echo exceeds ARG_MAX (~128KB on Linux).
+	// Use chunked write via multiple commands.
+	const maxEchoSize = 65536 // 64KB - safe limit considering base64 4/3 expansion = ~87KB arg
+
+	if len(content) > maxEchoSize {
+		return c.writeFileLXCChunked(ctx, node, vmid, path, content)
+	}
+
 	// Use base64 encoding to avoid shell escaping issues.
 	// mkdir -p ensures the parent directory exists.
+	// SECURITY: Use shellQuote (single quotes) for path to prevent shell injection.
+	// Go's %q produces double-quoted strings where $(cmd) is still interpreted!
 	encoded := base64.StdEncoding.EncodeToString([]byte(content))
-	cmd := fmt.Sprintf("mkdir -p $(dirname %s) && echo %s | base64 -d > %s", path, encoded, path)
+	safePath := shellQuote(path)
+	cmd := fmt.Sprintf("mkdir -p $(dirname %s) && echo %s | base64 -d > %s", safePath, encoded, safePath)
 	result, err := c.ExecCommand(ctx, node, vmid, "lxc", []string{"sh", "-c", cmd})
 	if err != nil {
 		return fmt.Errorf("write file via lxc exec: %w", err)
 	}
 	if result.ExitCode != 0 {
 		return fmt.Errorf("write failed (exit %d): %s", result.ExitCode, result.ErrData)
+	}
+	return nil
+}
+
+// writeFileLXCChunked writes large files in chunks to avoid exceeding ARG_MAX.
+func (c *Client) writeFileLXCChunked(ctx context.Context, node string, vmid int, path string, content string) error {
+	safePath := shellQuote(path)
+	// Create parent directory
+	_, err := c.ExecCommand(ctx, node, vmid, "lxc", []string{"sh", "-c", "mkdir -p $(dirname " + safePath + ")"})
+	if err != nil {
+		return fmt.Errorf("create parent dir: %w", err)
+	}
+
+	// Write in chunks via base64
+	chunkSize := 49152 // 48KB per chunk (base64 -> 64KB, well under ARG_MAX)
+	first := true
+	for i := 0; i < len(content); i += chunkSize {
+		end := i + chunkSize
+		if end > len(content) {
+			end = len(content)
+		}
+		chunk := content[i:end]
+		encoded := base64.StdEncoding.EncodeToString([]byte(chunk))
+
+		op := ">>"
+		if first {
+			op = ">"
+			first = false
+		}
+		cmd := fmt.Sprintf("echo %s | base64 -d %s %s", encoded, op, safePath)
+		result, err := c.ExecCommand(ctx, node, vmid, "lxc", []string{"sh", "-c", cmd})
+		if err != nil {
+			return fmt.Errorf("write chunk to file: %w", err)
+		}
+		if result.ExitCode != 0 {
+			return fmt.Errorf("write chunk failed (exit %d): %s", result.ExitCode, result.ErrData)
+		}
 	}
 	return nil
 }
@@ -111,6 +212,12 @@ func (c *Client) writeFileQEMU(ctx context.Context, node string, vmid int, path 
 // ListDirectory lists the contents of a directory inside a VM/container.
 // Executes ls -la --time-style=long-iso and parses the output.
 func (c *Client) ListDirectory(ctx context.Context, node string, vmid int, vmType string, path string) ([]FileEntry, error) {
+	if err := validateVMType(vmType); err != nil {
+		return nil, err
+	}
+	if err := validateFilePath(path); err != nil {
+		return nil, err
+	}
 	result, err := c.ExecCommand(ctx, node, vmid, vmType, []string{"ls", "-la", "--time-style=long-iso", path})
 	if err != nil {
 		return nil, fmt.Errorf("list directory: %w", err)
@@ -124,6 +231,16 @@ func (c *Client) ListDirectory(ctx context.Context, node string, vmid int, vmTyp
 
 // DeleteFile removes a file or directory inside a VM/container.
 func (c *Client) DeleteFile(ctx context.Context, node string, vmid int, vmType string, path string) error {
+	if err := validateVMType(vmType); err != nil {
+		return err
+	}
+	if err := validateFilePath(path); err != nil {
+		return err
+	}
+	// Block dangerous root-level deletions (covers /, //, ///, etc.)
+	if strings.TrimRight(path, "/") == "" || path == "/*" || path == "/." {
+		return fmt.Errorf("Löschung von '%s' ist nicht erlaubt", path)
+	}
 	result, err := c.ExecCommand(ctx, node, vmid, vmType, []string{"rm", "-rf", path})
 	if err != nil {
 		return fmt.Errorf("delete file: %w", err)
@@ -136,6 +253,12 @@ func (c *Client) DeleteFile(ctx context.Context, node string, vmid int, vmType s
 
 // MakeDirectory creates a directory inside a VM/container.
 func (c *Client) MakeDirectory(ctx context.Context, node string, vmid int, vmType string, path string) error {
+	if err := validateVMType(vmType); err != nil {
+		return err
+	}
+	if err := validateFilePath(path); err != nil {
+		return err
+	}
 	result, err := c.ExecCommand(ctx, node, vmid, vmType, []string{"mkdir", "-p", path})
 	if err != nil {
 		return fmt.Errorf("mkdir: %w", err)

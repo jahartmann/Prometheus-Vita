@@ -24,7 +24,7 @@ const STATUS_LABELS: Record<MigrationStatus, string> = {
   backing_up: "Backup",
   transferring: "Transfer",
   restoring: "Wiederherstellung",
-  cleaning_up: "Aufraeumen",
+  cleaning_up: "Aufräumen",
   completed: "Abgeschlossen",
   failed: "Fehlgeschlagen",
   cancelled: "Abgebrochen",

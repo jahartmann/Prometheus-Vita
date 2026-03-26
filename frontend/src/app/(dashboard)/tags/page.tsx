@@ -73,7 +73,7 @@ const defaultPolicies: TagPolicy[] = [
   {
     id: "3",
     name: "Owner-Tag Pflicht",
-    description: "Jede VM sollte einen Owner-Tag fuer die Verantwortlichkeit besitzen",
+    description: "Jede VM sollte einen Owner-Tag für die Verantwortlichkeit besitzen",
     requiredTag: "owner",
     scope: "all",
     compliance: 0,
@@ -179,10 +179,10 @@ export default function TagsPage() {
   const handleDelete = async (id: string) => {
     try {
       await tagApi.delete(id);
-      toast.success("Tag geloescht");
+      toast.success("Tag gelöscht");
       fetchData();
     } catch {
-      toast.error("Fehler beim Loeschen des Tags");
+      toast.error("Fehler beim Löschen des Tags");
     }
   };
 
@@ -470,18 +470,18 @@ export default function TagsPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Waehle einen Tag und mehrere Nodes aus, um den Tag gleichzeitig
+            Wähle einen Tag und mehrere Nodes aus, um den Tag gleichzeitig
             zuzuweisen.
           </p>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label>Tag auswaehlen</Label>
+              <Label>Tag auswählen</Label>
               <select
                 className="w-full rounded-md border bg-background px-3 py-2 text-sm"
                 value={bulkTagId}
                 onChange={(e) => setBulkTagId(e.target.value)}
               >
-                <option value="">Tag auswaehlen...</option>
+                <option value="">Tag auswählen...</option>
                 {tags.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.name}
@@ -491,7 +491,7 @@ export default function TagsPage() {
               </select>
             </div>
             <div className="space-y-2">
-              <Label>Nodes auswaehlen</Label>
+              <Label>Nodes auswählen</Label>
               <div className="max-h-40 overflow-y-auto space-y-1 rounded-md border p-2">
                 {pveNodes.map((node) => (
                   <label
@@ -512,7 +512,7 @@ export default function TagsPage() {
                 ))}
                 {pveNodes.length === 0 && (
                   <p className="text-xs text-muted-foreground py-2 text-center">
-                    Keine PVE Nodes verfuegbar
+                    Keine PVE Nodes verfügbar
                   </p>
                 )}
               </div>
@@ -564,7 +564,7 @@ export default function TagsPage() {
         {policiesOpen && (
           <CardContent className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              Empfohlene Richtlinien fuer die konsistente Tag-Verwendung im
+              Empfohlene Richtlinien für die konsistente Tag-Verwendung im
               Cluster.
             </p>
             {defaultPolicies.map((policy) => {

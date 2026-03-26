@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { useBackupStore } from "@/stores/backup-store";
 import { scheduleApi } from "@/lib/api";
 import { ScheduleForm } from "./schedule-form";
+import { toast } from "sonner";
 import type { BackupSchedule } from "@/types/api";
 
 interface BackupScheduleDialogProps {
@@ -34,6 +35,7 @@ export function BackupScheduleDialog({ nodeId, open, onOpenChange }: BackupSched
         is_active: true,
         retention_count: retentionDays,
       });
+      toast.success("Backup-Zeitplan erstellt");
       fetchSchedules(nodeId);
     } catch {
       /* ignore */
@@ -43,11 +45,13 @@ export function BackupScheduleDialog({ nodeId, open, onOpenChange }: BackupSched
 
   const handleDelete = async (id: string) => {
     await scheduleApi.deleteSchedule(id);
+    toast.success("Zeitplan gelöscht");
     fetchSchedules(nodeId);
   };
 
   const handleToggle = async (schedule: BackupSchedule) => {
     await scheduleApi.updateSchedule(schedule.id, { is_active: !schedule.is_active });
+    toast.success(schedule.is_active ? "Zeitplan pausiert" : "Zeitplan aktiviert");
     fetchSchedules(nodeId);
   };
 
@@ -56,7 +60,7 @@ export function BackupScheduleDialog({ nodeId, open, onOpenChange }: BackupSched
       <Card className="w-full max-w-lg">
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle>Backup-Zeitplaene</CardTitle>
+            <CardTitle>Backup-Zeitpläne</CardTitle>
             <Button variant="ghost" onClick={() => onOpenChange(false)}>
               Schliessen
             </Button>
@@ -77,7 +81,7 @@ export function BackupScheduleDialog({ nodeId, open, onOpenChange }: BackupSched
                     <p className="text-xs text-muted-foreground mt-1">
                       Aufbewahrung: {s.retention_count} |{" "}
                       {s.next_run_at
-                        ? `Naechster Lauf: ${new Date(s.next_run_at).toLocaleString("de-DE")}`
+                        ? `Nächster Lauf: ${new Date(s.next_run_at).toLocaleString("de-DE")}`
                         : ""}
                     </p>
                   </div>

@@ -10,4 +10,5 @@ INSERT INTO agent_config (id, key, value) VALUES
     (gen_random_uuid(), 'llm_model', 'llama3'),
     (gen_random_uuid(), 'ollama_url', 'http://localhost:11434'),
     (gen_random_uuid(), 'openai_key', ''),
-    (gen_random_uuid(), 'anthropic_key', '');
+    (gen_random_uuid(), 'anthropic_key', '')
+ON CONFLICT (key) DO NOTHING;

@@ -127,9 +127,10 @@ func (s *ProfileService) ListProfiles(ctx context.Context, nodeID uuid.UUID) ([]
 
 func (s *ProfileService) buildSSHConfig(node *model.Node) (ssh.SSHConfig, error) {
 	cfg := ssh.SSHConfig{
-		Host: node.Hostname,
-		Port: node.SSHPort,
-		User: node.SSHUser,
+		Host:    node.Hostname,
+		Port:    node.SSHPort,
+		User:    node.SSHUser,
+		HostKey: node.SSHHostKey,
 	}
 	if node.SSHPrivateKey != "" {
 		decrypted, err := s.encryptor.Decrypt(node.SSHPrivateKey)

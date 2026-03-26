@@ -29,7 +29,7 @@ func AuditLog(auditRepo repository.AuditRepository) echo.MiddlewareFunc {
 			tokenID, hasToken := c.Get(ContextKeyAPITokenID).(uuid.UUID)
 
 			// Record audit log asynchronously
-			go func() {
+			go func(uid uuid.UUID, hasU bool, tid uuid.UUID, hasT bool) {
 				entry := &model.AuditLogEntry{
 					Method:     method,
 					Path:       path,
@@ -39,16 +39,16 @@ func AuditLog(auditRepo repository.AuditRepository) echo.MiddlewareFunc {
 					DurationMS: duration,
 				}
 
-				if hasUser {
-					entry.UserID = &userID
+				if hasU {
+					entry.UserID = &uid
 				}
 
-				if hasToken {
-					entry.APITokenID = &tokenID
+				if hasT {
+					entry.APITokenID = &tid
 				}
 
 				_ = auditRepo.Create(context.Background(), entry)
-			}()
+			}(userID, hasUser, tokenID, hasToken)
 
 			return err
 		}

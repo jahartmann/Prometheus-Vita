@@ -83,11 +83,11 @@ export const useMigrationStore = create<MigrationState>()((set, get) => ({
   startMigration: async (data) => {
     const res = await migrationApi.start(data);
     set((state) => ({
-      migrations: [res.data, ...state.migrations],
-      activeMigrations: [res.data, ...state.activeMigrations],
       migrationLogs: { ...state.migrationLogs, [res.data.id]: [] },
     }));
     toast.success("Migration gestartet");
+    // Refresh the full list instead of optimistic update
+    get().fetchMigrations();
     return res.data;
   },
 
@@ -113,7 +113,7 @@ export const useMigrationStore = create<MigrationState>()((set, get) => ({
         migrationLogs: newLogs,
       };
     });
-    toast.success("Migration geloescht");
+    toast.success("Migration gelöscht");
   },
 
   retryMigration: async (migration: VMMigration) => {

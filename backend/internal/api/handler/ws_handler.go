@@ -48,7 +48,10 @@ func NewWSHandler(hub *monitor.WSHub, jwtSvc *auth.JWTService, allowedOrigins []
 func (h *WSHandler) HandleWS(c echo.Context) error {
 	// Authenticate via query parameter or header
 	token := c.QueryParam("token")
-	if token == "" {
+	if token != "" {
+		slog.Warn("ws auth token passed via query parameter — prefer Authorization header to avoid token leakage in logs and referrer headers",
+			slog.String("remote_addr", c.RealIP()))
+	} else {
 		authHeader := c.Request().Header.Get("Authorization")
 		if authHeader != "" {
 			parts := strings.SplitN(authHeader, " ", 2)

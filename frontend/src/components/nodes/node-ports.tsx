@@ -171,7 +171,7 @@ function PortGroup({
           <div className="rounded-md bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-400">
             {group.scan_status === "no_agent" ? (
               <>
-                <p className="font-medium">QEMU Guest Agent nicht verfuegbar</p>
+                <p className="font-medium">QEMU Guest Agent nicht verfügbar</p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   Der Guest Agent muss in der VM installiert sein, um Ports auszulesen.
                 </p>
@@ -283,7 +283,7 @@ export function NodePorts({ nodeId }: NodePortsProps) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Port-Uebersicht</CardTitle>
+          <CardTitle className="text-base">Port-Übersicht</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <Skeleton className="h-10 w-full" />
@@ -297,7 +297,7 @@ export function NodePorts({ nodeId }: NodePortsProps) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Port-Uebersicht</CardTitle>
+          <CardTitle className="text-base">Port-Übersicht</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
@@ -321,7 +321,7 @@ export function NodePorts({ nodeId }: NodePortsProps) {
     <Card>
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-base">Port-Uebersicht</CardTitle>
+          <CardTitle className="text-base">Port-Übersicht</CardTitle>
           <Button variant="outline" size="sm" onClick={fetchPorts} disabled={loading}>
             <RefreshCw className={`mr-2 h-3 w-3 ${loading ? "animate-spin" : ""}`} />
             Aktualisieren

@@ -208,7 +208,7 @@ export function ChannelFormDialog({
                 <Input value={fromAddress} onChange={(e) => setFromAddress(e.target.value)} placeholder="alerts@example.com" />
               </div>
               <div className="space-y-2">
-                <Label>Empfaenger (kommagetrennt)</Label>
+                <Label>Empfänger (kommagetrennt)</Label>
                 <Input value={toAddresses} onChange={(e) => setToAddresses(e.target.value)} placeholder="admin@example.com, ops@example.com" />
               </div>
             </>
@@ -234,7 +234,7 @@ export function ChannelFormDialog({
                 <Input value={webhookUrl} onChange={(e) => setWebhookUrl(e.target.value)} placeholder="https://hooks.example.com/webhook" />
               </div>
               <div className="space-y-2">
-                <Label>Secret (optional, fuer HMAC-Signatur)</Label>
+                <Label>Secret (optional, für HMAC-Signatur)</Label>
                 <Input type="password" value={webhookSecret} onChange={(e) => setWebhookSecret(e.target.value)} />
               </div>
             </>

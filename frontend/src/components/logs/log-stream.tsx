@@ -108,7 +108,7 @@ export function LogStream({ autoScroll }: LogStreamProps) {
     >
       {visibleEntries.length === 0 && (
         <div className="flex items-center justify-center h-24 text-zinc-600 text-sm">
-          Keine Log-Eintraege — warte auf Stream...
+          Keine Log-Einträge — warte auf Stream...
         </div>
       )}
 

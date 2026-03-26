@@ -18,7 +18,7 @@ function getScoreColor(score: number): string {
 function getScoreLabel(score: number): string {
   if (score >= 80) return "Bereit";
   if (score >= 60) return "Teilweise bereit";
-  if (score >= 40) return "Eingeschraenkt";
+  if (score >= 40) return "Eingeschränkt";
   return "Nicht bereit";
 }
 

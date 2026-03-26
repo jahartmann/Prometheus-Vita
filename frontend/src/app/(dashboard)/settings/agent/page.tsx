@@ -41,12 +41,12 @@ const autonomyLabels: Record<number, { label: string; description: string }> = {
     description: "Der Agent darf nur lesende Tools verwenden. Schreibende Aktionen werden blockiert.",
   },
   1: {
-    label: "Mit Bestaetigung",
-    description: "Schreibende Aktionen erfordern eine manuelle Genehmigung vor der Ausfuehrung.",
+    label: "Mit Bestätigung",
+    description: "Schreibende Aktionen erfordern eine manuelle Genehmigung vor der Ausführung.",
   },
   2: {
     label: "Voll-Automatisch",
-    description: "Der Agent fuehrt alle Aktionen sofort aus, ohne Bestaetigung.",
+    description: "Der Agent führt alle Aktionen sofort aus, ohne Bestätigung.",
   },
 };
 
@@ -242,7 +242,7 @@ export default function AgentSettingsPage() {
         <CardHeader>
           <CardTitle className="text-base">Aktiver Provider</CardTitle>
           <CardDescription>
-            Waehle den KI-Provider fuer den Agenten.
+            Wähle den KI-Provider für den Agenten.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -303,7 +303,7 @@ export default function AgentSettingsPage() {
               <Label>Modell</Label>
               <Select value={model} onValueChange={setModel}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Modell waehlen" />
+                  <SelectValue placeholder="Modell wählen" />
                 </SelectTrigger>
                 <SelectContent>
                   {availableModels.map((m) => (
@@ -341,7 +341,7 @@ export default function AgentSettingsPage() {
               <Label>Modell</Label>
               <Select value={model} onValueChange={setModel}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Modell waehlen" />
+                  <SelectValue placeholder="Modell wählen" />
                 </SelectTrigger>
                 <SelectContent>
                   {availableModels.map((m) => (
@@ -379,7 +379,7 @@ export default function AgentSettingsPage() {
               <Label>Modell</Label>
               <Select value={model} onValueChange={setModel}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Modell waehlen" />
+                  <SelectValue placeholder="Modell wählen" />
                 </SelectTrigger>
                 <SelectContent>
                   {availableModels.map((m) => (
@@ -399,7 +399,7 @@ export default function AgentSettingsPage() {
         <CardHeader>
           <CardTitle className="text-base">Autonomie-Level</CardTitle>
           <CardDescription>
-            Bestimme, wie selbststaendig der Agent handeln darf.
+            Bestimme, wie selbstständig der Agent handeln darf.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -419,7 +419,7 @@ export default function AgentSettingsPage() {
             />
             <div className="flex justify-between text-xs text-muted-foreground">
               <span>Nur Lesen</span>
-              <span>Mit Bestaetigung</span>
+              <span>Mit Bestätigung</span>
               <span>Voll-Automatisch</span>
             </div>
           </div>

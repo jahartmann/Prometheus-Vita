@@ -106,7 +106,7 @@ export const useDRStore = create<DRState>()((set) => ({
     set((state) => ({
       runbooks: state.runbooks.filter((r) => r.id !== runbookId),
     }));
-    toast.success("Runbook geloescht");
+    toast.success("Runbook gelöscht");
   },
 
   simulate: async (nodeId: string, scenario: string) => {

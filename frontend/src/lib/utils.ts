@@ -28,6 +28,23 @@ export function formatPercentage(value: number, decimals = 1): string {
   return `${value.toFixed(decimals)}%`;
 }
 
+// Status color classes for consistent usage across the app
+export const statusColors = {
+  success: "text-green-500 dark:text-green-400",
+  error: "text-red-500 dark:text-red-400",
+  warning: "text-amber-500 dark:text-amber-400",
+  info: "text-blue-500 dark:text-blue-400",
+  neutral: "text-muted-foreground",
+} as const;
+
+export const statusBgColors = {
+  success: "bg-green-500/10 text-green-600 dark:text-green-400",
+  error: "bg-red-500/10 text-red-600 dark:text-red-400",
+  warning: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+  info: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+  neutral: "bg-muted text-muted-foreground",
+} as const;
+
 export function getStatusColor(isOnline: boolean): string {
   return isOnline ? "text-green-500" : "text-red-500";
 }

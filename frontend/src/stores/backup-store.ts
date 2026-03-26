@@ -16,7 +16,7 @@ interface BackupState {
   fetchSchedules: (nodeId: string) => Promise<void>;
 }
 
-export const useBackupStore = create<BackupState>()((set) => ({
+export const useBackupStore = create<BackupState>()((set, get) => ({
   backups: [],
   schedules: [],
   isLoading: false,
@@ -43,8 +43,10 @@ export const useBackupStore = create<BackupState>()((set) => ({
         notes,
       });
       const backup = response.data;
-      set((state) => ({ backups: [backup, ...state.backups], isCreating: false }));
+      set({ isCreating: false });
       toast.success("Backup erfolgreich erstellt");
+      // Refresh the list after creation
+      get().fetchBackups(nodeId);
       return backup;
     } catch {
       toast.error("Backup konnte nicht erstellt werden");
@@ -59,11 +61,11 @@ export const useBackupStore = create<BackupState>()((set) => ({
       set((state) => ({
         backups: state.backups.filter((b) => b.id !== backupId),
       }));
-      toast.success("Backup geloescht");
+      toast.success("Backup gelöscht");
     } catch {
-      toast.error("Backup konnte nicht geloescht werden");
-      set({ error: "Backup konnte nicht geloescht werden" });
-      throw new Error("Backup konnte nicht geloescht werden");
+      toast.error("Backup konnte nicht gelöscht werden");
+      set({ error: "Backup konnte nicht gelöscht werden" });
+      throw new Error("Backup konnte nicht gelöscht werden");
     }
   },
 
@@ -73,8 +75,8 @@ export const useBackupStore = create<BackupState>()((set) => ({
       const response = await scheduleApi.listSchedules(nodeId);
       set({ schedules: toArray<BackupSchedule>(response.data), isLoadingSchedules: false });
     } catch {
-      toast.error("Zeitplaene konnten nicht geladen werden");
-      set({ error: "Zeitplaene konnten nicht geladen werden", isLoadingSchedules: false });
+      toast.error("Zeitpläne konnten nicht geladen werden");
+      set({ error: "Zeitpläne konnten nicht geladen werden", isLoadingSchedules: false });
     }
   },
 }));

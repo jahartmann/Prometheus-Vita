@@ -86,10 +86,10 @@ export function NodeComparison({ nodes }: NodeComparisonProps) {
         {/* Node Selection */}
         <Card>
           <CardContent className="p-4">
-            <h3 className="text-sm font-medium mb-3">Nodes auswaehlen (min. 2)</h3>
+            <h3 className="text-sm font-medium mb-3">Nodes auswählen (min. 2)</h3>
             <div className="space-y-2 max-h-48 overflow-y-auto">
               {onlineNodes.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Keine Online-Nodes verfuegbar.</p>
+                <p className="text-sm text-muted-foreground">Keine Online-Nodes verfügbar.</p>
               ) : (
                 onlineNodes.map((node) => (
                   <label
@@ -112,7 +112,7 @@ export function NodeComparison({ nodes }: NodeComparisonProps) {
         {/* File Path Selection */}
         <Card>
           <CardContent className="p-4">
-            <h3 className="text-sm font-medium mb-3">Dateipfade auswaehlen</h3>
+            <h3 className="text-sm font-medium mb-3">Dateipfade auswählen</h3>
             <div className="space-y-2 max-h-36 overflow-y-auto mb-3">
               {defaultFilePaths.map((path) => (
                 <label

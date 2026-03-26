@@ -171,7 +171,7 @@ export function VMTagAssignDialog({
             {/* Available tags */}
             {unassigned.length > 0 && (
               <div>
-                <p className="text-sm font-medium mb-2">Verfuegbar</p>
+                <p className="text-sm font-medium mb-2">Verfügbar</p>
                 <div className="flex flex-wrap gap-2">
                   {unassigned.map((tag) => (
                     <Badge

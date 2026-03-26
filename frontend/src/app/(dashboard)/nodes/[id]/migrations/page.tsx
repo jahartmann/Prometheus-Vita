@@ -25,7 +25,7 @@ export default function NodeMigrationsPage() {
           VM-Migrationen{node ? ` – ${node.name}` : ""}
         </h1>
         <p className="text-muted-foreground text-sm">
-          Migrationen fuer diesen Node
+          Migrationen für diesen Node
         </p>
       </div>
 

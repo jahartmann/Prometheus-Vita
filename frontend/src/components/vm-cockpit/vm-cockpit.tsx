@@ -71,7 +71,7 @@ export function VMCockpit({ vm, nodeId }: VMCockpitProps) {
           <TabsTrigger value="files">Dateien</TabsTrigger>
           <TabsTrigger value="ai">KI-Assistent</TabsTrigger>
           <TabsTrigger value="monitoring">Monitoring</TabsTrigger>
-          <TabsTrigger value="dependencies">Abhaengigkeiten</TabsTrigger>
+          <TabsTrigger value="dependencies">Abhängigkeiten</TabsTrigger>
         </TabsList>
 
         <TabsContent value="shell" className="mt-4">
@@ -81,7 +81,7 @@ export function VMCockpit({ vm, nodeId }: VMCockpitProps) {
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-12">
                 <p className="text-muted-foreground">
-                  Shell ist nur verfuegbar, wenn die VM laeuft.
+                  Shell ist nur verfügbar, wenn die VM läuft.
                 </p>
               </CardContent>
             </Card>
@@ -95,7 +95,7 @@ export function VMCockpit({ vm, nodeId }: VMCockpitProps) {
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-12">
                 <p className="text-muted-foreground">
-                  Systeminformationen sind nur verfuegbar, wenn die VM laeuft.
+                  Systeminformationen sind nur verfügbar, wenn die VM läuft.
                 </p>
               </CardContent>
             </Card>
@@ -110,7 +110,7 @@ export function VMCockpit({ vm, nodeId }: VMCockpitProps) {
               <CardContent className="flex flex-col items-center justify-center py-12">
                 <FolderOpen className="mb-4 h-12 w-12 text-muted-foreground" />
                 <p className="text-muted-foreground">
-                  Dateimanager ist nur verfuegbar, wenn die VM laeuft.
+                  Dateimanager ist nur verfügbar, wenn die VM läuft.
                 </p>
               </CardContent>
             </Card>
@@ -125,7 +125,7 @@ export function VMCockpit({ vm, nodeId }: VMCockpitProps) {
               <CardContent className="flex flex-col items-center justify-center py-12">
                 <Bot className="mb-4 h-12 w-12 text-muted-foreground" />
                 <p className="text-muted-foreground">
-                  KI-Assistent ist nur verfuegbar, wenn die VM laeuft.
+                  KI-Assistent ist nur verfügbar, wenn die VM läuft.
                 </p>
               </CardContent>
             </Card>

@@ -2,10 +2,13 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"syscall"
 	"time"
 
@@ -175,7 +178,10 @@ func main() {
 	// Services
 	jwtSvc := auth.NewJWTService(cfg.JWT.Secret, cfg.JWT.AccessTokenExpiry, cfg.JWT.RefreshTokenExpiry)
 	authService := auth.NewService(userRepo, tokenRepo, jwtSvc, redisClient)
-	clientFactory := proxmox.NewClientFactory(encryptor)
+
+	// Proxmox TLS configuration
+	proxmoxTLS := buildProxmoxTLSConfig(cfg.Proxmox)
+	clientFactory := proxmox.NewClientFactory(encryptor, proxmoxTLS)
 
 	// SSH Pool
 	sshPool := ssh.NewPool(ssh.PoolConfig{})
@@ -213,6 +219,11 @@ func main() {
 
 	// Migration Service
 	migrationSvc := migrationService.NewService(migrationRepo, nodeRepo, encryptor, sshPool, clientFactory, wsHub, migrationLogRepo)
+
+	// Recover migrations that were interrupted by a server restart
+	if err := migrationSvc.RecoverOrphanedMigrations(ctx); err != nil {
+		slog.Error("failed to recover orphaned migrations", slog.Any("error", err))
+	}
 
 	// LLM Registry
 	llmRegistry := llm.NewRegistry()
@@ -430,7 +441,7 @@ func main() {
 	// Handlers
 	handlers := api.Handlers{
 		Health:       handler.NewHealthHandler(dbPool, redisClient),
-		Auth:         handler.NewAuthHandler(authService, userRepo),
+		Auth:         handler.NewAuthHandler(authService, userRepo, redisClient),
 		Node:         handler.NewNodeHandler(nodeSvc),
 		WS:           handler.NewWSHandler(wsHub, jwtSvc, cfg.CORS.AllowOrigins),
 		Backup:       handler.NewBackupHandler(backupSvc, restoreSvc, nodeSvc),
@@ -464,7 +475,7 @@ func main() {
 		SyncCenter:     handler.NewSyncCenterHandler(nodeSvc, nodeRepo, tagRepo),
 		Security:       handler.NewSecurityHandler(securityEventRepo, analysisSvc),
 		PasswordPolicy: handler.NewPasswordPolicyHandler(policyRepo),
-		VMCockpit:      handler.NewVMCockpitHandler(nodeSvc, vmPermSvc, jwtSvc, cfg.CORS.AllowOrigins),
+		VMCockpit:      handler.NewVMCockpitHandler(nodeSvc, vmPermSvc, jwtSvc, cfg.CORS.AllowOrigins, proxmoxTLS),
 		VMPermission:   handler.NewVMPermissionHandler(vmPermSvc),
 		VMGroup:        handler.NewVMGroupHandler(vmGroupSvc),
 		VMHealth:       handler.NewVMHealthHandler(vmHealthSvc, vmRightsizingSvc, vmAnomalySvc, snapshotPolicySvc, scheduledActionSvc, vmDependencySvc),
@@ -490,6 +501,15 @@ func main() {
 	slog.Info("server listening", slog.String("addr", addr))
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("server goroutine panicked",
+					slog.Any("panic", r),
+					slog.String("stack", string(debug.Stack())),
+				)
+				os.Exit(1)
+			}
+		}()
 		if err := e.Start(addr); err != nil {
 			slog.Info("server stopped", slog.Any("reason", err))
 		}
@@ -517,4 +537,44 @@ func main() {
 	}
 
 	slog.Info("server shutdown complete")
+}
+
+// buildProxmoxTLSConfig creates a *tls.Config based on the Proxmox configuration.
+// Returns nil when TLS verification is disabled (InsecureSkipVerify mode).
+func buildProxmoxTLSConfig(cfg config.ProxmoxConfig) *tls.Config {
+	if cfg.TLSInsecure && cfg.TLSCACert == "" {
+		slog.Warn("Proxmox TLS-Verifikation ist deaktiviert (PROXMOX_TLS_INSECURE=true). " +
+			"Für Produktionsumgebungen wird empfohlen, ein CA-Zertifikat zu hinterlegen (PROXMOX_TLS_CA_CERT)")
+		// Return nil so NewClient applies its insecure default
+		return nil
+	}
+
+	tlsCfg := &tls.Config{}
+
+	if cfg.TLSCACert != "" {
+		caCert, err := os.ReadFile(cfg.TLSCACert)
+		if err != nil {
+			slog.Error("Proxmox CA-Zertifikat konnte nicht gelesen werden",
+				slog.String("path", cfg.TLSCACert),
+				slog.Any("error", err))
+			os.Exit(1)
+		}
+		caCertPool := x509.NewCertPool()
+		if !caCertPool.AppendCertsFromPEM(caCert) {
+			slog.Error("Proxmox CA-Zertifikat konnte nicht geparst werden – ungültiges PEM-Format",
+				slog.String("path", cfg.TLSCACert))
+			os.Exit(1)
+		}
+		tlsCfg.RootCAs = caCertPool
+		slog.Info("Proxmox TLS mit benutzerdefiniertem CA-Zertifikat konfiguriert",
+			slog.String("ca_cert", cfg.TLSCACert))
+	}
+
+	if cfg.TLSInsecure {
+		slog.Warn("Proxmox TLS-Verifikation ist deaktiviert (PROXMOX_TLS_INSECURE=true), " +
+			"obwohl ein CA-Zertifikat konfiguriert ist – das CA-Zertifikat wird ignoriert")
+		tlsCfg.InsecureSkipVerify = true
+	}
+
+	return tlsCfg
 }

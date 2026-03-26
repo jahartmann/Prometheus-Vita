@@ -58,7 +58,7 @@ export default function SecurityPage() {
   if (user?.username === "admin") {
     warnings.push({
       message:
-        'Der Standard-Benutzername "admin" wird verwendet. Es wird empfohlen, einen individuellen Benutzernamen zu waehlen.',
+        'Der Standard-Benutzername "admin" wird verwendet. Es wird empfohlen, einen individuellen Benutzernamen zu wählen.',
       severity: "warning",
     });
   }
@@ -66,7 +66,7 @@ export default function SecurityPage() {
   if (user?.must_change_password) {
     warnings.push({
       message:
-        "Sie muessen Ihr Passwort aendern. Bitte aktualisieren Sie Ihr Passwort umgehend.",
+        "Sie müssen Ihr Passwort ändern. Bitte aktualisieren Sie Ihr Passwort umgehend.",
       severity: "warning",
     });
   }
@@ -76,7 +76,7 @@ export default function SecurityPage() {
       <div>
         <h2 className="text-lg font-semibold">Sicherheit</h2>
         <p className="text-sm text-muted-foreground">
-          Kontostatus, Login-Aktivitaet und Sicherheitsempfehlungen.
+          Kontostatus, Login-Aktivität und Sicherheitsempfehlungen.
         </p>
       </div>
 
@@ -85,7 +85,7 @@ export default function SecurityPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <Shield className="h-4 w-4" />
-            Konto-Uebersicht
+            Konto-Übersicht
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -106,7 +106,7 @@ export default function SecurityPage() {
                 </Badge>
                 {user?.must_change_password && (
                   <Badge variant="outline" className="text-amber-600 border-amber-400">
-                    Passwort-Aenderung erforderlich
+                    Passwort-Änderung erforderlich
                   </Badge>
                 )}
               </div>
@@ -125,7 +125,7 @@ export default function SecurityPage() {
               <Button variant="outline" size="sm" asChild>
                 <Link href="/settings/users">
                   <Key className="mr-2 h-4 w-4" />
-                  Passwort aendern
+                  Passwort ändern
                 </Link>
               </Button>
             </div>
@@ -206,7 +206,7 @@ export default function SecurityPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <Clock className="h-4 w-4" />
-            Login-Aktivitaet
+            Login-Aktivität
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -216,7 +216,7 @@ export default function SecurityPage() {
             </p>
           ) : loginEntries.length === 0 ? (
             <p className="text-sm text-muted-foreground py-4 text-center">
-              Keine Login-Eintraege gefunden.
+              Keine Login-Einträge gefunden.
             </p>
           ) : (
             <div className="space-y-3">

@@ -2,7 +2,6 @@ package handler
 
 import (
 	"errors"
-	"strconv"
 
 	apiPkg "github.com/antigravity/prometheus/internal/api/response"
 	"github.com/antigravity/prometheus/internal/repository"
@@ -20,7 +19,7 @@ func NewUpdateHandler(updateSvc *updates.Service) *UpdateHandler {
 }
 
 func (h *UpdateHandler) ListAll(c echo.Context) error {
-	limit, _ := strconv.Atoi(c.QueryParam("limit"))
+	limit, _ := ParsePagination(c)
 	checks, err := h.updateSvc.ListAll(c.Request().Context(), limit)
 	if err != nil {
 		return apiPkg.InternalError(c, "failed to list update checks")
@@ -33,7 +32,7 @@ func (h *UpdateHandler) ListByNode(c echo.Context) error {
 	if err != nil {
 		return apiPkg.BadRequest(c, "invalid node id")
 	}
-	limit, _ := strconv.Atoi(c.QueryParam("limit"))
+	limit, _ := ParsePagination(c)
 	checks, err := h.updateSvc.ListByNode(c.Request().Context(), nodeID, limit)
 	if err != nil {
 		return apiPkg.InternalError(c, "failed to list update checks")

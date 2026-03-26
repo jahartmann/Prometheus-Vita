@@ -859,7 +859,7 @@ export function TopologyMap() {
                 }`}
               >
                 <LayoutGrid className="h-3.5 w-3.5" />
-                Cluster-Uebersicht
+                Cluster-Übersicht
               </button>
               <button
                 onClick={() => setViewMode("detailed")}
@@ -986,7 +986,7 @@ export function TopologyMap() {
                     }}
                   >
                     <X className="h-3 w-3 mr-1" />
-                    Filter zuruecksetzen
+                    Filter zurücksetzen
                   </Button>
                 )}
               </div>

@@ -38,7 +38,7 @@ export default function ChangePasswordPage() {
     setError("");
 
     if (newPassword !== confirmPassword) {
-      setError("Passwoerter stimmen nicht ueberein");
+      setError("Passwörter stimmen nicht überein");
       return;
     }
 
@@ -56,8 +56,8 @@ export default function ChangePasswordPage() {
       const msg =
         err && typeof err === "object" && "response" in err
           ? (err as { response?: { data?: { error?: string } } }).response?.data
-              ?.error || "Passwort konnte nicht geaendert werden"
-          : "Passwort konnte nicht geaendert werden";
+              ?.error || "Passwort konnte nicht geändert werden"
+          : "Passwort konnte nicht geändert werden";
       setError(msg);
     } finally {
       setIsSubmitting(false);
@@ -75,7 +75,7 @@ export default function ChangePasswordPage() {
                 Passwortwechsel erforderlich
               </p>
               <p className="text-muted-foreground">
-                Ihr Passwort muss vor der ersten Nutzung geaendert werden.
+                Ihr Passwort muss vor der ersten Nutzung geändert werden.
               </p>
             </div>
           </div>
@@ -83,12 +83,12 @@ export default function ChangePasswordPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Passwort aendern</CardTitle>
+            <CardTitle>Passwort ändern</CardTitle>
             <CardDescription>
               {policy && (
                 <span className="block mt-1 text-xs">
                   Mindestens {policy.min_length} Zeichen
-                  {policy.require_uppercase && ", Grossbuchstabe"}
+                  {policy.require_uppercase && ", Großbuchstabe"}
                   {policy.require_lowercase && ", Kleinbuchstabe"}
                   {policy.require_digit && ", Ziffer"}
                   {policy.require_special && ", Sonderzeichen"}
@@ -123,7 +123,7 @@ export default function ChangePasswordPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="confirmPassword">Passwort bestaetigen</Label>
+                <Label htmlFor="confirmPassword">Passwort bestätigen</Label>
                 <Input
                   id="confirmPassword"
                   type="password"
@@ -149,7 +149,7 @@ export default function ChangePasswordPage() {
                     Wird gespeichert...
                   </>
                 ) : (
-                  "Passwort aendern"
+                  "Passwort ändern"
                 )}
               </Button>
             </form>

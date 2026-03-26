@@ -27,9 +27,9 @@ const statusVariant: Record<IncidentStatus, "default" | "secondary" | "destructi
 };
 
 const statusLabel: Record<IncidentStatus, string> = {
-  triggered: "Ausgeloest",
-  acknowledged: "Bestaetigt",
-  resolved: "Geloest",
+  triggered: "Ausgelöst",
+  acknowledged: "Bestätigt",
+  resolved: "Gelöst",
 };
 
 const formatDate = (dateStr?: string | null) => {
@@ -81,7 +81,7 @@ export function IncidentDetailDialog({
               <p>{incident.current_step}</p>
             </div>
             <div>
-              <span className="text-muted-foreground">Ausgeloest:</span>
+              <span className="text-muted-foreground">Ausgelöst:</span>
               <p>{formatDate(incident.triggered_at)}</p>
             </div>
             <div>
@@ -89,11 +89,11 @@ export function IncidentDetailDialog({
               <p>{formatDate(incident.last_escalated_at)}</p>
             </div>
             <div>
-              <span className="text-muted-foreground">Bestaetigt:</span>
+              <span className="text-muted-foreground">Bestätigt:</span>
               <p>{formatDate(incident.acknowledged_at)}</p>
             </div>
             <div>
-              <span className="text-muted-foreground">Geloest:</span>
+              <span className="text-muted-foreground">Gelöst:</span>
               <p>{formatDate(incident.resolved_at)}</p>
             </div>
           </div>
@@ -111,7 +111,7 @@ export function IncidentDetailDialog({
                 onOpenChange(false);
               }}
             >
-              Bestaetigen
+              Bestätigen
             </Button>
           )}
           {incident.status !== "resolved" && (
@@ -121,7 +121,7 @@ export function IncidentDetailDialog({
                 onOpenChange(false);
               }}
             >
-              Loesen
+              Lösen
             </Button>
           )}
         </DialogFooter>

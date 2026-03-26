@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useBackupStore } from "@/stores/backup-store";
+import { toast } from "sonner";
 
 interface CreateBackupDialogProps {
   nodeId: string;
@@ -17,27 +18,26 @@ export function CreateBackupDialog({ nodeId, open, onOpenChange }: CreateBackupD
   const [isCreating, setIsCreating] = useState(false);
   const { createBackup } = useBackupStore();
 
-  if (!open) return null;
-
   const handleCreate = async () => {
     setIsCreating(true);
     try {
       await createBackup(nodeId, notes || undefined);
+      toast.success("Backup erfolgreich erstellt");
       setNotes("");
       onOpenChange(false);
-    } catch {
-      /* ignore */
+    } catch (e) {
+      console.error('Failed to create backup:', e);
     }
     setIsCreating(false);
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle>Backup erstellen</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Backup erstellen</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="notes">Notizen (optional)</Label>
             <textarea
@@ -49,16 +49,16 @@ export function CreateBackupDialog({ nodeId, open, onOpenChange }: CreateBackupD
               placeholder="z.B. Vor Kernel-Update..."
             />
           </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
-              Abbrechen
-            </Button>
-            <Button onClick={handleCreate} disabled={isCreating}>
-              {isCreating ? "Erstelle..." : "Backup erstellen"}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Abbrechen
+          </Button>
+          <Button onClick={handleCreate} disabled={isCreating}>
+            {isCreating ? "Erstelle..." : "Backup erstellen"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

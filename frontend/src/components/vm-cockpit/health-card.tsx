@@ -128,10 +128,10 @@ export function HealthCard({ nodeId, vmid }: HealthCardProps) {
           max: 25,
         },
         {
-          label: "Stabilitaet",
+          label: "Stabilität",
           icon: ShieldCheck,
           score: health.breakdown.stability_score,
-          detail: `Uptime: ${health.breakdown.uptime_days.toFixed(1)} Tage, Ausfaelle: ${health.breakdown.crash_count}`,
+          detail: `Uptime: ${health.breakdown.uptime_days.toFixed(1)} Tage, Ausfälle: ${health.breakdown.crash_count}`,
           max: 25,
         },
       ]

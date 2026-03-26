@@ -115,6 +115,7 @@ func (s *Service) Create(ctx context.Context, req model.CreateNodeRequest) (*mod
 		SSHPort:        sshPort,
 		SSHUser:        sshUser,
 		SSHPrivateKey:  encSSHPrivateKey,
+		SSHHostKey:     req.SSHHostKey,
 		IsOnline:       false,
 		Metadata:       metadata,
 	}
@@ -151,7 +152,7 @@ func (s *Service) Onboard(ctx context.Context, req model.OnboardNodeRequest) (*m
 	}
 
 	// 1. Ticket-Auth
-	ticket, csrf, err := proxmox.GetTicket(ctx, req.Hostname, port, username, req.Password)
+	ticket, csrf, err := proxmox.GetTicket(ctx, req.Hostname, port, username, req.Password, s.clientFactory.TLSConfig())
 	if err != nil {
 		return nil, fmt.Errorf("proxmox authentication failed: %w", err)
 	}
@@ -159,7 +160,7 @@ func (s *Service) Onboard(ctx context.Context, req model.OnboardNodeRequest) (*m
 	// 2. Create API token (unique per node to avoid conflicts in clusters)
 	sanitizedHost := strings.ReplaceAll(strings.ReplaceAll(req.Hostname, ".", "-"), ":", "-")
 	tokenName := fmt.Sprintf("prometheus-vita-%s", sanitizedHost)
-	tokenID, tokenSecret, err := proxmox.CreateAPITokenWithTicket(ctx, req.Hostname, port, username, ticket, csrf, tokenName)
+	tokenID, tokenSecret, err := proxmox.CreateAPITokenWithTicket(ctx, req.Hostname, port, username, ticket, csrf, tokenName, s.clientFactory.TLSConfig())
 	if err != nil {
 		return nil, fmt.Errorf("create API token failed: %w", err)
 	}
@@ -182,10 +183,7 @@ func (s *Service) Onboard(ctx context.Context, req model.OnboardNodeRequest) (*m
 	}
 	defer sshClient.Close()
 
-	deployCmd := fmt.Sprintf(
-		`mkdir -p ~/.ssh && chmod 700 ~/.ssh && echo %q >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys`,
-		strings.TrimSpace(pubKey),
-	)
+	deployCmd := "mkdir -p ~/.ssh && chmod 700 ~/.ssh && echo " + ssh.ShellQuote(strings.TrimSpace(pubKey)) + " >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
 	result, err := sshClient.RunCommand(ctx, deployCmd)
 	if err != nil {
 		return nil, fmt.Errorf("deploy ssh key: %w", err)
@@ -208,7 +206,10 @@ func (s *Service) Onboard(ctx context.Context, req model.OnboardNodeRequest) (*m
 		metadata = metaBytes
 	}
 
-	// 6. Save node via existing Create flow
+	// 6. Capture SSH host key from the onboarding connection (TOFU).
+	sshHostKey := sshClient.GetHostKey()
+
+	// 7. Save node via existing Create flow
 	createReq := model.CreateNodeRequest{
 		Name:           req.Name,
 		Type:           req.Type,
@@ -219,6 +220,7 @@ func (s *Service) Onboard(ctx context.Context, req model.OnboardNodeRequest) (*m
 		SSHPort:        sshPort,
 		SSHUser:        "root",
 		SSHPrivateKey:  privKey,
+		SSHHostKey:     sshHostKey,
 		Metadata:       metadata,
 	}
 
@@ -328,6 +330,14 @@ func getCachedPVENode(node *model.Node) string {
 
 // cachePVENode stores the resolved PVE node name in the node's metadata.
 func (s *Service) cachePVENode(ctx context.Context, node *model.Node, pveNode string) {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("cachePVENode goroutine panicked",
+				slog.String("node_id", node.ID.String()),
+				slog.Any("panic", r),
+			)
+		}
+	}()
 	var meta map[string]interface{}
 	if len(node.Metadata) > 0 {
 		if err := json.Unmarshal(node.Metadata, &meta); err != nil {
@@ -1081,6 +1091,9 @@ func (s *Service) RunSSHCommand(ctx context.Context, nodeID uuid.UUID, command s
 	}
 	defer s.sshPool.Return(nodeID.String(), client)
 
+	// Persist host key on first successful connection (TOFU).
+	s.saveSSHHostKeyIfNew(ctx, node, client)
+
 	return client.RunCommand(ctx, command)
 }
 
@@ -1354,9 +1367,10 @@ func (s *Service) GetVMRRDData(ctx context.Context, nodeID uuid.UUID, vmid int, 
 
 func (s *Service) buildSSHConfig(node *model.Node) (ssh.SSHConfig, error) {
 	cfg := ssh.SSHConfig{
-		Host: node.Hostname,
-		Port: node.SSHPort,
-		User: node.SSHUser,
+		Host:    node.Hostname,
+		Port:    node.SSHPort,
+		User:    node.SSHUser,
+		HostKey: node.SSHHostKey,
 	}
 
 	if node.SSHPrivateKey != "" {
@@ -1368,6 +1382,30 @@ func (s *Service) buildSSHConfig(node *model.Node) (ssh.SSHConfig, error) {
 	}
 
 	return cfg, nil
+}
+
+// saveSSHHostKeyIfNew persists the SSH host key from a client connection when the node
+// does not yet have one stored (TOFU). This is called after a successful SSH connection.
+func (s *Service) saveSSHHostKeyIfNew(ctx context.Context, node *model.Node, client *ssh.Client) {
+	if node.SSHHostKey != "" {
+		return // already have a stored key
+	}
+	hostKey := client.GetHostKey()
+	if hostKey == "" {
+		return
+	}
+	if err := s.nodeRepo.UpdateSSHHostKey(ctx, node.ID, hostKey); err != nil {
+		slog.Warn("failed to persist SSH host key",
+			slog.String("node_id", node.ID.String()),
+			slog.Any("error", err),
+		)
+		return
+	}
+	node.SSHHostKey = hostKey
+	slog.Info("SSH host key saved (TOFU)",
+		slog.String("node_id", node.ID.String()),
+		slog.String("host", node.Hostname),
+	)
 }
 
 func (s *Service) ExecVMCommand(ctx context.Context, nodeID uuid.UUID, vmid int, vmType string, command []string) (*proxmox.ExecResult, error) {
@@ -1409,7 +1447,9 @@ func (s *Service) execLXCviaSSH(ctx context.Context, nodeID uuid.UUID, vmid int,
 	} else {
 		args := make([]string, 0, len(command)+4)
 		args = append(args, "pct", "exec", strconv.Itoa(vmid), "--")
-		args = append(args, command...)
+		for _, arg := range command {
+			args = append(args, ssh.ShellQuote(arg))
+		}
 		cmdStr = strings.Join(args, " ")
 	}
 
@@ -1457,7 +1497,7 @@ func (s *Service) WriteVMFile(ctx context.Context, nodeID uuid.UUID, vmid int, v
 		slog.Warn("proxmox api write failed for lxc, trying ssh fallback",
 			slog.Int("vmid", vmid), slog.Any("error", err))
 		encoded := base64.StdEncoding.EncodeToString([]byte(content))
-		cmd := fmt.Sprintf("mkdir -p $(dirname %s) && echo %s | base64 -d > %s", path, encoded, path)
+		cmd := "mkdir -p $(dirname " + ssh.ShellQuote(path) + ") && echo " + ssh.ShellQuote(encoded) + " | base64 -d > " + ssh.ShellQuote(path)
 		result, sshErr := s.execLXCviaSSH(ctx, nodeID, vmid, []string{"sh", "-c", cmd})
 		if sshErr != nil {
 			return sshErr

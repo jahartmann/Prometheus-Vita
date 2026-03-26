@@ -103,7 +103,7 @@ export default function HealthPage() {
         <div>
           <h2 className="text-xl font-bold">VM-Gesundheit</h2>
           <p className="text-sm text-muted-foreground">
-            Uebersicht aller VMs sortiert nach Gesundheitsbewertung.
+            Übersicht aller VMs sortiert nach Gesundheitsbewertung.
           </p>
         </div>
         <Button variant="outline" onClick={fetchAllHealth} disabled={isLoading}>

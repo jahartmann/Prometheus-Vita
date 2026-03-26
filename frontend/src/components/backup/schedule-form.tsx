@@ -30,7 +30,7 @@ const WEEKDAYS = [
 
 function getNextExecution(cron: string): string {
   const parts = cron.split(" ");
-  if (parts.length !== 5) return "Ungueltiger Cron-Ausdruck";
+  if (parts.length !== 5) return "Ungültiger Cron-Ausdruck";
 
   const [minute, hour, dayOfMonth, , dayOfWeek] = parts;
   const now = new Date();
@@ -101,8 +101,8 @@ export function ScheduleForm({ onSubmit, isSubmitting }: ScheduleFormProps) {
         <div className="space-y-2">
           <Label>Frequenz</Label>
           <TabsList className="w-full">
-            <TabsTrigger value="daily" className="flex-1">Taeglich</TabsTrigger>
-            <TabsTrigger value="weekly" className="flex-1">Woechentlich</TabsTrigger>
+            <TabsTrigger value="daily" className="flex-1">Täglich</TabsTrigger>
+            <TabsTrigger value="weekly" className="flex-1">Wöchentlich</TabsTrigger>
             <TabsTrigger value="monthly" className="flex-1">Monatlich</TabsTrigger>
           </TabsList>
         </div>
@@ -198,7 +198,7 @@ export function ScheduleForm({ onSubmit, isSubmitting }: ScheduleFormProps) {
           <code className="font-mono text-xs bg-muted px-2 py-1 rounded">{cronExpression}</code>
         </div>
         <div className="flex items-center justify-between text-sm">
-          <span className="text-muted-foreground">Naechste Ausfuehrung:</span>
+          <span className="text-muted-foreground">Nächste Ausführung:</span>
           <span className="text-xs">{nextExecution}</span>
         </div>
       </div>

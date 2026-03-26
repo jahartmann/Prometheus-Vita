@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import Link from "next/link";
-import { Server, Plus, Wifi, WifiOff } from "lucide-react";
+import { Server, Plus, Wifi, WifiOff, Circle, CircleOff, AlertCircle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useNodeStore } from "@/stores/node-store";
 
 export default function NodesPage() {
-  const { nodes, isLoading, fetchNodes } = useNodeStore();
+  const { nodes, isLoading, error, fetchNodes } = useNodeStore();
 
   useEffect(() => {
     fetchNodes();
@@ -25,13 +25,13 @@ export default function NodesPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Nodes</h1>
           <p className="text-muted-foreground">
-            Uebersicht aller verbundenen Proxmox Nodes.
+            Übersicht aller verbundenen Proxmox Nodes.
           </p>
         </div>
         <Button asChild>
           <Link href="/settings/nodes">
             <Plus className="mr-2 h-4 w-4" />
-            Node hinzufuegen
+            Node hinzufügen
           </Link>
         </Button>
       </div>
@@ -74,6 +74,18 @@ export default function NodesPage() {
             <Skeleton key={i} className="h-20 w-full" />
           ))}
         </div>
+      ) : error ? (
+        <Card className="border-destructive">
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <AlertCircle className="mb-3 h-10 w-10 text-destructive" />
+            <p className="font-medium text-destructive">Fehler beim Laden der Nodes</p>
+            <p className="text-sm text-muted-foreground mt-1">{error}</p>
+            <Button variant="outline" className="mt-4" onClick={() => fetchNodes()}>
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Erneut versuchen
+            </Button>
+          </CardContent>
+        </Card>
       ) : nodes.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
@@ -82,7 +94,7 @@ export default function NodesPage() {
             <Button variant="outline" className="mt-4" asChild>
               <Link href="/settings/nodes">
                 <Plus className="mr-2 h-4 w-4" />
-                Ersten Node hinzufuegen
+                Ersten Node hinzufügen
               </Link>
             </Button>
           </CardContent>
@@ -98,9 +110,17 @@ export default function NodesPage() {
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <p className="font-medium truncate">{node.name}</p>
-                        <Badge variant={node.is_online ? "success" : "destructive"}>
-                          {node.is_online ? "Online" : "Offline"}
-                        </Badge>
+                        {node.is_online ? (
+                          <Badge variant="success" className="gap-1">
+                            <Circle className="h-2 w-2 fill-current" />
+                            Online
+                          </Badge>
+                        ) : (
+                          <Badge variant="destructive" className="gap-1">
+                            <CircleOff className="h-2 w-2" />
+                            Offline
+                          </Badge>
+                        )}
                       </div>
                       <p className="text-sm text-muted-foreground truncate">
                         {node.hostname}:{node.port}

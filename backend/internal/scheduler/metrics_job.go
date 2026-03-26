@@ -82,6 +82,19 @@ func (mc *metricsCache) calculateDelta(key string, netIn, netOut, diskRead, disk
 	return netInRate, netOutRate, diskReadRate, diskWriteRate, true
 }
 
+// cleanup removes stale entries from the cache that were not seen in the current
+// collection cycle and are older than one hour, preventing unbounded growth.
+func (mc *metricsCache) cleanup(activeKeys map[string]bool) {
+	mc.mu.Lock()
+	defer mc.mu.Unlock()
+	cutoff := time.Now().Add(-1 * time.Hour)
+	for key, reading := range mc.previous {
+		if !activeKeys[key] && reading.readAt.Before(cutoff) {
+			delete(mc.previous, key)
+		}
+	}
+}
+
 type MetricsCollectionJob struct {
 	nodeRepo      repository.NodeRepository
 	metricsRepo   repository.MetricsRepository
@@ -126,6 +139,7 @@ func (j *MetricsCollectionJob) Run(ctx context.Context) error {
 	var mu sync.Mutex
 	collected := 0
 	failed := 0
+	activeKeys := make(map[string]bool)
 
 	for _, n := range nodes {
 		if !n.IsOnline {
@@ -178,6 +192,9 @@ func (j *MetricsCollectionJob) Run(ctx context.Context) error {
 
 			// Calculate network rate from cumulative counters
 			nodeKey := node.ID.String()
+			mu.Lock()
+			activeKeys[nodeKey] = true
+			mu.Unlock()
 			netInRate, netOutRate, _, _, valid := j.cache.calculateDelta(
 				nodeKey, status.NetIn, status.NetOut, 0, 0, now,
 			)
@@ -227,7 +244,12 @@ func (j *MetricsCollectionJob) Run(ctx context.Context) error {
 			})
 
 			// Collect per-VM metrics
-			j.collectVMMetrics(ctx, client, pveNode, node.ID, now)
+			vmKeys := j.collectVMMetrics(ctx, client, pveNode, node.ID, now)
+			mu.Lock()
+			for _, k := range vmKeys {
+				activeKeys[k] = true
+			}
+			mu.Unlock()
 
 			mu.Lock()
 			collected++
@@ -250,6 +272,9 @@ func (j *MetricsCollectionJob) Run(ctx context.Context) error {
 		slog.Warn("metrics: failed to cleanup old vm metrics", slog.Any("error", err))
 	}
 
+	// Evict stale entries from the metrics delta cache
+	j.cache.cleanup(activeKeys)
+
 	slog.Info("metrics collection completed",
 		slog.Int("collected", collected),
 		slog.Int("failed", failed),
@@ -261,22 +286,25 @@ func (j *MetricsCollectionJob) Run(ctx context.Context) error {
 }
 
 // collectVMMetrics fetches per-VM metrics and stores them with delta-calculated network rates.
-func (j *MetricsCollectionJob) collectVMMetrics(ctx context.Context, client *proxmox.Client, pveNode string, nodeID uuid.UUID, now time.Time) {
+// Returns the cache keys used during this collection for cache eviction tracking.
+func (j *MetricsCollectionJob) collectVMMetrics(ctx context.Context, client *proxmox.Client, pveNode string, nodeID uuid.UUID, now time.Time) []string {
 	vms, err := client.GetVMs(ctx, pveNode)
 	if err != nil {
 		slog.Warn("metrics: failed to get VMs for VM metrics",
 			slog.String("node_id", nodeID.String()),
 			slog.Any("error", err),
 		)
-		return
+		return nil
 	}
 
+	var keys []string
 	for _, vm := range vms {
 		if vm.Status != "running" {
 			continue
 		}
 
 		vmKey := fmt.Sprintf("%s:%d", nodeID.String(), vm.VMID)
+		keys = append(keys, vmKey)
 		netInRate, netOutRate, diskReadRate, diskWriteRate, valid := j.cache.calculateDelta(
 			vmKey, int64(vm.NetIn), int64(vm.NetOut), int64(vm.DiskRead), int64(vm.DiskWrite), now,
 		)
@@ -327,4 +355,5 @@ func (j *MetricsCollectionJob) collectVMMetrics(ctx context.Context, client *pro
 			Data: vmRecord,
 		})
 	}
+	return keys
 }

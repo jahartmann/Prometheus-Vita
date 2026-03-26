@@ -98,7 +98,7 @@ function computeRecommendations(items: ClusterStorageItem[]): Recommendation[] {
       description: `Der Speicher "${s.storage}" hat nur noch ${formatBytes(s.available)} frei von insgesamt ${formatBytes(s.total)}.`,
       action: severity === "critical"
         ? "Dringend: Daten bereinigen oder Speicher erweitern"
-        : "Speichernutzung pruefen und ggf. bereinigen",
+        : "Speichernutzung prüfen und ggf. bereinigen",
     });
   }
 
@@ -111,7 +111,7 @@ function computeRecommendations(items: ClusterStorageItem[]): Recommendation[] {
         severity: "warning",
         title: `LVM-Thin Overcommit: ${tp.storage} auf ${tp.node_name}`,
         description: `Thin-Provisioned Pool ist zu ${tp.usage_percent.toFixed(1)}% belegt. Overcommit-Risiko besteht.`,
-        action: "Thin-Pool-Nutzung pruefen, VMs mit hohem Verbrauch identifizieren",
+        action: "Thin-Pool-Nutzung prüfen, VMs mit hohem Verbrauch identifizieren",
       });
     }
   }
@@ -135,9 +135,9 @@ function computeRecommendations(items: ClusterStorageItem[]): Recommendation[] {
       recs.push({
         id: "unbalanced",
         severity: "warning",
-        title: "Ungleichmaessige Speicherverteilung",
-        description: `${sorted[0].name} ist bei ${sorted[0].avg.toFixed(0)}% Auslastung, waehrend ${sorted[sorted.length - 1].name} nur bei ${sorted[sorted.length - 1].avg.toFixed(0)}% liegt (Differenz: ${diff.toFixed(0)}%).`,
-        action: "VMs oder Daten zwischen Nodes migrieren fuer bessere Verteilung",
+        title: "Ungleichmäßige Speicherverteilung",
+        description: `${sorted[0].name} ist bei ${sorted[0].avg.toFixed(0)}% Auslastung, während ${sorted[sorted.length - 1].name} nur bei ${sorted[sorted.length - 1].avg.toFixed(0)}% liegt (Differenz: ${diff.toFixed(0)}%).`,
+        action: "VMs oder Daten zwischen Nodes migrieren für bessere Verteilung",
       });
     }
   }
@@ -162,7 +162,7 @@ function computeRecommendations(items: ClusterStorageItem[]): Recommendation[] {
       severity: "info",
       title: "Speicher-Zustand optimal",
       description: "Alle Storages befinden sich in einem gesunden Zustand.",
-      action: "Keine Massnahmen erforderlich",
+      action: "Keine Maßnahmen erforderlich",
     });
   }
 
@@ -476,7 +476,7 @@ export default function ClusterStoragePage() {
         <div>
           <h1 className="text-2xl font-bold">Speicheranalyse</h1>
           <p className="text-sm text-muted-foreground">
-            Cluster-weite Uebersicht aller Storage-Pools
+            Cluster-weite Übersicht aller Storage-Pools
           </p>
         </div>
       </div>
@@ -518,7 +518,7 @@ export default function ClusterStoragePage() {
                 <HardDrive className="h-5 w-5 text-zinc-600 dark:text-zinc-400" />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Verfuegbar</p>
+                <p className="text-xs text-muted-foreground">Verfügbar</p>
                 <p className="text-xl font-bold">{formatBytes(kpis.totalAvailable)}</p>
               </div>
             </div>

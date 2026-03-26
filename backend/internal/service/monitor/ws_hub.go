@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 )
@@ -30,7 +31,7 @@ type WSHub struct {
 func NewWSHub() *WSHub {
 	return &WSHub{
 		clients:    make(map[*WSClient]bool),
-		broadcast:  make(chan []byte, 256),
+		broadcast:  make(chan []byte, 1024),
 		register:   make(chan *WSClient),
 		unregister: make(chan *WSClient),
 	}
@@ -55,27 +56,17 @@ func (h *WSHub) Run() {
 			slog.Debug("ws client disconnected", slog.Int("total", len(h.clients)))
 
 		case message := <-h.broadcast:
-			h.mu.RLock()
-			var stale []*WSClient
+			h.mu.Lock()
 			for client := range h.clients {
 				select {
 				case client.send <- message:
 				default:
-					stale = append(stale, client)
+					// Client is stale, remove immediately while holding lock
+					delete(h.clients, client)
+					close(client.send)
 				}
 			}
-			h.mu.RUnlock()
-
-			if len(stale) > 0 {
-				h.mu.Lock()
-				for _, client := range stale {
-					if _, ok := h.clients[client]; ok {
-						delete(h.clients, client)
-						close(client.send)
-					}
-				}
-				h.mu.Unlock()
-			}
+			h.mu.Unlock()
 		}
 	}
 }
@@ -89,7 +80,9 @@ func (h *WSHub) BroadcastMessage(msg WSMessage) {
 	select {
 	case h.broadcast <- data:
 	default:
-		slog.Warn("ws broadcast channel full, dropping message")
+		slog.Warn("ws broadcast channel full, dropping message",
+			slog.String("type", msg.Type),
+		)
 	}
 }
 
@@ -116,11 +109,27 @@ func NewWSClient(hub *WSHub, conn *websocket.Conn) *WSClient {
 }
 
 func (c *WSClient) WritePump() {
-	defer c.conn.Close()
-
-	for message := range c.send {
-		if err := c.conn.WriteMessage(websocket.TextMessage, message); err != nil {
-			return
+	ticker := time.NewTicker(30 * time.Second)
+	defer func() {
+		ticker.Stop()
+		c.conn.Close()
+	}()
+	for {
+		select {
+		case message, ok := <-c.send:
+			if !ok {
+				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+				return
+			}
+			c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			if err := c.conn.WriteMessage(websocket.TextMessage, message); err != nil {
+				return
+			}
+		case <-ticker.C:
+			c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				return
+			}
 		}
 	}
 }
@@ -130,7 +139,11 @@ func (c *WSClient) ReadPump() {
 		c.hub.Unregister(c)
 		c.conn.Close()
 	}()
-
+	c.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+	c.conn.SetPongHandler(func(string) error {
+		c.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		return nil
+	})
 	for {
 		_, _, err := c.conn.ReadMessage()
 		if err != nil {

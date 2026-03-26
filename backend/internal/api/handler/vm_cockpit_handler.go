@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"runtime/debug"
 	"strconv"
 	"strings"
 
@@ -63,13 +64,19 @@ type VMCockpitHandler struct {
 	permSvc        *vmService.PermissionService
 	jwtSvc         *auth.JWTService
 	upgrader       websocket.Upgrader
+	tlsConfig      *tls.Config // TLS config for Proxmox WebSocket connections
 }
 
-func NewVMCockpitHandler(nodeSvc *nodeService.Service, permSvc *vmService.PermissionService, jwtSvc *auth.JWTService, allowedOrigins []string) *VMCockpitHandler {
+func NewVMCockpitHandler(nodeSvc *nodeService.Service, permSvc *vmService.PermissionService, jwtSvc *auth.JWTService, allowedOrigins []string, tlsCfg *tls.Config) *VMCockpitHandler {
+	// Default to insecure TLS if no config provided (backward compat)
+	if tlsCfg == nil {
+		tlsCfg = &tls.Config{InsecureSkipVerify: true}
+	}
 	h := &VMCockpitHandler{
-		nodeSvc: nodeSvc,
-		permSvc: permSvc,
-		jwtSvc:  jwtSvc,
+		nodeSvc:   nodeSvc,
+		permSvc:   permSvc,
+		jwtSvc:    jwtSvc,
+		tlsConfig: tlsCfg,
 	}
 	h.upgrader = websocket.Upgrader{
 		ReadBufferSize:  4096,
@@ -109,6 +116,9 @@ func parseCockpitParams(c echo.Context) (uuid.UUID, int, string, uuid.UUID, erro
 	vmid, err := strconv.Atoi(c.Param("vmid"))
 	if err != nil {
 		return uuid.UUID{}, 0, "", uuid.UUID{}, fmt.Errorf("invalid vmid")
+	}
+	if vmid <= 0 {
+		return uuid.UUID{}, 0, "", uuid.UUID{}, fmt.Errorf("vmid must be positive")
 	}
 
 	vmType := c.QueryParam("type")
@@ -512,6 +522,9 @@ func (h *VMCockpitHandler) HandleShell(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid vmid"})
 	}
+	if vmid <= 0 {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "vmid must be positive"})
+	}
 
 	vmType := c.QueryParam("type")
 	if vmType == "" {
@@ -550,9 +563,9 @@ func (h *VMCockpitHandler) HandleShell(c echo.Context) error {
 	}
 	defer browserConn.Close()
 
-	// Connect to Proxmox terminal WebSocket
+	// Connect to Proxmox terminal WebSocket using configured TLS
 	dialer := websocket.Dialer{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		TLSClientConfig: h.tlsConfig,
 	}
 	pveHeaders := http.Header{}
 	pveHeaders.Set("Cookie", fmt.Sprintf("PVEAuthCookie=%s", termProxy.Ticket))
@@ -575,6 +588,14 @@ func (h *VMCockpitHandler) HandleShell(c echo.Context) error {
 	// Browser -> Proxmox: wrap xterm.js input in Proxmox framing
 	go func() {
 		defer func() { done <- struct{}{} }()
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("terminal browser->pve goroutine panicked",
+					slog.Any("panic", r),
+					slog.String("stack", string(debug.Stack())),
+				)
+			}
+		}()
 		for {
 			_, msg, err := browserConn.ReadMessage()
 			if err != nil {
@@ -591,6 +612,14 @@ func (h *VMCockpitHandler) HandleShell(c echo.Context) error {
 	// Proxmox -> Browser: forward terminal output directly
 	go func() {
 		defer func() { done <- struct{}{} }()
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("terminal pve->browser goroutine panicked",
+					slog.Any("panic", r),
+					slog.String("stack", string(debug.Stack())),
+				)
+			}
+		}()
 		for {
 			_, msg, err := pveConn.ReadMessage()
 			if err != nil {

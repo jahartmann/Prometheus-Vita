@@ -11,10 +11,18 @@ import {
   Tooltip,
   AreaChart,
   Area,
+  Legend,
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatBandwidth } from "@/lib/utils";
 import type { MetricsRecord } from "@/types/api";
+
+const tooltipStyle = {
+  backgroundColor: "hsl(var(--card))",
+  border: "1px solid hsl(var(--border))",
+  borderRadius: "8px",
+  fontSize: "12px",
+};
 
 interface MetricsChartsProps {
   metrics: MetricsRecord[];
@@ -44,7 +52,7 @@ export function MetricsCharts({ metrics }: MetricsChartsProps) {
       <Card>
         <CardContent className="flex h-[300px] items-center justify-center">
           <p className="text-sm text-muted-foreground">
-            Keine Metriken-Daten verfuegbar.
+            Keine Metriken-Daten verfügbar.
           </p>
         </CardContent>
       </Card>
@@ -58,7 +66,7 @@ export function MetricsCharts({ metrics }: MetricsChartsProps) {
           <CardTitle className="text-base">CPU-Auslastung</CardTitle>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={250}>
+          <ResponsiveContainer width="100%" height={200}>
             <AreaChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
               <XAxis dataKey="time" tick={{ fontSize: 10 }} />
@@ -69,11 +77,13 @@ export function MetricsCharts({ metrics }: MetricsChartsProps) {
               />
               <Tooltip
                 formatter={(v: number) => `${v.toFixed(1)}%`}
-                contentStyle={{
-                  backgroundColor: "hsl(var(--card))",
-                  border: "1px solid hsl(var(--border))",
-                  borderRadius: "0.5rem",
-                }}
+                contentStyle={tooltipStyle}
+              />
+              <Legend
+                verticalAlign="top"
+                height={24}
+                iconSize={10}
+                wrapperStyle={{ fontSize: '12px' }}
               />
               <Area
                 type="monotone"
@@ -94,7 +104,7 @@ export function MetricsCharts({ metrics }: MetricsChartsProps) {
           <CardTitle className="text-base">RAM-Auslastung</CardTitle>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={250}>
+          <ResponsiveContainer width="100%" height={200}>
             <AreaChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
               <XAxis dataKey="time" tick={{ fontSize: 10 }} />
@@ -105,11 +115,13 @@ export function MetricsCharts({ metrics }: MetricsChartsProps) {
               />
               <Tooltip
                 formatter={(v: number) => `${v.toFixed(1)}%`}
-                contentStyle={{
-                  backgroundColor: "hsl(var(--card))",
-                  border: "1px solid hsl(var(--border))",
-                  borderRadius: "0.5rem",
-                }}
+                contentStyle={tooltipStyle}
+              />
+              <Legend
+                verticalAlign="top"
+                height={24}
+                iconSize={10}
+                wrapperStyle={{ fontSize: '12px' }}
               />
               <Area
                 type="monotone"
@@ -130,7 +142,7 @@ export function MetricsCharts({ metrics }: MetricsChartsProps) {
           <CardTitle className="text-base">Disk-Auslastung</CardTitle>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={250}>
+          <ResponsiveContainer width="100%" height={200}>
             <AreaChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
               <XAxis dataKey="time" tick={{ fontSize: 10 }} />
@@ -141,11 +153,13 @@ export function MetricsCharts({ metrics }: MetricsChartsProps) {
               />
               <Tooltip
                 formatter={(v: number) => `${v.toFixed(1)}%`}
-                contentStyle={{
-                  backgroundColor: "hsl(var(--card))",
-                  border: "1px solid hsl(var(--border))",
-                  borderRadius: "0.5rem",
-                }}
+                contentStyle={tooltipStyle}
+              />
+              <Legend
+                verticalAlign="top"
+                height={24}
+                iconSize={10}
+                wrapperStyle={{ fontSize: '12px' }}
               />
               <Area
                 type="monotone"
@@ -166,7 +180,7 @@ export function MetricsCharts({ metrics }: MetricsChartsProps) {
           <CardTitle className="text-base">Netzwerk I/O (Rate)</CardTitle>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={250}>
+          <ResponsiveContainer width="100%" height={200}>
             <LineChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
               <XAxis dataKey="time" tick={{ fontSize: 10 }} />
@@ -176,11 +190,13 @@ export function MetricsCharts({ metrics }: MetricsChartsProps) {
                   const label = name === "Eingehend" ? "Eingehend" : "Ausgehend";
                   return [formatBandwidth(v), label];
                 }}
-                contentStyle={{
-                  backgroundColor: "hsl(var(--card))",
-                  border: "1px solid hsl(var(--border))",
-                  borderRadius: "0.5rem",
-                }}
+                contentStyle={tooltipStyle}
+              />
+              <Legend
+                verticalAlign="top"
+                height={24}
+                iconSize={10}
+                wrapperStyle={{ fontSize: '12px' }}
               />
               <Line
                 type="monotone"

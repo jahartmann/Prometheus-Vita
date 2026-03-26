@@ -21,7 +21,7 @@ export function AnomalyList() {
     return (
       <Card>
         <CardContent className="py-6 text-center text-muted-foreground">
-          Keine ungeloesten Anomalien erkannt.
+          Keine ungelösten Anomalien erkannt.
         </CardContent>
       </Card>
     );
@@ -60,7 +60,7 @@ export function AnomalyList() {
               size="sm"
               onClick={() => resolve(a.id)}
             >
-              Als geloest markieren
+              Als gelöst markieren
             </Button>
           </CardContent>
         </Card>

@@ -3,6 +3,7 @@ package middleware
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -16,6 +17,9 @@ type RateLimitConfig struct {
 	Enabled           bool
 }
 
+// RateLimit applies a global per-IP/user rate limit.
+// TODO: Add per-endpoint rate limiting for sensitive routes (e.g., /auth/login, /auth/refresh).
+// Login-specific rate limiting is currently handled in AuthHandler.checkLoginRateLimit.
 func RateLimit(redisClient *redis.Client, cfg RateLimitConfig) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
@@ -47,7 +51,7 @@ func RateLimit(redisClient *redis.Client, cfg RateLimitConfig) echo.MiddlewareFu
 			pipe.Expire(ctx, key, 2*time.Minute)
 
 			if _, err := pipe.Exec(ctx); err != nil {
-				// On Redis error, allow request through
+				slog.Error("rate limit redis error, allowing request", slog.Any("error", err))
 				return next(c)
 			}
 

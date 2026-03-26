@@ -14,7 +14,7 @@ interface EnvironmentState {
   assignNode: (nodeId: string, environmentId: string) => Promise<void>;
 }
 
-export const useEnvironmentStore = create<EnvironmentState>()((set) => ({
+export const useEnvironmentStore = create<EnvironmentState>()((set, get) => ({
   environments: [],
   isLoading: false,
   error: null,
@@ -36,6 +36,8 @@ export const useEnvironmentStore = create<EnvironmentState>()((set) => ({
       const env = resp.data;
       set((state) => ({ environments: [...state.environments, env] }));
       toast.success("Umgebung erstellt");
+      // Refresh the list after creation
+      get().fetchEnvironments();
     } catch {
       toast.error("Umgebung konnte nicht erstellt werden");
       set({ error: "Umgebung konnte nicht erstellt werden" });
@@ -51,6 +53,8 @@ export const useEnvironmentStore = create<EnvironmentState>()((set) => ({
         environments: state.environments.map((e) => (e.id === id ? updated : e)),
       }));
       toast.success("Umgebung aktualisiert");
+      // Refresh the list after update
+      get().fetchEnvironments();
     } catch {
       toast.error("Umgebung konnte nicht aktualisiert werden");
       set({ error: "Umgebung konnte nicht aktualisiert werden" });
@@ -64,11 +68,13 @@ export const useEnvironmentStore = create<EnvironmentState>()((set) => ({
       set((state) => ({
         environments: state.environments.filter((e) => e.id !== id),
       }));
-      toast.success("Umgebung geloescht");
+      toast.success("Umgebung gelöscht");
+      // Refresh the list after deletion
+      get().fetchEnvironments();
     } catch {
-      toast.error("Umgebung konnte nicht geloescht werden");
-      set({ error: "Umgebung konnte nicht geloescht werden" });
-      throw new Error("Umgebung konnte nicht geloescht werden");
+      toast.error("Umgebung konnte nicht gelöscht werden");
+      set({ error: "Umgebung konnte nicht gelöscht werden" });
+      throw new Error("Umgebung konnte nicht gelöscht werden");
     }
   },
 

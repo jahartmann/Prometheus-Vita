@@ -2,7 +2,7 @@ package config
 
 import (
 	"fmt"
-	"log/slog"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -20,6 +20,12 @@ type Config struct {
 	Telegram   TelegramConfig
 	Briefing   BriefingConfig
 	RateLimit  RateLimitConfig
+	Proxmox    ProxmoxConfig
+}
+
+type ProxmoxConfig struct {
+	TLSInsecure bool   // PROXMOX_TLS_INSECURE, default true (backward compat)
+	TLSCACert   string // PROXMOX_TLS_CA_CERT, path to custom CA cert file
 }
 
 type RateLimitConfig struct {
@@ -71,7 +77,13 @@ type DatabaseConfig struct {
 
 func (d DatabaseConfig) DSN() string {
 	return fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=%s",
-		d.User, d.Password, d.Host, d.Port, d.DBName, d.SSLMode)
+		d.User, url.QueryEscape(d.Password), d.Host, d.Port, d.DBName, d.SSLMode)
+}
+
+// SafeDSN returns the DSN with the password redacted, safe for logging.
+func (d DatabaseConfig) SafeDSN() string {
+	return fmt.Sprintf("postgres://%s:***@%s:%d/%s?sslmode=%s",
+		d.User, d.Host, d.Port, d.DBName, d.SSLMode)
 }
 
 type RedisConfig struct {
@@ -162,6 +174,10 @@ func Load() (*Config, error) {
 			RequestsPerMinute: getEnvInt("RATE_LIMIT_RPM", 300),
 			Enabled:           getEnv("RATE_LIMIT_ENABLED", "true") == "true",
 		},
+		Proxmox: ProxmoxConfig{
+			TLSInsecure: getEnv("PROXMOX_TLS_INSECURE", "true") == "true",
+			TLSCACert:   getEnv("PROXMOX_TLS_CA_CERT", ""),
+		},
 	}
 
 	if err := cfg.validate(); err != nil {
@@ -176,16 +192,22 @@ func (c *Config) validate() error {
 		return fmt.Errorf("JWT_SECRET must be set")
 	}
 	if c.JWT.Secret == "changeme_jwt_secret_at_least_32_characters_long" {
-		slog.Warn("JWT_SECRET is using the default placeholder value — change this for production!")
+		return fmt.Errorf("JWT_SECRET is using the default placeholder value — change this for production")
 	}
 	if len(c.JWT.Secret) < 32 {
-		slog.Warn("JWT_SECRET is shorter than 32 characters — consider using a longer secret")
+		return fmt.Errorf("JWT_SECRET must be at least 32 characters long (got %d)", len(c.JWT.Secret))
+	}
+	if c.JWT.AccessTokenExpiry <= 0 {
+		return fmt.Errorf("JWT_ACCESS_EXPIRY_MINUTES must be greater than 0")
+	}
+	if c.JWT.RefreshTokenExpiry <= 0 {
+		return fmt.Errorf("JWT_REFRESH_EXPIRY_HOURS must be greater than 0")
 	}
 	if c.Encryption.Key == "" {
 		return fmt.Errorf("ENCRYPTION_KEY must be set")
 	}
 	if c.Encryption.Key == "changeme_encryption_key_exactly_64_hex_characters_long_here" {
-		slog.Warn("ENCRYPTION_KEY is using the default placeholder value — change this for production!")
+		return fmt.Errorf("ENCRYPTION_KEY is using the default placeholder value — change this for production")
 	}
 	return nil
 }

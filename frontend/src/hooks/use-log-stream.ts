@@ -20,6 +20,11 @@ export function useLogStream({
   const [isConnected, setIsConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => { isMountedRef.current = false; };
+  }, []);
   const addEntry = useLogStore((s) => s.addEntry);
   const updateKpis = useLogStore((s) => s.updateKpis);
   const accessToken = useAuthStore((s) => s.accessToken);
@@ -35,7 +40,7 @@ export function useLogStream({
     wsRef.current = ws;
 
     ws.onopen = () => {
-      setIsConnected(true);
+      if (isMountedRef.current) setIsConnected(true);
       // Send subscription
       ws.send(JSON.stringify({
         type: "subscribe",
@@ -46,6 +51,7 @@ export function useLogStream({
     };
 
     ws.onmessage = (event) => {
+      if (!isMountedRef.current) return;
       try {
         const data = JSON.parse(event.data);
         if (data.type === "log") {
@@ -57,7 +63,7 @@ export function useLogStream({
     };
 
     ws.onclose = () => {
-      setIsConnected(false);
+      if (isMountedRef.current) setIsConnected(false);
       wsRef.current = null;
       // Auto-reconnect after 3 seconds
       if (enabled) {

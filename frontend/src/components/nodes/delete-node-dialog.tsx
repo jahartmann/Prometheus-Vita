@@ -63,14 +63,14 @@ export function DeleteNodeDialog({
             Node entfernen
           </DialogTitle>
           <DialogDescription>
-            Diese Aktion kann nicht rueckgaengig gemacht werden. Der Node{" "}
+            Diese Aktion kann nicht rückgängig gemacht werden. Der Node{" "}
             <strong>{node?.name}</strong> wird aus Prometheus entfernt.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-2">
           <Label htmlFor="confirm-name">
-            Geben Sie <strong>{node?.name}</strong> ein, um zu bestaetigen:
+            Geben Sie <strong>{node?.name}</strong> ein, um zu bestätigen:
           </Label>
           <Input
             id="confirm-name"

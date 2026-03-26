@@ -59,6 +59,7 @@ type BackupFile struct {
 	FilePermissions  string    `json:"file_permissions,omitempty"`
 	FileOwner        string    `json:"file_owner,omitempty"`
 	Content          []byte    `json:"-"`
+	IsEncrypted      bool      `json:"is_encrypted" db:"is_encrypted"`
 	DiffFromPrevious string    `json:"diff_from_previous,omitempty"`
 	CreatedAt        time.Time `json:"created_at"`
 }

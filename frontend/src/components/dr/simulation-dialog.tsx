@@ -29,7 +29,7 @@ const scenarios = [
   { value: "disk_failure", label: "Festplattenausfall" },
   { value: "network_failure", label: "Netzwerkausfall" },
   { value: "cluster_recovery", label: "Cluster-Wiederherstellung" },
-  { value: "full_restore", label: "Vollstaendige Wiederherstellung" },
+  { value: "full_restore", label: "Vollständige Wiederherstellung" },
 ];
 
 export function SimulationDialog({ nodeId }: SimulationDialogProps) {
@@ -67,7 +67,7 @@ export function SimulationDialog({ nodeId }: SimulationDialogProps) {
           <div className="flex gap-2">
             <Select value={scenario} onValueChange={setScenario}>
               <SelectTrigger className="flex-1">
-                <SelectValue placeholder="Szenario waehlen..." />
+                <SelectValue placeholder="Szenario wählen..." />
               </SelectTrigger>
               <SelectContent>
                 {scenarios.map((s) => (

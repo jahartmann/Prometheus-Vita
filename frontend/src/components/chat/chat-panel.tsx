@@ -94,6 +94,7 @@ export function ChatPanel() {
               className="h-6 w-6"
               onClick={newConversation}
               title="Neue Unterhaltung"
+              aria-label="Neue Unterhaltung"
             >
               <Plus className="h-3.5 w-3.5" />
             </Button>
@@ -115,6 +116,7 @@ export function ChatPanel() {
                 <span className="flex-1 truncate">{conv.title}</span>
                 <button
                   className="hidden shrink-0 text-muted-foreground hover:text-destructive group-hover:block"
+                  aria-label="Unterhaltung löschen"
                   onClick={(e) => {
                     e.stopPropagation();
                     deleteConversation(conv.id);
@@ -137,6 +139,7 @@ export function ChatPanel() {
                 size="icon"
                 className="h-7 w-7 sm:hidden shrink-0"
                 onClick={() => setShowSidebar((v) => !v)}
+                aria-label="Chat-Liste anzeigen"
               >
                 <Menu className="h-4 w-4" />
               </Button>
@@ -149,7 +152,7 @@ export function ChatPanel() {
                 {displayModel}
               </Badge>
               <Link href="/settings/agent">
-                <Button variant="ghost" size="icon" className="h-6 w-6" title="Modell aendern">
+                <Button variant="ghost" size="icon" className="h-6 w-6" title="Modell ändern" aria-label="Einstellungen">
                   <Settings className="h-3.5 w-3.5" />
                 </Button>
               </Link>
@@ -158,6 +161,7 @@ export function ChatPanel() {
                 size="icon"
                 className="h-7 w-7"
                 onClick={() => setOpen(false)}
+                aria-label="Chat schließen"
               >
                 <X className="h-4 w-4" />
               </Button>

@@ -140,7 +140,7 @@ export function AlertRuleDialog({
           <DialogDescription>
             {isEdit
               ? "Alert-Regel Konfiguration aktualisieren."
-              : "Definieren Sie, wann eine Benachrichtigung ausgeloest werden soll."}
+              : "Definieren Sie, wann eine Benachrichtigung ausgelöst werden soll."}
           </DialogDescription>
         </DialogHeader>
 
@@ -226,7 +226,7 @@ export function AlertRuleDialog({
 
           {channels.length > 0 && (
             <div className="space-y-2">
-              <Label>Benachrichtigungskanaele</Label>
+              <Label>Benachrichtigungskanäle</Label>
               <div className="space-y-1 rounded-md border p-2">
                 {channels.map((ch) => (
                   <label key={ch.id} className="flex items-center gap-2 text-sm cursor-pointer">

@@ -19,7 +19,7 @@ const segmentLabels: Record<string, string> = {
   "disaster-recovery": "Disaster Recovery",
   notifications: "Benachrichtigungen",
   environments: "Umgebungen",
-  "ssh-keys": "SSH-Schluessel",
+  "ssh-keys": "SSH-Schlüssel",
   "api-tokens": "API-Tokens",
   tags: "Tags",
   agent: "KI-Assistent",
@@ -28,7 +28,7 @@ const segmentLabels: Record<string, string> = {
   network: "Netzwerk",
   storage: "Storage",
   dr: "Disaster Recovery",
-  "change-password": "Passwort aendern",
+  "change-password": "Passwort ändern",
 };
 
 export function Breadcrumbs() {

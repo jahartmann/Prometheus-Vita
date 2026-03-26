@@ -87,6 +87,7 @@ func (s *DiscoveryService) DiscoverSources(ctx context.Context, nodeID uuid.UUID
 		Port:       node.SSHPort,
 		User:       node.SSHUser,
 		PrivateKey: node.SSHPrivateKey,
+		HostKey:    node.SSHHostKey,
 	}
 	if sshCfg.Port == 0 {
 		sshCfg.Port = 22

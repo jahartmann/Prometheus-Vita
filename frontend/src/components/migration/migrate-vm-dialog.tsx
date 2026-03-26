@@ -290,7 +290,7 @@ export function MigrateVmDialog({
 
         {/* Step indicator */}
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          {["Ziel-Node", "Storage", "Optionen", "Bestaetigung"].map(
+          {["Ziel-Node", "Storage", "Optionen", "Bestätigung"].map(
             (label, i) => (
               <div key={label} className="flex items-center gap-1">
                 <span
@@ -312,10 +312,10 @@ export function MigrateVmDialog({
         {/* STEP 1: Target Node */}
         {step === "target" && (
           <div className="space-y-3">
-            <Label>Ziel-Node waehlen</Label>
+            <Label>Ziel-Node wählen</Label>
             {targetNodes.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                Keine weiteren Online-Nodes verfuegbar.
+                Keine weiteren Online-Nodes verfügbar.
               </p>
             ) : (
               <div className="grid gap-2">
@@ -379,7 +379,7 @@ export function MigrateVmDialog({
             <Label>
               Ziel-Storage
               <span className="ml-2 text-xs font-normal text-muted-foreground">
-                ({vm.type === "lxc" ? "rootdir" : "images"}-faehig)
+                ({vm.type === "lxc" ? "rootdir" : "images"}-fähig)
               </span>
             </Label>
 
@@ -402,11 +402,11 @@ export function MigrateVmDialog({
               <div className="text-sm text-muted-foreground space-y-1">
                 <p>Keine kompatiblen Storages auf dem Ziel-Node gefunden.</p>
                 <p className="text-xs">
-                  Benoetigter Content-Typ: <code className="bg-muted px-1 rounded">{vm.type === "lxc" ? "rootdir" : "images"}</code>
+                  Benötigter Content-Typ: <code className="bg-muted px-1 rounded">{vm.type === "lxc" ? "rootdir" : "images"}</code>
                 </p>
                 {storages.length > 0 && (
                   <p className="text-xs">
-                    Verfuegbare Storages: {storages.map(s => s.storage).join(", ")}
+                    Verfügbare Storages: {storages.map(s => s.storage).join(", ")}
                   </p>
                 )}
               </div>
@@ -477,7 +477,7 @@ export function MigrateVmDialog({
             )}
             <DialogFooter>
               <Button variant="outline" onClick={() => setStep("target")}>
-                Zurueck
+                Zurück
               </Button>
               <Button
                 disabled={!targetStorage}
@@ -537,7 +537,7 @@ export function MigrateVmDialog({
                   onChange={(e) => setCleanupSource(e.target.checked)}
                   className="rounded"
                 />
-                Vzdump auf Source loeschen
+                Vzdump auf Source löschen
               </label>
               <label className="flex items-center gap-2 text-sm">
                 <input
@@ -546,13 +546,13 @@ export function MigrateVmDialog({
                   onChange={(e) => setCleanupTarget(e.target.checked)}
                   className="rounded"
                 />
-                Vzdump auf Target loeschen
+                Vzdump auf Target löschen
               </label>
             </div>
 
             <DialogFooter>
               <Button variant="outline" onClick={() => setStep("storage")}>
-                Zurueck
+                Zurück
               </Button>
               <Button onClick={() => setStep("confirm")}>Weiter</Button>
             </DialogFooter>
@@ -626,8 +626,8 @@ export function MigrateVmDialog({
               <div className="flex items-center gap-2 text-sm text-amber-600 bg-amber-50 dark:bg-amber-950/30 rounded-lg p-3">
                 <AlertTriangle className="h-4 w-4 flex-shrink-0" />
                 <span>
-                  Ziel-Node hat moeglicherweise nicht genug RAM (
-                  {formatBytes(targetResources.memFree)} frei, VM benoetigt{" "}
+                  Ziel-Node hat möglicherweise nicht genug RAM (
+                  {formatBytes(targetResources.memFree)} frei, VM benötigt{" "}
                   {formatBytes(vm.memory_total)}).
                 </span>
               </div>
@@ -637,9 +637,9 @@ export function MigrateVmDialog({
               <div className="flex items-center gap-2 text-sm text-amber-600 bg-amber-50 dark:bg-amber-950/30 rounded-lg p-3">
                 <AlertTriangle className="h-4 w-4 flex-shrink-0" />
                 <span>
-                  Der Ziel-Storage hat moeglicherweise nicht genug Platz (
+                  Der Ziel-Storage hat möglicherweise nicht genug Platz (
                   {formatBytes(selectedStorage?.available ?? 0)} frei,{" "}
-                  {formatBytes(vmDiskSize)} benoetigt).
+                  {formatBytes(vmDiskSize)} benötigt).
                 </span>
               </div>
             )}
@@ -647,7 +647,7 @@ export function MigrateVmDialog({
             {mode === "stop" && (
               <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-50 dark:bg-amber-950/30 rounded-lg p-2">
                 <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
-                Die VM wird waehrend der Migration heruntergefahren und ist
+                Die VM wird während der Migration heruntergefahren und ist
                 nicht erreichbar.
               </div>
             )}
@@ -656,7 +656,7 @@ export function MigrateVmDialog({
               <div className="flex items-center gap-2 text-xs text-green-600">
                 <CheckCircle2 className="h-3.5 w-3.5" />
                 Alle Voraussetzungen erfuellt. Tags und Konfiguration werden
-                uebernommen.
+                übernommen.
               </div>
             )}
 
@@ -666,7 +666,7 @@ export function MigrateVmDialog({
 
             <DialogFooter>
               <Button variant="outline" onClick={() => setStep("options")}>
-                Zurueck
+                Zurück
               </Button>
               <Button onClick={handleSubmit} disabled={submitting}>
                 {submitting && (

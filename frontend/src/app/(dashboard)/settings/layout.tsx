@@ -47,7 +47,7 @@ const settingsNav = [
     icon: Globe,
   },
   {
-    label: "SSH-Schluessel",
+    label: "SSH-Schlüssel",
     href: "/settings/ssh-keys",
     icon: Key,
   },

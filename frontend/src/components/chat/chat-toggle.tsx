@@ -14,6 +14,7 @@ export function ChatToggle() {
       onClick={toggleOpen}
       size="icon"
       className="fixed bottom-6 right-6 z-50 h-12 w-12 rounded-full shadow-lg"
+      aria-label="KI-Assistent öffnen"
     >
       <MessageSquare className="h-5 w-5" />
     </Button>

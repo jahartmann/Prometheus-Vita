@@ -68,6 +68,7 @@ func (s *Service) CheckUpdates(ctx context.Context, nodeID uuid.UUID) (*model.Up
 		Port:       node.SSHPort,
 		User:       node.SSHUser,
 		PrivateKey: privateKey,
+		HostKey:    node.SSHHostKey,
 	})
 	if err != nil {
 		check.Status = model.UpdateCheckFailed

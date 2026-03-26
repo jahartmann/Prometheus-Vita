@@ -32,11 +32,11 @@ func (r *pgBackupFileRepository) CreateBatch(ctx context.Context, files []model.
 		files[i].ID = uuid.New()
 		batch.Queue(
 			`INSERT INTO config_backup_files (id, backup_id, file_path, file_hash, file_size,
-			        file_permissions, file_owner, content, diff_from_previous, created_at)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())`,
+			        file_permissions, file_owner, content, is_encrypted, diff_from_previous, created_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())`,
 			files[i].ID, files[i].BackupID, files[i].FilePath, files[i].FileHash,
 			files[i].FileSize, files[i].FilePermissions, files[i].FileOwner,
-			files[i].Content, files[i].DiffFromPrevious,
+			files[i].Content, files[i].IsEncrypted, files[i].DiffFromPrevious,
 		)
 	}
 
@@ -54,7 +54,7 @@ func (r *pgBackupFileRepository) CreateBatch(ctx context.Context, files []model.
 func (r *pgBackupFileRepository) GetByBackupID(ctx context.Context, backupID uuid.UUID) ([]model.BackupFile, error) {
 	rows, err := r.db.Query(ctx,
 		`SELECT id, backup_id, file_path, file_hash, file_size,
-		        COALESCE(file_permissions, ''), COALESCE(file_owner, ''), COALESCE(diff_from_previous, ''), created_at
+		        COALESCE(file_permissions, ''), COALESCE(file_owner, ''), COALESCE(is_encrypted, false), COALESCE(diff_from_previous, ''), created_at
 		 FROM config_backup_files WHERE backup_id = $1 ORDER BY file_path`, backupID)
 	if err != nil {
 		return nil, fmt.Errorf("list backup files: %w", err)
@@ -66,7 +66,7 @@ func (r *pgBackupFileRepository) GetByBackupID(ctx context.Context, backupID uui
 		var f model.BackupFile
 		if err := rows.Scan(&f.ID, &f.BackupID, &f.FilePath, &f.FileHash,
 			&f.FileSize, &f.FilePermissions, &f.FileOwner,
-			&f.DiffFromPrevious, &f.CreatedAt); err != nil {
+			&f.IsEncrypted, &f.DiffFromPrevious, &f.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan backup file: %w", err)
 		}
 		files = append(files, f)
@@ -78,11 +78,11 @@ func (r *pgBackupFileRepository) GetSingleFile(ctx context.Context, backupID uui
 	var f model.BackupFile
 	err := r.db.QueryRow(ctx,
 		`SELECT id, backup_id, file_path, file_hash, file_size,
-		        COALESCE(file_permissions, ''), COALESCE(file_owner, ''), content, COALESCE(diff_from_previous, ''), created_at
+		        COALESCE(file_permissions, ''), COALESCE(file_owner, ''), content, COALESCE(is_encrypted, false), COALESCE(diff_from_previous, ''), created_at
 		 FROM config_backup_files WHERE backup_id = $1 AND file_path = $2`, backupID, filePath,
 	).Scan(&f.ID, &f.BackupID, &f.FilePath, &f.FileHash,
 		&f.FileSize, &f.FilePermissions, &f.FileOwner,
-		&f.Content, &f.DiffFromPrevious, &f.CreatedAt)
+		&f.Content, &f.IsEncrypted, &f.DiffFromPrevious, &f.CreatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound

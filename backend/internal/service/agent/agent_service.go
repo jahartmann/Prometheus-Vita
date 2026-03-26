@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -147,6 +148,12 @@ func (s *Service) Chat(ctx context.Context, userID uuid.UUID, req model.ChatRequ
 		return nil, fmt.Errorf("list messages: %w", err)
 	}
 
+	// Sliding window: only keep the last N messages to avoid exceeding LLM context windows
+	const maxContextMessages = 50
+	if len(existingMsgs) > maxContextMessages {
+		existingMsgs = existingMsgs[len(existingMsgs)-maxContextMessages:]
+	}
+
 	// 3. Build LLM messages with autonomy-aware system prompt
 	llmMessages := []llm.Message{
 		{Role: "system", Content: buildSystemPrompt(autonomyLevel)},
@@ -159,7 +166,8 @@ func (s *Service) Chat(ctx context.Context, userID uuid.UUID, req model.ChatRequ
 		}
 		// Wrap user messages in tags for injection protection
 		if m.Role == model.RoleUser {
-			msg.Content = "<user_input>" + m.Content + "</user_input>"
+			sanitized := strings.ReplaceAll(m.Content, "</user_input>", "&lt;/user_input&gt;")
+			msg.Content = "<user_input>" + sanitized + "</user_input>"
 		}
 		if m.ToolCalls != nil {
 			var toolCalls []llm.ToolCall
@@ -180,9 +188,10 @@ func (s *Service) Chat(ctx context.Context, userID uuid.UUID, req model.ChatRequ
 		return nil, fmt.Errorf("save user message: %w", err)
 	}
 
+	sanitizedMsg := strings.ReplaceAll(req.Message, "</user_input>", "&lt;/user_input&gt;")
 	llmMessages = append(llmMessages, llm.Message{
 		Role:    "user",
-		Content: "<user_input>" + req.Message + "</user_input>",
+		Content: "<user_input>" + sanitizedMsg + "</user_input>",
 	})
 
 	// 5. Get LLM provider - use resolved model, fallback to conversation model
@@ -209,7 +218,7 @@ func (s *Service) Chat(ctx context.Context, userID uuid.UUID, req model.ChatRequ
 			Tools:    toolDefs,
 		}
 
-		llmResp, err := provider.Complete(ctx, llmReq)
+		llmResp, err := llm.CompleteWithRetry(ctx, provider, llmReq, 2)
 		if err != nil {
 			return nil, fmt.Errorf("LLM completion failed: %w", err)
 		}
@@ -361,6 +370,12 @@ func (s *Service) executeTool(ctx context.Context, userID uuid.UUID, convID uuid
 	} else {
 		resultJSON = result
 		resultStr = string(result)
+	}
+
+	// Truncate large tool results to avoid exceeding LLM context windows
+	const maxToolResultLen = 4000
+	if len(resultStr) > maxToolResultLen {
+		resultStr = resultStr[:maxToolResultLen] + "\n... (truncated)"
 	}
 
 	// Update tool call record

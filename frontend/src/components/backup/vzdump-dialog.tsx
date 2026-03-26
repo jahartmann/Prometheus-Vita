@@ -107,7 +107,7 @@ export function VzdumpDialog({ open, onOpenChange }: VzdumpDialogProps) {
         <DialogHeader>
           <DialogTitle>Vzdump-Backup erstellen</DialogTitle>
           <DialogDescription>
-            VM/CT-Backup ueber die Proxmox vzdump-Schnittstelle starten.
+            VM/CT-Backup über die Proxmox vzdump-Schnittstelle starten.
           </DialogDescription>
         </DialogHeader>
 
@@ -116,7 +116,7 @@ export function VzdumpDialog({ open, onOpenChange }: VzdumpDialogProps) {
             <Label>Node</Label>
             <Select value={selectedNodeId} onValueChange={setSelectedNodeId}>
               <SelectTrigger>
-                <SelectValue placeholder="Node waehlen..." />
+                <SelectValue placeholder="Node wählen..." />
               </SelectTrigger>
               <SelectContent>
                 {nodes.map((n) => (
@@ -132,7 +132,7 @@ export function VzdumpDialog({ open, onOpenChange }: VzdumpDialogProps) {
             <Label>VM / Container</Label>
             <Select value={vmid} onValueChange={setVmid} disabled={!selectedNodeId}>
               <SelectTrigger>
-                <SelectValue placeholder="VM waehlen..." />
+                <SelectValue placeholder="VM wählen..." />
               </SelectTrigger>
               <SelectContent>
                 {vms.map((vm) => (

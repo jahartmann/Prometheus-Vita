@@ -244,7 +244,7 @@ export default function TopologyPage() {
             <Server className="h-12 w-12 text-muted-foreground mb-3" />
             <p className="text-muted-foreground">Keine Nodes konfiguriert.</p>
             <p className="text-sm text-muted-foreground">
-              Fuege Nodes unter Einstellungen hinzu.
+              Füge Nodes unter Einstellungen hinzu.
             </p>
           </CardContent>
         </Card>

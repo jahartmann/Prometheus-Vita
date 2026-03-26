@@ -130,8 +130,11 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (*model.Refr
 		return nil, ErrTokenExpired
 	}
 
-	// Revoke old token
+	// Atomically revoke old token — if 0 rows affected, a concurrent request already revoked it
 	if err := s.tokenRepo.RevokeByHash(ctx, tokenHash); err != nil {
+		if errors.Is(err, repository.ErrAlreadyRevoked) {
+			return nil, ErrTokenRevoked
+		}
 		return nil, fmt.Errorf("revoke old token: %w", err)
 	}
 
@@ -162,7 +165,12 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (*model.Refr
 
 func (s *Service) Logout(ctx context.Context, refreshToken string) error {
 	tokenHash := repository.HashToken(refreshToken)
-	return s.tokenRepo.RevokeByHash(ctx, tokenHash)
+	err := s.tokenRepo.RevokeByHash(ctx, tokenHash)
+	if errors.Is(err, repository.ErrAlreadyRevoked) {
+		// Logout is idempotent — already revoked is fine
+		return nil
+	}
+	return err
 }
 
 func (s *Service) SeedAdmin(ctx context.Context, username, password string) error {

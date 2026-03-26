@@ -173,7 +173,7 @@ export function NodeDetail({ node }: NodeDetailProps) {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" asChild>
+        <Button variant="ghost" size="icon" asChild aria-label="Zurück zum Dashboard">
           <Link href="/">
             <ArrowLeft className="h-4 w-4" />
           </Link>
@@ -203,7 +203,7 @@ export function NodeDetail({ node }: NodeDetailProps) {
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-600 dark:text-amber-400">
           <div className="flex items-center gap-2">
             <AlertTriangle className="h-4 w-4" />
-            <span>{nodeErrors[node.id]} — Einige Daten sind moeglicherweise nicht verfuegbar.</span>
+            <span>{nodeErrors[node.id]} — Einige Daten sind möglicherweise nicht verfügbar.</span>
           </div>
         </div>
       )}
@@ -299,7 +299,7 @@ export function NodeDetail({ node }: NodeDetailProps) {
 
       <Tabs defaultValue="overview">
         <TabsList>
-          <TabsTrigger value="overview">Uebersicht</TabsTrigger>
+          <TabsTrigger value="overview">Übersicht</TabsTrigger>
           <TabsTrigger value="vms">VMs & Container</TabsTrigger>
           <TabsTrigger value="monitoring">Monitoring</TabsTrigger>
           <TabsTrigger value="network">Netzwerk</TabsTrigger>
@@ -486,7 +486,7 @@ export function NodeDetail({ node }: NodeDetailProps) {
                   <tr className="border-b">
                     <th className="p-3 text-left font-medium">Name</th>
                     <th className="p-3 text-left font-medium">Format</th>
-                    <th className="p-3 text-right font-medium">Groesse</th>
+                    <th className="p-3 text-right font-medium">Größe</th>
                     <th className="p-3 text-right font-medium">Datum</th>
                   </tr>
                 </thead>
@@ -538,7 +538,7 @@ export function NodeDetail({ node }: NodeDetailProps) {
                   <tr className="border-b">
                     <th className="p-3 text-left font-medium">Name</th>
                     <th className="p-3 text-left font-medium">Format</th>
-                    <th className="p-3 text-right font-medium">Groesse</th>
+                    <th className="p-3 text-right font-medium">Größe</th>
                     <th className="p-3 text-right font-medium">Datum</th>
                   </tr>
                 </thead>
@@ -614,7 +614,7 @@ export function NodeDetail({ node }: NodeDetailProps) {
                   ))
                 ) : (
                   <div className="py-8 text-center text-zinc-500">
-                    Keine Logs verfuegbar.
+                    Keine Logs verfügbar.
                   </div>
                 )}
               </pre>
@@ -657,7 +657,7 @@ export function NodeDetail({ node }: NodeDetailProps) {
                     }
                   }}
                 >
-                  <option value="">Node auswaehlen...</option>
+                  <option value="">Node auswählen...</option>
                   {allNodes
                     .filter((n) => n.id !== node.id)
                     .map((n) => (
@@ -676,7 +676,7 @@ export function NodeDetail({ node }: NodeDetailProps) {
                     value={syncSelectedVolid}
                     onChange={(e) => setSyncSelectedVolid(e.target.value)}
                   >
-                    <option value="">Datei auswaehlen...</option>
+                    <option value="">Datei auswählen...</option>
                     {syncSourceContent.map((c) => (
                       <option key={c.volid} value={c.volid}>
                         {c.volid} ({formatBytes(c.size)})

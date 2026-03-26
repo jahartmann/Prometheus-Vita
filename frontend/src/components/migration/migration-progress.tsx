@@ -25,7 +25,7 @@ const STATUS_LABELS: Record<MigrationStatus, string> = {
   backing_up: "Backup",
   transferring: "Transfer",
   restoring: "Wiederherstellung",
-  cleaning_up: "Aufraeumen",
+  cleaning_up: "Aufräumen",
   completed: "Abgeschlossen",
   failed: "Fehlgeschlagen",
   cancelled: "Abgebrochen",
@@ -120,11 +120,11 @@ export function MigrationProgress({
             {STATUS_LABELS[migration.status]}
           </Badge>
         </div>
-        <span className="text-muted-foreground font-mono">{migration.progress}%</span>
+        <span className="text-muted-foreground font-mono" role="status" aria-live="polite">{migration.progress}%</span>
       </div>
 
       {/* Progress bar */}
-      <div className="h-2.5 rounded-full bg-muted overflow-hidden">
+      <div className="h-2.5 rounded-full bg-muted overflow-hidden" role="progressbar" aria-valuenow={migration.progress} aria-valuemin={0} aria-valuemax={100} aria-label="Migrationsfortschritt">
         <div
           className={`h-full rounded-full transition-all duration-500 ${
             migration.status === "failed"
@@ -141,7 +141,7 @@ export function MigrationProgress({
         <span>{migration.current_step}</span>
         {migration.status === "transferring" && (
           <div className="flex items-center gap-3">
-            <span>{formatBytes(migration.transfer_bytes_sent)} uebertragen</span>
+            <span>{formatBytes(migration.transfer_bytes_sent)} übertragen</span>
             <span>{formatSpeed(migration.transfer_speed_bps)}</span>
             {totalSize && totalSize > 0 && (
               <span>

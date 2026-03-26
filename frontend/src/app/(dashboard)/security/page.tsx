@@ -48,13 +48,13 @@ const categoryConfig: Record<
     badgeClass: "bg-blue-500/10 text-blue-500 border-blue-500/30",
   },
   capacity: {
-    label: "Kapazitaet",
+    label: "Kapazität",
     icon: HardDrive,
     colorClass: "text-orange-500",
     badgeClass: "bg-orange-500/10 text-orange-500 border-orange-500/30",
   },
   availability: {
-    label: "Verfuegbarkeit",
+    label: "Verfügbarkeit",
     icon: Server,
     colorClass: "text-green-500",
     badgeClass: "bg-green-500/10 text-green-500 border-green-500/30",
@@ -180,8 +180,8 @@ export default function SecurityPage() {
             Sicherheit & Intelligente Analyse
           </h1>
           <p className="text-muted-foreground">
-            KI-gestuetzte Erkennung von Anomalien, Sicherheitsbedrohungen und
-            Kapazitaetsrisiken
+            KI-gestützte Erkennung von Anomalien, Sicherheitsbedrohungen und
+            Kapazitätsrisiken
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -273,7 +273,7 @@ export default function SecurityPage() {
           color="red"
         />
         <KpiCard
-          title="Unbestaetigt"
+          title="Unbestätigt"
           value={unacknowledgedCount}
           subtitle="Offene Befunde"
           icon={Bell}
@@ -302,11 +302,11 @@ export default function SecurityPage() {
           </TabsTrigger>
           <TabsTrigger value="capacity" className="gap-1.5">
             <HardDrive className="h-3.5 w-3.5" />
-            Kapazitaet
+            Kapazität
           </TabsTrigger>
           <TabsTrigger value="availability" className="gap-1.5">
             <Server className="h-3.5 w-3.5" />
-            Verfuegbarkeit
+            Verfügbarkeit
           </TabsTrigger>
           <TabsTrigger value="config" className="gap-1.5">
             <Settings className="h-3.5 w-3.5" />
@@ -395,7 +395,7 @@ export default function SecurityPage() {
                             {event.is_acknowledged && (
                               <Badge variant="secondary" className="text-xs gap-1">
                                 <CheckCircle2 className="h-3 w-3" />
-                                Bestaetigt
+                                Bestätigt
                               </Badge>
                             )}
                           </div>

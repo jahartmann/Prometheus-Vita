@@ -49,10 +49,10 @@ export const useAnomalyStore = create<AnomalyState>()((set, get) => ({
         anomalies: s.anomalies.filter((a) => a.id !== id),
         nodeAnomalies: s.nodeAnomalies.filter((a) => a.id !== id),
       }));
-      toast.success("Anomalie aufgeloest");
+      toast.success("Anomalie aufgelöst");
     } catch {
-      toast.error("Anomalie konnte nicht aufgeloest werden");
-      set({ error: "Anomalie konnte nicht aufgeloest werden" });
+      toast.error("Anomalie konnte nicht aufgelöst werden");
+      set({ error: "Anomalie konnte nicht aufgelöst werden" });
     }
   },
 }));

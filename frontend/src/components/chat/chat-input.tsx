@@ -46,7 +46,8 @@ export function ChatInput({ onSend, disabled, isSending }: ChatInputProps) {
           value={value}
           onChange={handleInput}
           onKeyDown={handleKeyDown}
-          placeholder="Nachricht eingeben... (Shift+Enter fuer Zeilenumbruch)"
+          placeholder="Nachricht eingeben... (Shift+Enter für Zeilenumbruch)"
+          aria-label="Nachricht eingeben"
           disabled={disabled || isSending}
           rows={1}
           className="flex-1 resize-none rounded-xl border bg-muted/50 px-4 py-2.5 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:bg-background disabled:opacity-50 transition-colors"
@@ -56,6 +57,7 @@ export function ChatInput({ onSend, disabled, isSending }: ChatInputProps) {
           className="h-10 w-10 rounded-xl shrink-0"
           onClick={handleSubmit}
           disabled={!value.trim() || disabled || isSending}
+          aria-label="Nachricht senden"
         >
           {isSending ? (
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -65,7 +67,7 @@ export function ChatInput({ onSend, disabled, isSending }: ChatInputProps) {
         </Button>
       </div>
       <p className="mt-1.5 text-[10px] text-muted-foreground text-center hidden md:block">
-        Prometheus kann Fehler machen. Bitte ueberpruefe wichtige Informationen.
+        Prometheus kann Fehler machen. Bitte überprüfe wichtige Informationen.
       </p>
     </div>
   );

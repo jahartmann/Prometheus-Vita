@@ -134,7 +134,7 @@ export function SystemProcesses() {
         open={killPid !== null}
         onOpenChange={(open) => !open && setKillPid(null)}
         title="Prozess beenden?"
-        description={`Prozess mit PID ${killPid} wirklich beenden? Dies kann zu Datenverlust fuehren.`}
+        description={`Prozess mit PID ${killPid} wirklich beenden? Dies kann zu Datenverlust führen.`}
         confirmLabel="Beenden"
         variant="destructive"
         onConfirm={() => {

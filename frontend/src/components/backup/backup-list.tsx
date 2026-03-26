@@ -38,7 +38,7 @@ const statusVariant: Record<string, "default" | "success" | "destructive" | "out
 
 const statusLabel: Record<string, string> = {
   pending: "Ausstehend",
-  running: "Laeuft",
+  running: "Läuft",
   completed: "Abgeschlossen",
   failed: "Fehlgeschlagen",
 };
@@ -257,7 +257,7 @@ export function BackupList({ nodeId }: BackupListProps) {
                             <Button
                               variant="ghost"
                               size="icon"
-                              title="Loeschen"
+                              title="Löschen"
                               onClick={() => setDeleteConfirm(backup.id)}
                             >
                               <Trash2 className="h-4 w-4 text-destructive" />

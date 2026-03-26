@@ -126,8 +126,8 @@ export function SnapshotPolicySection({ nodeId, vmid, vmType }: SnapshotPolicyDi
                       {policy.schedule_cron}
                     </span>
                     <span>
-                      Behalten: {policy.keep_daily} taeglich
-                      {policy.keep_weekly > 0 && `, ${policy.keep_weekly} woechentlich`}
+                      Behalten: {policy.keep_daily} täglich
+                      {policy.keep_weekly > 0 && `, ${policy.keep_weekly} wöchentlich`}
                       {policy.keep_monthly > 0 && `, ${policy.keep_monthly} monatlich`}
                     </span>
                   </div>
@@ -207,14 +207,14 @@ function CreatePolicyForm({
         <Input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="z.B. Taeglich-Backup"
+          placeholder="z.B. Täglich-Backup"
           required
         />
       </div>
 
       <div className="grid grid-cols-3 gap-3">
         <div className="space-y-2">
-          <Label>Taeglich behalten</Label>
+          <Label>Täglich behalten</Label>
           <Input
             type="number"
             min={0}
@@ -223,7 +223,7 @@ function CreatePolicyForm({
           />
         </div>
         <div className="space-y-2">
-          <Label>Woechentlich</Label>
+          <Label>Wöchentlich</Label>
           <Input
             type="number"
             min={0}

@@ -32,7 +32,8 @@ type Node struct {
 	APITokenSecret string          `json:"-"` // encrypted in DB
 	SSHPort        int             `json:"ssh_port"`
 	SSHUser        string          `json:"ssh_user"`
-	SSHPrivateKey  string          `json:"-"` // encrypted in DB, not exposed in JSON
+	SSHPrivateKey  string          `json:"-"`            // encrypted in DB, not exposed in JSON
+	SSHHostKey     string          `json:"ssh_host_key"` // server host key (authorized_keys format) for TOFU verification
 	IsOnline       bool            `json:"is_online"`
 	LastSeen       *time.Time      `json:"last_seen,omitempty"`
 	Metadata       json.RawMessage `json:"metadata,omitempty"`
@@ -53,6 +54,7 @@ type CreateNodeRequest struct {
 	SSHPort        int             `json:"ssh_port,omitempty"`
 	SSHUser        string          `json:"ssh_user,omitempty"`
 	SSHPrivateKey  string          `json:"ssh_private_key,omitempty"`
+	SSHHostKey     string          `json:"ssh_host_key,omitempty"`
 	Metadata       json.RawMessage `json:"metadata,omitempty"`
 }
 

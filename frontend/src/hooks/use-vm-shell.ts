@@ -60,15 +60,15 @@ export function useVMShell({ nodeId, vmid, vmType }: UseVMShellOptions) {
       if (event.code === 1008) {
         setShellError({
           errorCode: "VM_PERMISSION_DENIED",
-          message: "Keine Berechtigung fuer Shell-Zugriff",
-          details: "Sie haben keine Shell-Berechtigung fuer diese VM.",
+          message: "Keine Berechtigung für Shell-Zugriff",
+          details: "Sie haben keine Shell-Berechtigung für diese VM.",
         });
       } else if (event.code === 1011 || event.code === 1006) {
         setShellError({
           errorCode: "VM_EXEC_FAILED",
           message: "Terminal-Verbindung fehlgeschlagen",
           details: "Die Verbindung zum VM-Terminal konnte nicht hergestellt werden.",
-          hint: "Stellen Sie sicher, dass die VM laeuft und der VNC-Proxy erreichbar ist.",
+          hint: "Stellen Sie sicher, dass die VM läuft und der VNC-Proxy erreichbar ist.",
         });
       }
     };

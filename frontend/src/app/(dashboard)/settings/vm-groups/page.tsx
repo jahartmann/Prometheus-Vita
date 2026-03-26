@@ -238,7 +238,7 @@ export default function VMGroupsPage() {
                               className="text-destructive"
                             >
                               <Trash2 className="mr-2 h-4 w-4" />
-                              Loeschen
+                              Löschen
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -292,7 +292,7 @@ export default function VMGroupsPage() {
                             <div className="flex items-center gap-2 pt-2 border-t">
                               <Select value={addNodeId} onValueChange={(v) => { setAddNodeId(v); setAddVmid(""); }}>
                                 <SelectTrigger className="w-40 h-8 text-xs">
-                                  <SelectValue placeholder="Node waehlen" />
+                                  <SelectValue placeholder="Node wählen" />
                                 </SelectTrigger>
                                 <SelectContent>
                                   {nodes.map((node) => (
@@ -306,7 +306,7 @@ export default function VMGroupsPage() {
                               {addNodeId && (
                                 <Select value={addVmid} onValueChange={setAddVmid}>
                                   <SelectTrigger className="w-48 h-8 text-xs">
-                                    <SelectValue placeholder="VM waehlen" />
+                                    <SelectValue placeholder="VM wählen" />
                                   </SelectTrigger>
                                   <SelectContent>
                                     {(vms[addNodeId] || []).map((vm) => (
@@ -326,7 +326,7 @@ export default function VMGroupsPage() {
                                 onClick={() => handleAddMember(group.id)}
                               >
                                 <Plus className="h-3 w-3 mr-1" />
-                                Hinzufuegen
+                                Hinzufügen
                               </Button>
                             </div>
                           </div>
@@ -350,9 +350,9 @@ export default function VMGroupsPage() {
       <ConfirmDialog
         open={!!deleteTarget}
         onOpenChange={(open) => !open && setDeleteTarget(null)}
-        title="VM-Gruppe loeschen?"
-        description={`Die Gruppe "${deleteTarget?.name}" wird unwiderruflich geloescht. Alle Mitgliedschaften und zugehoerige Berechtigungen werden entfernt.`}
-        confirmLabel="Loeschen"
+        title="VM-Gruppe löschen?"
+        description={`Die Gruppe "${deleteTarget?.name}" wird unwiderruflich gelöscht. Alle Mitgliedschaften und zugehörige Berechtigungen werden entfernt.`}
+        confirmLabel="Löschen"
         variant="destructive"
         onConfirm={() => {
           if (deleteTarget) {

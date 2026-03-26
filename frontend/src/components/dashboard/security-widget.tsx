@@ -96,7 +96,7 @@ export function SecurityWidget() {
                 </Badge>
               )}
               <Badge variant="outline" className="text-xs">
-                {unack} unbestaetigt
+                {unack} unbestätigt
               </Badge>
             </>
           ) : (

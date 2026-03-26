@@ -71,7 +71,7 @@ export function TelegramLinkCard() {
       setLinkCode(data.verification_code);
       if (data.bot_username) setBotUsername(data.bot_username);
     } catch {
-      setError("Telegram-Verknuepfung fehlgeschlagen. Bitte versuchen Sie es spaeter erneut.");
+      setError("Telegram-Verknüpfung fehlgeschlagen. Bitte versuchen Sie es später erneut.");
     } finally {
       setLoading(false);
     }
@@ -85,7 +85,7 @@ export function TelegramLinkCard() {
       setStatus(null);
       setLinkCode(null);
     } catch {
-      setError("Verknuepfung konnte nicht aufgehoben werden.");
+      setError("Verknüpfung konnte nicht aufgehoben werden.");
     } finally {
       setLoading(false);
     }
@@ -110,7 +110,7 @@ export function TelegramLinkCard() {
       <CardHeader className="pb-3">
         <CardTitle className="text-base flex items-center gap-2">
           <MessageCircle className="h-4 w-4" />
-          Telegram-Verknuepfung
+          Telegram-Verknüpfung
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -134,7 +134,7 @@ export function TelegramLinkCard() {
             <div className="flex items-center gap-2">
               <Badge variant="default" className="gap-1">
                 <Check className="h-3 w-3" />
-                Verknuepft
+                Verknüpft
               </Badge>
               {status.telegram_username && (
                 <span className="text-sm text-muted-foreground">
@@ -143,11 +143,11 @@ export function TelegramLinkCard() {
               )}
             </div>
             <p className="text-sm text-muted-foreground">
-              Dein Telegram-Konto ist verknuepft. Du kannst mit dem KI-Assistenten ueber Telegram chatten.
+              Dein Telegram-Konto ist verknüpft. Du kannst mit dem KI-Assistenten über Telegram chatten.
             </p>
             <Button variant="outline" size="sm" onClick={handleUnlink} disabled={loading}>
               <Unlink className="h-3 w-3 mr-1.5" />
-              Verknuepfung aufheben
+              Verknüpfung aufheben
             </Button>
           </div>
         ) : linkCode ? (
@@ -159,7 +159,7 @@ export function TelegramLinkCard() {
                 <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
                   1
                 </span>
-                Bot in Telegram oeffnen
+                Bot in Telegram öffnen
               </div>
 
               {deepLink ? (
@@ -170,12 +170,12 @@ export function TelegramLinkCard() {
                   className="inline-flex items-center gap-2 rounded-md bg-[#2AABEE] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#229ED9] transition-colors"
                 >
                   <MessageCircle className="h-4 w-4" />
-                  In Telegram oeffnen
+                  In Telegram öffnen
                   <ExternalLink className="h-3 w-3" />
                 </a>
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  Oeffne <span className="font-mono font-medium">@{botUsername || "den Bot"}</span>{" "}
+                  Öffne <span className="font-mono font-medium">@{botUsername || "den Bot"}</span>{" "}
                   in Telegram.
                 </p>
               )}
@@ -209,7 +209,7 @@ export function TelegramLinkCard() {
 
               {deepLink && (
                 <p className="text-sm text-muted-foreground">
-                  Der Code wird automatisch uebermittelt. Falls es nicht klappt, sende{" "}
+                  Der Code wird automatisch übermittelt. Falls es nicht klappt, sende{" "}
                   <button
                     onClick={copyCode}
                     className="inline-flex items-center gap-1 font-mono text-foreground hover:underline cursor-pointer"
@@ -232,7 +232,7 @@ export function TelegramLinkCard() {
                 <span className="flex h-5 w-5 items-center justify-center rounded-full bg-muted text-muted-foreground text-xs">
                   3
                 </span>
-                Warte auf Bestaetigung
+                Warte auf Bestätigung
               </div>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -244,7 +244,7 @@ export function TelegramLinkCard() {
           /* Initial state - not linked */
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              Verknuepfe dein Telegram-Konto, um mit dem KI-Assistenten ueber Telegram zu chatten
+              Verknüpfe dein Telegram-Konto, um mit dem KI-Assistenten über Telegram zu chatten
               und Benachrichtigungen zu erhalten.
             </p>
             <Button onClick={handleLink} disabled={loading}>
@@ -253,7 +253,7 @@ export function TelegramLinkCard() {
               ) : (
                 <LinkIcon className="h-4 w-4 mr-1.5" />
               )}
-              {loading ? "Verknuepfen..." : "Telegram verknuepfen"}
+              {loading ? "Verknüpfen..." : "Telegram verknüpfen"}
             </Button>
           </div>
         ) : null}

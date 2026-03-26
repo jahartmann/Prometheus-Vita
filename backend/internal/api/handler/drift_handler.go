@@ -2,7 +2,6 @@ package handler
 
 import (
 	"errors"
-	"strconv"
 
 	apiPkg "github.com/antigravity/prometheus/internal/api/response"
 	"github.com/antigravity/prometheus/internal/model"
@@ -21,10 +20,7 @@ func NewDriftHandler(driftSvc *drift.Service) *DriftHandler {
 }
 
 func (h *DriftHandler) ListAll(c echo.Context) error {
-	limit, _ := strconv.Atoi(c.QueryParam("limit"))
-	if limit <= 0 {
-		limit = 50
-	}
+	limit, _ := ParsePagination(c)
 	checks, err := h.driftSvc.ListAll(c.Request().Context(), limit)
 	if err != nil {
 		return apiPkg.InternalError(c, "failed to list drift checks")
@@ -37,7 +33,7 @@ func (h *DriftHandler) ListByNode(c echo.Context) error {
 	if err != nil {
 		return apiPkg.BadRequest(c, "invalid node id")
 	}
-	limit, _ := strconv.Atoi(c.QueryParam("limit"))
+	limit, _ := ParsePagination(c)
 	checks, err := h.driftSvc.ListByNode(c.Request().Context(), nodeID, limit)
 	if err != nil {
 		return apiPkg.InternalError(c, "failed to list drift checks")

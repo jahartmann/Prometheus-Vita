@@ -35,7 +35,7 @@ export const useReflexStore = create<ReflexState>()((set, get) => ({
         ),
       });
     } catch {
-      set({ error: "Status konnte nicht geaendert werden" });
+      set({ error: "Status konnte nicht geändert werden" });
     }
   },
 
@@ -44,7 +44,7 @@ export const useReflexStore = create<ReflexState>()((set, get) => ({
       await reflexApi.delete(id);
       set({ rules: get().rules.filter((r) => r.id !== id) });
     } catch {
-      set({ error: "Regel konnte nicht geloescht werden" });
+      set({ error: "Regel konnte nicht gelöscht werden" });
     }
   },
 }));

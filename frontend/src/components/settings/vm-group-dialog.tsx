@@ -74,7 +74,7 @@ export function VMGroupDialog({ open, onOpenChange, group }: VMGroupDialogProps)
           </DialogTitle>
           <DialogDescription>
             {isEdit
-              ? "Aendern Sie die Eigenschaften der VM-Gruppe."
+              ? "Ändern Sie die Eigenschaften der VM-Gruppe."
               : "Erstellen Sie eine neue Gruppe zur Organisation Ihrer VMs."}
           </DialogDescription>
         </DialogHeader>

@@ -2,13 +2,13 @@ package backup
 
 import (
 	"archive/tar"
-	"bytes"
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"fmt"
 	"io"
 	"log/slog"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -55,10 +55,44 @@ func NewRestoreService(
 	}
 }
 
+// preValidateRestore checks that all files can be restored before any actual
+// changes are made. It verifies that backup files exist and can be decrypted,
+// and that all target parent directories exist on the node.
+func (rs *RestoreService) preValidateRestore(ctx context.Context, client *ssh.Client, backupID uuid.UUID, filePaths []string) error {
+	for _, filePath := range filePaths {
+		// Check backup file exists and can be decrypted
+		backupFile, err := rs.fileRepo.GetSingleFile(ctx, backupID, filePath)
+		if err != nil {
+			// File not found in backup is not a validation failure — it will be
+			// skipped during restore. Only fail on truly unexpected errors.
+			continue
+		}
+
+		if backupFile.IsEncrypted && len(backupFile.Content) > 0 {
+			if rs.encryptor == nil {
+				return fmt.Errorf("Backup-Datei '%s' ist verschlüsselt, aber kein Entschlüsselungskey konfiguriert", filePath)
+			}
+			if _, err := rs.encryptor.Decrypt(string(backupFile.Content)); err != nil {
+				return fmt.Errorf("Entschlüsselung fehlgeschlagen für '%s' — möglicherweise wurde der Encryption-Key rotiert: %w", filePath, err)
+			}
+		}
+
+		// Check parent directory exists on target node
+		parentDir := filepath.Dir(filePath)
+		result, err := client.RunCommand(ctx, "test -d "+ssh.ShellQuote(parentDir)+" && echo ok")
+		if err != nil || result == nil || !strings.Contains(result.Stdout, "ok") {
+			return fmt.Errorf("Verzeichnis '%s' existiert nicht auf dem Ziel-Node", parentDir)
+		}
+	}
+
+	return nil
+}
+
 // RestoreFiles restores the specified files from a backup to the originating
 // node. When req.DryRun is true, no files are written; instead a preview of
-// what would change is returned. When req.DryRun is false, each file is
-// uploaded to the node and its permissions/ownership are restored.
+// what would change is returned. When req.DryRun is false, a pre-validation
+// pass runs first to ensure ALL files can be restored before touching anything
+// (atomic semantics). Only after successful validation are files written.
 func (rs *RestoreService) RestoreFiles(ctx context.Context, backupID uuid.UUID, req model.RestoreRequest) (*model.RestorePreview, error) {
 	// Get backup to find the node
 	backup, err := rs.backupRepo.GetByID(ctx, backupID)
@@ -85,18 +119,31 @@ func (rs *RestoreService) RestoreFiles(ctx context.Context, backupID uuid.UUID, 
 	}
 	defer rs.sshPool.Return(backup.NodeID.String(), client)
 
+	// Pre-validate ALL files before making any changes (even if not dry-run).
+	// This ensures we don't end up in a partial-restore state.
+	if err := rs.preValidateRestore(ctx, client, backupID, req.FilePaths); err != nil {
+		return nil, fmt.Errorf("Vorab-Validierung fehlgeschlagen: %w", err)
+	}
+
 	preview := &model.RestorePreview{
 		Files: make([]model.RestoreFilePreview, 0, len(req.FilePaths)),
 	}
 
+	// Track which files were already changed for recovery logging on failure
+	var restoredFiles []string
+
 	for _, filePath := range req.FilePaths {
 		// Get the backed up file and decrypt if needed
 		backupFile, err := rs.fileRepo.GetSingleFile(ctx, backupID, filePath)
-		if err == nil && rs.encryptor != nil && len(backupFile.Content) > 0 {
-			decrypted, decErr := rs.encryptor.Decrypt(string(backupFile.Content))
-			if decErr == nil {
-				backupFile.Content = []byte(decrypted)
+		if err == nil && backupFile.IsEncrypted && len(backupFile.Content) > 0 {
+			if rs.encryptor == nil {
+				return nil, fmt.Errorf("Backup verschlüsselt, aber kein Entschlüsselungskey konfiguriert")
 			}
+			decrypted, decErr := rs.encryptor.Decrypt(string(backupFile.Content))
+			if decErr != nil {
+				return nil, fmt.Errorf("Entschlüsselung fehlgeschlagen für %s — möglicherweise wurde der Encryption-Key rotiert: %w", filePath, decErr)
+			}
+			backupFile.Content = []byte(decrypted)
 		}
 		if err != nil {
 			slog.Warn("backup file not found, skipping",
@@ -146,8 +193,15 @@ func (rs *RestoreService) RestoreFiles(ctx context.Context, backupID uuid.UUID, 
 
 		// Actually restore the file
 		if err := client.CopyTo(ctx, backupFile.Content, filePath); err != nil {
-			return nil, fmt.Errorf("restore file %s: %w", filePath, err)
+			// Log which files were already changed and which weren't for manual recovery
+			slog.Error("Restore fehlgeschlagen — Teildaten wurden bereits geschrieben",
+				slog.String("failed_file", filePath),
+				slog.Any("already_restored", restoredFiles),
+				slog.Any("error", err),
+			)
+			return nil, fmt.Errorf("restore file %s: %w (bereits wiederhergestellt: %v)", filePath, err, restoredFiles)
 		}
+		restoredFiles = append(restoredFiles, filePath)
 
 		// Restore permissions (validate to prevent command injection)
 		if backupFile.FilePermissions != "" {
@@ -197,18 +251,21 @@ func (rs *RestoreService) RestoreFiles(ctx context.Context, backupID uuid.UUID, 
 }
 
 // GenerateArchive creates a gzip-compressed tar archive containing all files
-// from the specified backup. Each file in the archive preserves its original
-// path (with the leading "/" stripped) and permission mode.
-func (rs *RestoreService) GenerateArchive(ctx context.Context, backupID uuid.UUID) (io.Reader, error) {
+// from the specified backup and streams it directly to the provided writer.
+// Each file in the archive preserves its original path (with the leading "/"
+// stripped) and permission mode. Streaming avoids buffering the entire archive
+// in memory, preventing OOM for large backups.
+func (rs *RestoreService) GenerateArchive(ctx context.Context, backupID uuid.UUID, w io.Writer) error {
 	// Get all backup files with content
 	fileList, err := rs.fileRepo.GetByBackupID(ctx, backupID)
 	if err != nil {
-		return nil, fmt.Errorf("get backup files: %w", err)
+		return fmt.Errorf("get backup files: %w", err)
 	}
 
-	var buf bytes.Buffer
-	gzWriter := gzip.NewWriter(&buf)
+	gzWriter := gzip.NewWriter(w)
+	defer gzWriter.Close()
 	tarWriter := tar.NewWriter(gzWriter)
+	defer tarWriter.Close()
 
 	for _, f := range fileList {
 		// Fetch full file content
@@ -221,11 +278,15 @@ func (rs *RestoreService) GenerateArchive(ctx context.Context, backupID uuid.UUI
 			continue
 		}
 		// Decrypt content if encrypted
-		if rs.encryptor != nil && len(fullFile.Content) > 0 {
-			decrypted, decErr := rs.encryptor.Decrypt(string(fullFile.Content))
-			if decErr == nil {
-				fullFile.Content = []byte(decrypted)
+		if fullFile.IsEncrypted && len(fullFile.Content) > 0 {
+			if rs.encryptor == nil {
+				return fmt.Errorf("Backup-Datei %s ist verschlüsselt, aber kein Entschlüsselungskey konfiguriert", f.FilePath)
 			}
+			decrypted, decErr := rs.encryptor.Decrypt(string(fullFile.Content))
+			if decErr != nil {
+				return fmt.Errorf("Entschlüsselung fehlgeschlagen für %s — möglicherweise wurde der Encryption-Key rotiert: %w", f.FilePath, decErr)
+			}
+			fullFile.Content = []byte(decrypted)
 		}
 
 		// Parse permissions to file mode
@@ -246,31 +307,25 @@ func (rs *RestoreService) GenerateArchive(ctx context.Context, backupID uuid.UUI
 		}
 
 		if err := tarWriter.WriteHeader(header); err != nil {
-			return nil, fmt.Errorf("write tar header for %s: %w", fullFile.FilePath, err)
+			return fmt.Errorf("write tar header for %s: %w", fullFile.FilePath, err)
 		}
 
 		if _, err := tarWriter.Write(fullFile.Content); err != nil {
-			return nil, fmt.Errorf("write tar content for %s: %w", fullFile.FilePath, err)
+			return fmt.Errorf("write tar content for %s: %w", fullFile.FilePath, err)
 		}
 	}
 
-	if err := tarWriter.Close(); err != nil {
-		return nil, fmt.Errorf("close tar writer: %w", err)
-	}
-	if err := gzWriter.Close(); err != nil {
-		return nil, fmt.Errorf("close gzip writer: %w", err)
-	}
-
-	return &buf, nil
+	return nil
 }
 
 // buildSSHConfig constructs an ssh.SSHConfig from a node's stored (encrypted)
 // credentials.
 func (rs *RestoreService) buildSSHConfig(node *model.Node) (ssh.SSHConfig, error) {
 	cfg := ssh.SSHConfig{
-		Host: node.Hostname,
-		Port: node.SSHPort,
-		User: node.SSHUser,
+		Host:    node.Hostname,
+		Port:    node.SSHPort,
+		User:    node.SSHUser,
+		HostKey: node.SSHHostKey,
 	}
 
 	if node.SSHPrivateKey != "" {

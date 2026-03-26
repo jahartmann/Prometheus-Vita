@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useNodeStore } from "@/stores/node-store";
 import { useMigrationStore } from "@/stores/migration-store";
 import { useWebSocket } from "@/hooks/use-websocket";
@@ -58,10 +58,10 @@ interface StorageInfo {
 }
 
 const STEPS = [
-  { number: 1, label: "Quell-Auswahl", description: "Node & VM waehlen" },
+  { number: 1, label: "Quell-Auswahl", description: "Node & VM wählen" },
   { number: 2, label: "Ziel-Auswahl", description: "Ziel-Node & Storage" },
   { number: 3, label: "Optionen", description: "Migrations-Modus" },
-  { number: 4, label: "Bestaetigung", description: "Zusammenfassung" },
+  { number: 4, label: "Bestätigung", description: "Zusammenfassung" },
 ];
 
 const MODE_CONFIG: {
@@ -122,6 +122,7 @@ export default function MigrationsPage() {
   const [cleanupSource, setCleanupSource] = useState(true);
   const [cleanupTarget, setCleanupTarget] = useState(true);
   const [vmSearch, setVmSearch] = useState("");
+  const historyRef = useRef<HTMLDivElement>(null);
 
   // Storages loaded once from the source node.
   // In a Proxmox cluster, storage config is shared across all nodes
@@ -252,6 +253,9 @@ export default function MigrationsPage() {
       setTargetStorage("");
       setMode("snapshot");
       setNewVmid("");
+      setTimeout(() => {
+        historyRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 300);
     } catch (err: unknown) {
       setSubmitError(
         err instanceof Error
@@ -346,7 +350,7 @@ export default function MigrationsPage() {
           <Label className="text-sm font-medium">Quell-Node</Label>
           <Select value={sourceNodeId} onValueChange={setSourceNodeId}>
             <SelectTrigger>
-              <SelectValue placeholder="Node auswaehlen..." />
+              <SelectValue placeholder="Node auswählen..." />
             </SelectTrigger>
             <SelectContent>
               {onlineNodes.map((node) => (
@@ -364,7 +368,7 @@ export default function MigrationsPage() {
         {sourceNodeId && (
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <Label className="text-sm font-medium">VM auswaehlen</Label>
+              <Label className="text-sm font-medium">VM auswählen</Label>
               <div className="relative w-64">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -372,6 +376,7 @@ export default function MigrationsPage() {
                   value={vmSearch}
                   onChange={(e) => setVmSearch(e.target.value)}
                   className="pl-9 h-9"
+                  aria-label="VM suchen"
                 />
               </div>
             </div>
@@ -382,7 +387,7 @@ export default function MigrationsPage() {
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[400px] overflow-y-auto pr-1">
-                {filteredVMs.map((vm) => {
+                {(filteredVMs ?? []).map((vm) => {
                   const isSelected = String(vm.vmid) === selectedVmid;
                   return (
                     <button
@@ -488,7 +493,7 @@ export default function MigrationsPage() {
         ) : (
           <div className="flex items-center justify-center h-full border border-dashed rounded-lg p-8 text-center">
             <p className="text-sm text-muted-foreground">
-              VM auswaehlen, um Details anzuzeigen
+              VM auswählen, um Details anzuzeigen
             </p>
           </div>
         )}
@@ -502,7 +507,7 @@ export default function MigrationsPage() {
         <Label className="text-sm font-medium">Ziel-Node</Label>
         <Select value={targetNodeId} onValueChange={setTargetNodeId}>
           <SelectTrigger className="max-w-md">
-            <SelectValue placeholder="Ziel-Node auswaehlen..." />
+            <SelectValue placeholder="Ziel-Node auswählen..." />
           </SelectTrigger>
           <SelectContent>
             {targetNodes.map((node) => (
@@ -534,13 +539,13 @@ export default function MigrationsPage() {
               <div>
                 <p className="text-sm text-destructive">{storageError}</p>
                 <p className="text-xs text-muted-foreground mt-2">
-                  Tipp: Pruefe die API-Token-Berechtigungen des Quell-Nodes.
+                  Tipp: Prüfe die API-Token-Berechtigungen des Quell-Nodes.
                 </p>
               </div>
             </div>
           ) : storages.length === 0 ? (
             <div className="text-center py-6 text-muted-foreground text-sm">
-              Keine Storages gefunden. Waehle zuerst einen Quell-Node in Schritt 1.
+              Keine Storages gefunden. Wähle zuerst einen Quell-Node in Schritt 1.
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -656,7 +661,7 @@ export default function MigrationsPage() {
               Achtung: VM wird heruntergefahren
             </p>
             <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
-              Die VM ist waehrend der gesamten Migration nicht erreichbar.
+              Die VM ist während der gesamten Migration nicht erreichbar.
             </p>
           </div>
         </div>
@@ -682,7 +687,7 @@ export default function MigrationsPage() {
               onChange={(e) => setCleanupSource(e.target.checked)}
               className="h-4 w-4 rounded border-border"
             />
-            <span className="text-sm">Vzdump auf Source loeschen</span>
+            <span className="text-sm">Vzdump auf Source löschen</span>
           </label>
           <label className="flex items-center gap-3 cursor-pointer">
             <input
@@ -691,7 +696,7 @@ export default function MigrationsPage() {
               onChange={(e) => setCleanupTarget(e.target.checked)}
               className="h-4 w-4 rounded border-border"
             />
-            <span className="text-sm">Vzdump auf Target loeschen</span>
+            <span className="text-sm">Vzdump auf Target löschen</span>
           </label>
         </div>
       </div>
@@ -824,6 +829,21 @@ export default function MigrationsPage() {
         </p>
       </div>
 
+      {activeMigrations.length > 0 && (
+        <div className="rounded-lg border border-blue-500/50 bg-blue-500/10 p-4 flex items-center gap-3" role="status" aria-live="polite">
+          <Loader2 className="h-5 w-5 text-blue-500 animate-spin shrink-0" aria-hidden="true" />
+          <div className="flex-1">
+            <p className="font-medium text-blue-700 dark:text-blue-300">
+              {activeMigrations.length} Migration{activeMigrations.length > 1 ? 'en' : ''} aktiv
+            </p>
+            <p className="text-sm text-muted-foreground">Scrollen Sie nach unten für Live-Status</p>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => historyRef.current?.scrollIntoView({ behavior: 'smooth' })}>
+            Zum Status
+          </Button>
+        </div>
+      )}
+
       <Card>
         <CardHeader>
           <div className="flex items-center gap-2">
@@ -833,7 +853,7 @@ export default function MigrationsPage() {
             </CardTitle>
           </div>
           <CardDescription>
-            Schritt-fuer-Schritt Assistent zur VM-Migration zwischen Nodes.
+            Schritt-für-Schritt Assistent zur VM-Migration zwischen Nodes.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -851,7 +871,7 @@ export default function MigrationsPage() {
               disabled={step === 1}
             >
               <ArrowLeft className="mr-2 h-4 w-4" />
-              Zurueck
+              Zurück
             </Button>
             {step < 4 ? (
               <Button
@@ -879,7 +899,7 @@ export default function MigrationsPage() {
         </CardContent>
       </Card>
 
-      <div>
+      <div ref={historyRef}>
         <h2 className="text-lg font-semibold mb-3">Migrations-Historie</h2>
         <MigrationHistory />
       </div>

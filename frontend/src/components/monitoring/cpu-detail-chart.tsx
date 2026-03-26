@@ -149,7 +149,7 @@ export function CPUDetailChart({ metrics, rrdData }: CPUDetailChartProps) {
         <CardContent>
           {ioWaitData.length === 0 ? (
             <div className="flex h-[250px] items-center justify-center text-sm text-muted-foreground">
-              Keine IO-Wait-Daten verfuegbar (RRD-Daten erforderlich).
+              Keine IO-Wait-Daten verfügbar (RRD-Daten erforderlich).
             </div>
           ) : (
             <ResponsiveContainer width="100%" height={250}>

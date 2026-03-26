@@ -39,7 +39,7 @@ export const useEscalationStore = create<EscalationState>()((set) => ({
       set({ incidents: toArray<AlertIncident>(response.data), isLoading: false });
     } catch (err: unknown) {
       const message =
-        err instanceof Error ? err.message : "Vorfaelle konnten nicht geladen werden";
+        err instanceof Error ? err.message : "Vorfälle konnten nicht geladen werden";
       toast.error(message);
       set({ error: message, isLoading: false });
     }

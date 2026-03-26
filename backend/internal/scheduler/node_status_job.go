@@ -143,7 +143,9 @@ func (j *NodeStatusJob) cacheStatus(ctx context.Context, nodeID string, status *
 	key := fmt.Sprintf("node:status:%s", nodeID)
 
 	if status == nil {
-		j.redis.Del(ctx, key)
+		if err := j.redis.Del(ctx, key).Err(); err != nil {
+			slog.Warn("failed to delete cached node status", slog.String("node_id", nodeID), slog.Any("error", err))
+		}
 		return
 	}
 
@@ -153,5 +155,7 @@ func (j *NodeStatusJob) cacheStatus(ctx context.Context, nodeID string, status *
 		return
 	}
 
-	j.redis.Set(ctx, key, data, 2*j.interval)
+	if err := j.redis.Set(ctx, key, data, 2*j.interval).Err(); err != nil {
+		slog.Warn("failed to cache node status", slog.String("node_id", nodeID), slog.Any("error", err))
+	}
 }

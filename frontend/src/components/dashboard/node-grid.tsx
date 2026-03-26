@@ -20,9 +20,9 @@ export function NodeGrid() {
 
   if (isLoading) {
     return (
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {Array.from({ length: 4 }).map((_, i) => (
-          <Skeleton key={i} className="h-64 rounded-xl" />
+          <Skeleton key={i} className="h-48 md:h-56 lg:h-64 rounded-xl" />
         ))}
       </div>
     );
@@ -33,14 +33,14 @@ export function NodeGrid() {
       <div className="flex flex-col items-center justify-center rounded-xl border border-dashed py-12">
         <p className="text-muted-foreground">Keine Nodes konfiguriert.</p>
         <p className="mt-1 text-sm text-muted-foreground">
-          Fuegen Sie Ihren ersten Proxmox Node unter Einstellungen hinzu.
+          Fügen Sie Ihren ersten Proxmox Node unter Einstellungen hinzu.
         </p>
       </div>
     );
   }
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+    <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       {nodes.map((node) => (
         <NodeCard
           key={node.id}

@@ -38,7 +38,7 @@ const actionTypes: { value: ReflexActionType; label: string }[] = [
   { value: "restart_service", label: "Service neustarten" },
   { value: "clear_cache", label: "Cache leeren" },
   { value: "notify", label: "Benachrichtigung senden" },
-  { value: "run_command", label: "Befehl ausfuehren" },
+  { value: "run_command", label: "Befehl ausführen" },
   { value: "start_vm", label: "VM starten" },
   { value: "stop_vm", label: "VM stoppen" },
   { value: "scale_up", label: "Ressourcen hochskalieren" },
@@ -371,8 +371,8 @@ export function ReflexRuleDialog({
           </div>
 
           <div className="space-y-2">
-            <Label>Prioritaet</Label>
-            <Input value={priority} onChange={(e) => setPriority(e.target.value)} type="number" min="0" max="100" placeholder="0 = hoechste" />
+            <Label>Priorität</Label>
+            <Input value={priority} onChange={(e) => setPriority(e.target.value)} type="number" min="0" max="100" placeholder="0 = höchste" />
           </div>
 
           <div className="space-y-2">

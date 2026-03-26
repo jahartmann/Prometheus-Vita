@@ -150,18 +150,18 @@ export function AITab({ vm, nodeId }: AITabProps) {
         const result = await vmCockpitApi.exec(nodeId, vm.vmid, command.split(/\s+/), vm.type);
         const data = result.data as unknown as { exitcode: number; "out-data": string; "err-data": string };
         const output = data["out-data"] || data["err-data"] || "";
-        toast.success(`Befehl ausgefuehrt (Exit: ${data.exitcode})`);
+        toast.success(`Befehl ausgeführt (Exit: ${data.exitcode})`);
 
         const resultMsg: ChatMessage = {
           id: "run-" + Date.now(),
           conversation_id: conversationId || "",
           role: "assistant",
-          content: `**Befehl ausgefuehrt:** \`${command}\`\n\nExit-Code: ${data.exitcode}\n\`\`\`\n${output}\n\`\`\``,
+          content: `**Befehl ausgeführt:** \`${command}\`\n\nExit-Code: ${data.exitcode}\n\`\`\`\n${output}\n\`\`\``,
           created_at: new Date().toISOString(),
         };
         setMessages((prev) => [...prev, resultMsg]);
       } catch {
-        toast.error("Befehl konnte nicht ausgefuehrt werden");
+        toast.error("Befehl konnte nicht ausgeführt werden");
       } finally {
         setExecutingCommands((prev) => {
           const next = new Set(prev);
@@ -220,12 +220,12 @@ export function AITab({ vm, nodeId }: AITabProps) {
             <Bot className="h-10 w-10 text-muted-foreground mb-3" />
             <p className="text-sm text-muted-foreground">
               Stelle eine Frage zu dieser VM. Der Assistent hat Zugriff auf Systeminformationen,
-              Dateien und kann Befehle ausfuehren.
+              Dateien und kann Befehle ausführen.
             </p>
             <div className="flex flex-wrap gap-2 mt-4 justify-center">
               {[
                 "Zeige die laufenden Services",
-                "Pruefe den Speicherplatz",
+                "Prüfe den Speicherplatz",
                 "Welche Ports sind offen?",
                 "Analysiere die Systemlast",
               ].map((suggestion) => (
@@ -377,7 +377,7 @@ export function AITab({ vm, nodeId }: AITabProps) {
                           {executingCommands.has(cmd.command) ? (
                             <Loader2 className="h-3 w-3 animate-spin" />
                           ) : (
-                            "Ausfuehren"
+                            "Ausführen"
                           )}
                         </Button>
                         <Button
@@ -418,7 +418,7 @@ export function AITab({ vm, nodeId }: AITabProps) {
             value={input}
             onChange={handleInput}
             onKeyDown={handleKeyDown}
-            placeholder="Frage zur VM stellen... (Shift+Enter fuer Zeilenumbruch)"
+            placeholder="Frage zur VM stellen... (Shift+Enter für Zeilenumbruch)"
             disabled={isSending}
             rows={1}
             className="flex-1 resize-none rounded-xl border bg-muted/50 px-4 py-2.5 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:bg-background disabled:opacity-50 transition-colors"
