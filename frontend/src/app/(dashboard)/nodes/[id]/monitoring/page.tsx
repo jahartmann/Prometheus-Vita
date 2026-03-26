@@ -100,7 +100,7 @@ export default function NodeMonitoringPage() {
     if (!nodeId) return;
     const controller = new AbortController();
     nodeApi
-      .getVMs(nodeId, { signal: controller.signal })
+      .getVMs(nodeId)
       .then((res) => setVMs(toArray<VM>(res.data)))
       .catch((e) => { if (e?.name !== 'CanceledError') setVMs([]); });
     return () => controller.abort();
