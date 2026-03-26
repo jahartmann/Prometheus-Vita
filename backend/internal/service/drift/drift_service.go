@@ -76,7 +76,7 @@ func (s *Service) CheckDrift(ctx context.Context, nodeID uuid.UUID) (*model.Drif
 		if err := s.driftRepo.Update(ctx, check); err != nil {
 			slog.Error("failed to update drift check status",
 				slog.String("check_id", check.ID.String()),
-				slog.String("status", check.Status),
+				slog.String("status", string(check.Status)),
 				slog.Any("error", err),
 			)
 		}
@@ -91,7 +91,7 @@ func (s *Service) CheckDrift(ctx context.Context, nodeID uuid.UUID) (*model.Drif
 		if err := s.driftRepo.Update(ctx, check); err != nil {
 			slog.Error("failed to update drift check status",
 				slog.String("check_id", check.ID.String()),
-				slog.String("status", check.Status),
+				slog.String("status", string(check.Status)),
 				slog.Any("error", err),
 			)
 		}
@@ -106,7 +106,7 @@ func (s *Service) CheckDrift(ctx context.Context, nodeID uuid.UUID) (*model.Drif
 		if err := s.driftRepo.Update(ctx, check); err != nil {
 			slog.Error("failed to update drift check status",
 				slog.String("check_id", check.ID.String()),
-				slog.String("status", check.Status),
+				slog.String("status", string(check.Status)),
 				slog.Any("error", err),
 			)
 		}
@@ -126,7 +126,7 @@ func (s *Service) CheckDrift(ctx context.Context, nodeID uuid.UUID) (*model.Drif
 		if err := s.driftRepo.Update(ctx, check); err != nil {
 			slog.Error("failed to update drift check status",
 				slog.String("check_id", check.ID.String()),
-				slog.String("status", check.Status),
+				slog.String("status", string(check.Status)),
 				slog.Any("error", err),
 			)
 		}
@@ -142,7 +142,7 @@ func (s *Service) CheckDrift(ctx context.Context, nodeID uuid.UUID) (*model.Drif
 		if err := s.driftRepo.Update(ctx, check); err != nil {
 			slog.Error("failed to update drift check status",
 				slog.String("check_id", check.ID.String()),
-				slog.String("status", check.Status),
+				slog.String("status", string(check.Status)),
 				slog.Any("error", err),
 			)
 		}

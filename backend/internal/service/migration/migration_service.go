@@ -95,7 +95,7 @@ func (s *Service) RecoverOrphanedMigrations(ctx context.Context) error {
 	for _, m := range migrations {
 		slog.Warn("recovering orphaned migration",
 			slog.String("id", m.ID.String()),
-			slog.String("status", m.Status),
+			slog.String("status", string(m.Status)),
 		)
 		oldStatus := m.Status
 		m.Status = "failed"
