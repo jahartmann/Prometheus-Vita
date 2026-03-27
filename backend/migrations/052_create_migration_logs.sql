@@ -1,4 +1,4 @@
-CREATE TABLE migration_logs (
+CREATE TABLE IF NOT EXISTS migration_logs (
     id BIGSERIAL PRIMARY KEY,
     migration_id UUID NOT NULL REFERENCES vm_migrations(id) ON DELETE CASCADE,
     line TEXT NOT NULL,
@@ -7,4 +7,4 @@ CREATE TABLE migration_logs (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_migration_logs_migration_id ON migration_logs(migration_id);
+CREATE INDEX IF NOT EXISTS idx_migration_logs_migration_id ON migration_logs(migration_id);

@@ -1,6 +1,10 @@
-CREATE TYPE reflex_action_type AS ENUM ('restart_service', 'clear_cache', 'notify', 'run_command', 'start_vm', 'stop_vm');
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'reflex_action_type') THEN
+        CREATE TYPE reflex_action_type AS ENUM ('restart_service', 'clear_cache', 'notify', 'run_command', 'start_vm', 'stop_vm');
+    END IF;
+END $$;
 
-CREATE TABLE reflex_rules (
+CREATE TABLE IF NOT EXISTS reflex_rules (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(255) NOT NULL,
     description TEXT,

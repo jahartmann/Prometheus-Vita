@@ -1,4 +1,4 @@
-CREATE TABLE brain_entries (
+CREATE TABLE IF NOT EXISTS brain_entries (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     category VARCHAR(50) NOT NULL,
     subject VARCHAR(255) NOT NULL,
@@ -11,5 +11,5 @@ CREATE TABLE brain_entries (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-CREATE INDEX idx_brain_category ON brain_entries(category);
-CREATE INDEX idx_brain_subject ON brain_entries USING gin(to_tsvector('german', subject || ' ' || content));
+CREATE INDEX IF NOT EXISTS idx_brain_category ON brain_entries(category);
+CREATE INDEX IF NOT EXISTS idx_brain_subject ON brain_entries USING gin(to_tsvector('german', subject || ' ' || content));

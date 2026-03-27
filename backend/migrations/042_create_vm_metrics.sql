@@ -13,5 +13,5 @@ CREATE TABLE IF NOT EXISTS vm_metrics_history (
     recorded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_vm_metrics_node_vmid ON vm_metrics_history(node_id, vmid, recorded_at DESC);
-CREATE INDEX idx_vm_metrics_recorded_at ON vm_metrics_history(recorded_at);
+CREATE INDEX IF NOT EXISTS idx_vm_metrics_node_vmid ON vm_metrics_history(node_id, vmid, recorded_at DESC);
+CREATE INDEX IF NOT EXISTS idx_vm_metrics_recorded_at ON vm_metrics_history(recorded_at);

@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS network_scans (
     completed_at TIMESTAMPTZ
 );
 
-CREATE INDEX idx_network_scans_node_ts ON network_scans (node_id, started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_network_scans_node_ts ON network_scans (node_id, started_at DESC);
 
 CREATE TABLE IF NOT EXISTS network_devices (
     id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -48,8 +48,8 @@ CREATE TABLE IF NOT EXISTS network_anomalies (
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_network_anomalies_node ON network_anomalies (node_id, created_at DESC);
-CREATE INDEX idx_network_anomalies_risk ON network_anomalies (risk_score DESC);
+CREATE INDEX IF NOT EXISTS idx_network_anomalies_node ON network_anomalies (node_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_network_anomalies_risk ON network_anomalies (risk_score DESC);
 
 CREATE TABLE IF NOT EXISTS scan_baselines (
     id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -61,4 +61,4 @@ CREATE TABLE IF NOT EXISTS scan_baselines (
     created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_scan_baselines_active ON scan_baselines (node_id) WHERE is_active = TRUE;
+CREATE INDEX IF NOT EXISTS idx_scan_baselines_active ON scan_baselines (node_id) WHERE is_active = TRUE;

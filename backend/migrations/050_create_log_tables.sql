@@ -29,9 +29,9 @@ CREATE TABLE IF NOT EXISTS log_anomalies (
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_log_anomalies_node_ts ON log_anomalies (node_id, timestamp DESC);
-CREATE INDEX idx_log_anomalies_score ON log_anomalies (anomaly_score DESC);
-CREATE INDEX idx_log_anomalies_category ON log_anomalies (category, node_id);
+CREATE INDEX IF NOT EXISTS idx_log_anomalies_node_ts ON log_anomalies (node_id, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_log_anomalies_score ON log_anomalies (anomaly_score DESC);
+CREATE INDEX IF NOT EXISTS idx_log_anomalies_category ON log_anomalies (category, node_id);
 
 -- Geplante Reports
 CREATE TABLE IF NOT EXISTS log_report_schedules (
@@ -58,8 +58,8 @@ CREATE TABLE IF NOT EXISTS log_analyses (
     created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_log_analyses_nodes ON log_analyses USING GIN (node_ids);
-CREATE INDEX idx_log_analyses_time ON log_analyses (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_log_analyses_nodes ON log_analyses USING GIN (node_ids);
+CREATE INDEX IF NOT EXISTS idx_log_analyses_time ON log_analyses (created_at DESC);
 
 -- Log-Bookmarks
 CREATE TABLE IF NOT EXISTS log_bookmarks (
