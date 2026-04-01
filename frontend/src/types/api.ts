@@ -1034,6 +1034,11 @@ export interface CreateSSHKeyRequest {
   deploy?: boolean;
 }
 
+export interface TrustResult {
+  distributed_to: string[];
+  failed?: Array<{ node: string; error: string }>;
+}
+
 // Phase 6: API Gateway types
 export interface APIToken {
   id: string;

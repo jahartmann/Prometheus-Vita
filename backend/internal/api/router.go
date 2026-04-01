@@ -482,6 +482,7 @@ func SetupRouter(e *echo.Echo, cfg *config.Config, jwtSvc *auth.JWTService, h Ha
 		sshAdmin.Use(middleware.RequireRole(model.RoleAdmin, model.RoleOperator))
 		sshAdmin.POST("/:id/ssh-keys", h.SSHKey.Generate)
 		sshAdmin.POST("/:id/ssh-keys/:keyId/deploy", h.SSHKey.Deploy)
+		sshAdmin.POST("/:id/ssh-keys/:keyId/trust", h.SSHKey.TrustAll)
 		sshAdmin.POST("/:id/ssh-keys/rotate", h.SSHKey.Rotate)
 		sshAdmin.DELETE("/:id/ssh-keys/:keyId", h.SSHKey.Delete)
 		sshAdmin.POST("/:id/ssh-keys/rotation", h.SSHKey.CreateRotationSchedule)

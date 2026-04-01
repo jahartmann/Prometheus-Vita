@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Key, Trash2, Upload, RefreshCw } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Key, Network, Trash2, Upload, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/table";
 import { sshKeyApi, toArray } from "@/lib/api";
 import { toast } from "sonner";
-import type { SSHKey } from "@/types/api";
+import type { SSHKey, TrustResult } from "@/types/api";
 
 interface KeyListProps {
   nodeId: string;
@@ -25,21 +25,21 @@ export function KeyList({ nodeId, onGenerate }: KeyListProps) {
   const [keys, setKeys] = useState<SSHKey[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  const fetchKeys = async () => {
+  const fetchKeys = useCallback(async () => {
     setIsLoading(true);
     try {
       const resp = await sshKeyApi.listByNode(nodeId);
       setKeys(toArray<SSHKey>(resp.data));
     } catch {
-      // Fehler
+      toast.error("Fehler beim Laden der SSH-Schlüssel");
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [nodeId]);
 
   useEffect(() => {
     fetchKeys();
-  }, [nodeId]);
+  }, [fetchKeys]);
 
   const handleDeploy = async (keyId: string) => {
     try {
@@ -48,6 +48,26 @@ export function KeyList({ nodeId, onGenerate }: KeyListProps) {
       toast.success("SSH-Schlüssel deployed");
     } catch {
       toast.error("Fehler beim Deployen des Schlüssels");
+    }
+  };
+
+  const handleTrust = async (keyId: string) => {
+    try {
+      const resp = await sshKeyApi.trustAll(nodeId, keyId);
+      const result: TrustResult = resp.data;
+      const ok = result.distributed_to?.length ?? 0;
+      const failed = result.failed?.length ?? 0;
+      if (ok === 0 && failed === 0) {
+        toast.info("Keine anderen Nodes vorhanden");
+      } else if (failed === 0) {
+        toast.success(`Schlüssel auf ${ok} Node(s) verteilt`);
+      } else if (ok > 0) {
+        toast.warning(`${ok} erfolgreich, ${failed} fehlgeschlagen`);
+      } else {
+        toast.error("Verteilung auf allen Nodes fehlgeschlagen");
+      }
+    } catch {
+      toast.error("Fehler beim Verteilen des Schlüssels");
     }
   };
 
@@ -88,7 +108,7 @@ export function KeyList({ nodeId, onGenerate }: KeyListProps) {
             <TableHead>Status</TableHead>
             <TableHead>Erstellt</TableHead>
             <TableHead>Ablauf</TableHead>
-            <TableHead className="w-24"></TableHead>
+            <TableHead className="w-28"></TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -132,6 +152,9 @@ export function KeyList({ nodeId, onGenerate }: KeyListProps) {
                         <Upload className="h-4 w-4" />
                       </Button>
                     )}
+                    <Button variant="ghost" size="icon" onClick={() => handleTrust(key.id)} title="Auf alle Nodes verteilen (Trust)">
+                      <Network className="h-4 w-4" />
+                    </Button>
                     <Button variant="ghost" size="icon" onClick={() => handleDelete(key.id)} title="Löschen">
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>

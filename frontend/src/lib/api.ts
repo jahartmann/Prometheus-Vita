@@ -496,6 +496,8 @@ export const sshKeyApi = {
     api.post(`/nodes/${nodeId}/ssh-keys`, data),
   deploy: (nodeId: string, keyId: string) =>
     api.post(`/nodes/${nodeId}/ssh-keys/${keyId}/deploy`),
+  trustAll: (nodeId: string, keyId: string) =>
+    api.post(`/nodes/${nodeId}/ssh-keys/${keyId}/trust`),
   rotate: (nodeId: string) =>
     api.post(`/nodes/${nodeId}/ssh-keys/rotate`),
   delete: (nodeId: string, keyId: string) =>

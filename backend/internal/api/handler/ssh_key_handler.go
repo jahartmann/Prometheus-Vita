@@ -82,6 +82,21 @@ func (h *SSHKeyHandler) Rotate(c echo.Context) error {
 	return apiPkg.Success(c, key)
 }
 
+func (h *SSHKeyHandler) TrustAll(c echo.Context) error {
+	keyID, err := uuid.Parse(c.Param("keyId"))
+	if err != nil {
+		return apiPkg.BadRequest(c, "invalid key id")
+	}
+	result, err := h.sshkeySvc.TrustKeyOnAllNodes(c.Request().Context(), keyID)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return apiPkg.NotFound(c, "key not found")
+		}
+		return apiPkg.InternalError(c, "failed to distribute key")
+	}
+	return apiPkg.Success(c, result)
+}
+
 func (h *SSHKeyHandler) Delete(c echo.Context) error {
 	keyID, err := uuid.Parse(c.Param("keyId"))
 	if err != nil {

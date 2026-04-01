@@ -4,9 +4,11 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/rsa"
 	"encoding/pem"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/antigravity/prometheus/internal/model"
@@ -16,6 +18,18 @@ import (
 	"github.com/google/uuid"
 	gossh "golang.org/x/crypto/ssh"
 )
+
+// TrustResult describes the outcome of distributing a key to all nodes.
+type TrustResult struct {
+	DistributedTo []string    `json:"distributed_to"`
+	Failed        []TrustFail `json:"failed,omitempty"`
+}
+
+// TrustFail holds one failed distribution attempt.
+type TrustFail struct {
+	Node  string `json:"node"`
+	Error string `json:"error"`
+}
 
 type Service struct {
 	keyRepo   repository.SSHKeyRepository
@@ -43,9 +57,22 @@ func (s *Service) GenerateKeyPair(ctx context.Context, nodeID uuid.UUID, req mod
 		return nil, fmt.Errorf("get node: %w", err)
 	}
 
-	pubKey, privKey, err := generateEd25519KeyPair()
-	if err != nil {
-		return nil, fmt.Errorf("generate key pair: %w", err)
+	keyType := req.KeyType
+	if keyType == "" {
+		keyType = "ed25519"
+	}
+
+	var pubKey, privKey string
+	var genErr error
+	switch keyType {
+	case "rsa":
+		pubKey, privKey, genErr = generateRSAKeyPair()
+	default:
+		keyType = "ed25519"
+		pubKey, privKey, genErr = generateEd25519KeyPair()
+	}
+	if genErr != nil {
+		return nil, fmt.Errorf("generate key pair: %w", genErr)
 	}
 
 	// Compute fingerprint
@@ -73,7 +100,7 @@ func (s *Service) GenerateKeyPair(ctx context.Context, nodeID uuid.UUID, req mod
 	key := &model.SSHKey{
 		NodeID:      nodeID,
 		Name:        req.Name,
-		KeyType:     "ed25519",
+		KeyType:     keyType,
 		PublicKey:   pubKey,
 		PrivateKey:  encryptedPrivKey,
 		Fingerprint: fingerprint,
@@ -125,10 +152,11 @@ func (s *Service) deployKey(ctx context.Context, nodeID uuid.UUID, key *model.SS
 	}
 	defer s.sshPool.Return(nodeID.String(), sshClient)
 
-	// Add public key to authorized_keys
+	// Add public key to authorized_keys (idempotent – skip if already present)
+	pubKey := strings.TrimSpace(key.PublicKey)
 	cmd := fmt.Sprintf(
-		`mkdir -p ~/.ssh && chmod 700 ~/.ssh && echo %q >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys`,
-		key.PublicKey,
+		`mkdir -p ~/.ssh && chmod 700 ~/.ssh && grep -qxF %q ~/.ssh/authorized_keys 2>/dev/null || echo %q >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys`,
+		pubKey, pubKey,
 	)
 	result, err := sshClient.RunCommand(ctx, cmd)
 	if err != nil {
@@ -204,6 +232,76 @@ func (s *Service) UpdateRotationSchedule(ctx context.Context, sched *model.SSHKe
 	return s.keyRepo.UpdateRotationSchedule(ctx, sched)
 }
 
+// TrustKeyOnAllNodes distributes the public key identified by keyID to the
+// authorized_keys of every other node. Errors per node are collected in the
+// result rather than aborting the whole operation.
+func (s *Service) TrustKeyOnAllNodes(ctx context.Context, keyID uuid.UUID) (*TrustResult, error) {
+	key, err := s.keyRepo.GetByID(ctx, keyID)
+	if err != nil {
+		return nil, fmt.Errorf("get key: %w", err)
+	}
+
+	nodes, err := s.nodeRepo.List(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list nodes: %w", err)
+	}
+
+	result := &TrustResult{}
+	for i := range nodes {
+		node := &nodes[i]
+		if node.ID == key.NodeID {
+			continue // skip the key's own node
+		}
+		if err := s.deployPublicKeyToNode(ctx, node, key.PublicKey); err != nil {
+			slog.Warn("trust: deploy to node failed",
+				slog.String("node", node.Name),
+				slog.Any("error", err),
+			)
+			result.Failed = append(result.Failed, TrustFail{Node: node.Name, Error: err.Error()})
+		} else {
+			result.DistributedTo = append(result.DistributedTo, node.Name)
+		}
+	}
+
+	return result, nil
+}
+
+// deployPublicKeyToNode SSHs into target using its own stored credentials and
+// appends publicKey to its authorized_keys (idempotent).
+func (s *Service) deployPublicKeyToNode(ctx context.Context, node *model.Node, publicKey string) error {
+	privateKey, err := s.encryptor.Decrypt(node.SSHPrivateKey)
+	if err != nil {
+		return fmt.Errorf("decrypt node ssh key: %w", err)
+	}
+
+	sshClient, err := s.sshPool.Get(node.ID.String(), ssh.SSHConfig{
+		Host:       node.Hostname,
+		Port:       node.SSHPort,
+		User:       node.SSHUser,
+		PrivateKey: privateKey,
+		HostKey:    node.SSHHostKey,
+	})
+	if err != nil {
+		return fmt.Errorf("ssh connection: %w", err)
+	}
+	defer s.sshPool.Return(node.ID.String(), sshClient)
+
+	pubKey := strings.TrimSpace(publicKey)
+	cmd := fmt.Sprintf(
+		`mkdir -p ~/.ssh && chmod 700 ~/.ssh && grep -qxF %q ~/.ssh/authorized_keys 2>/dev/null || echo %q >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys`,
+		pubKey, pubKey,
+	)
+	result, err := sshClient.RunCommand(ctx, cmd)
+	if err != nil {
+		return fmt.Errorf("run command: %w", err)
+	}
+	if result.ExitCode != 0 {
+		return fmt.Errorf("command failed: %s", result.Stderr)
+	}
+
+	return nil
+}
+
 func generateEd25519KeyPair() (publicKey, privateKey string, err error) {
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -211,6 +309,28 @@ func generateEd25519KeyPair() (publicKey, privateKey string, err error) {
 	}
 
 	sshPub, err := gossh.NewPublicKey(pub)
+	if err != nil {
+		return "", "", fmt.Errorf("create ssh public key: %w", err)
+	}
+
+	pubKeyStr := string(gossh.MarshalAuthorizedKey(sshPub))
+
+	privPEM, err := gossh.MarshalPrivateKey(priv, "")
+	if err != nil {
+		return "", "", fmt.Errorf("marshal private key: %w", err)
+	}
+	privKeyStr := string(pem.EncodeToMemory(privPEM))
+
+	return pubKeyStr, privKeyStr, nil
+}
+
+func generateRSAKeyPair() (publicKey, privateKey string, err error) {
+	priv, err := rsa.GenerateKey(rand.Reader, 4096)
+	if err != nil {
+		return "", "", fmt.Errorf("generate rsa key: %w", err)
+	}
+
+	sshPub, err := gossh.NewPublicKey(&priv.PublicKey)
 	if err != nil {
 		return "", "", fmt.Errorf("create ssh public key: %w", err)
 	}

@@ -3,6 +3,13 @@
 import { useEffect, useState } from "react";
 import { useNodeStore } from "@/stores/node-store";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { KeyList } from "@/components/sshkeys/key-list";
 import { GenerateKeyDialog } from "@/components/sshkeys/generate-key-dialog";
 
@@ -32,24 +39,25 @@ export default function SSHKeysPage() {
       </div>
 
       <div className="max-w-xs">
-        <select
-          value={selectedNode}
-          onChange={(e) => setSelectedNode(e.target.value)}
-          className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
-        >
-          <option value="">Node wählen...</option>
-          {nodes.map((node) => (
-            <option key={node.id} value={node.id}>
-              {node.name}
-            </option>
-          ))}
-        </select>
+        <Select value={selectedNode} onValueChange={setSelectedNode}>
+          <SelectTrigger>
+            <SelectValue placeholder="Node wählen..." />
+          </SelectTrigger>
+          <SelectContent>
+            {nodes.map((node) => (
+              <SelectItem key={node.id} value={node.id}>
+                {node.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {selectedNode ? (
         <Card>
-          <CardContent className="p-4" key={refreshKey}>
+          <CardContent className="p-4">
             <KeyList
+              key={refreshKey}
               nodeId={selectedNode}
               onGenerate={() => setGenerateOpen(true)}
             />

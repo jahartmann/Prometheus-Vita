@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -11,6 +12,13 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { sshKeyApi } from "@/lib/api";
 import { toast } from "sonner";
 
@@ -57,24 +65,23 @@ export function GenerateKeyDialog({ nodeId, open, onOpenChange, onSuccess }: Gen
           </div>
           <div className="space-y-2">
             <Label>Schlüsseltyp</Label>
-            <select
-              value={keyType}
-              onChange={(e) => setKeyType(e.target.value)}
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
-            >
-              <option value="ed25519">Ed25519 (empfohlen)</option>
-              <option value="rsa">RSA (4096 bit)</option>
-            </select>
+            <Select value={keyType} onValueChange={setKeyType}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ed25519">Ed25519 (empfohlen)</SelectItem>
+                <SelectItem value="rsa">RSA (4096 bit)</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
+            <Checkbox
               id="deploy"
               checked={deploy}
-              onChange={(e) => setDeploy(e.target.checked)}
-              className="rounded"
+              onCheckedChange={(v) => setDeploy(v === true)}
             />
-            <Label htmlFor="deploy">Direkt deployen</Label>
+            <Label htmlFor="deploy" className="cursor-pointer">Direkt deployen</Label>
           </div>
         </div>
 
