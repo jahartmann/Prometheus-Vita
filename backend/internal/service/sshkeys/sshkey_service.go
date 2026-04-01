@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/antigravity/prometheus/internal/model"
@@ -200,8 +201,13 @@ type MutualTrustResult struct {
 	Failed      []TrustFail `json:"failed,omitempty"`
 }
 
+// sshTimeout is the per-node SSH connection timeout for trust operations.
+// Kept short so an unreachable node doesn't stall the whole request.
+const sshTimeout = 15 * time.Second
+
 // EstablishMutualTrust SSHs into every node, reads (or generates) root's
 // ed25519 public key, and distributes it to all other nodes' authorized_keys.
+// Both phases run in parallel so unreachable nodes don't block the others.
 func (s *Service) EstablishMutualTrust(ctx context.Context) (*MutualTrustResult, error) {
 	nodes, err := s.nodeRepo.List(ctx)
 	if err != nil {
@@ -209,41 +215,83 @@ func (s *Service) EstablishMutualTrust(ctx context.Context) (*MutualTrustResult,
 	}
 
 	result := &MutualTrustResult{}
+	var mu sync.Mutex
 
+	// Phase 1: fetch (or generate) each node's public key in parallel.
 	type nodeKey struct {
 		node   model.Node
 		pubKey string
 	}
-	var nodeKeys []nodeKey
+	keyCh := make(chan nodeKey, len(nodes))
 
+	var wg sync.WaitGroup
 	for i := range nodes {
-		node := &nodes[i]
-		pubKey, err := s.getOrCreateNodePublicKey(ctx, node)
-		if err != nil {
-			slog.Warn("trust: get public key failed", slog.String("node", node.Name), slog.Any("error", err))
-			result.Failed = append(result.Failed, TrustFail{
-				Node:  node.Name,
-				Error: fmt.Sprintf("Schlüssel auslesen: %v", err),
-			})
-			continue
-		}
-		nodeKeys = append(nodeKeys, nodeKey{node: *node, pubKey: pubKey})
+		node := nodes[i]
+		wg.Add(1)
+		go func(n model.Node) {
+			defer wg.Done()
+			nodeCtx, cancel := context.WithTimeout(ctx, sshTimeout)
+			defer cancel()
+
+			pubKey, err := s.getOrCreateNodePublicKey(nodeCtx, &n)
+			if err != nil {
+				slog.Warn("trust: get public key failed", slog.String("node", n.Name), slog.Any("error", err))
+				mu.Lock()
+				result.Failed = append(result.Failed, TrustFail{
+					Node:  n.Name,
+					Error: fmt.Sprintf("Schlüssel auslesen: %v", err),
+				})
+				mu.Unlock()
+				return
+			}
+			keyCh <- nodeKey{node: n, pubKey: pubKey}
+		}(node)
+	}
+	wg.Wait()
+	close(keyCh)
+
+	var nodeKeys []nodeKey
+	for nk := range keyCh {
+		nodeKeys = append(nodeKeys, nk)
 	}
 
+	// Phase 2: distribute each node's key to every other node in parallel.
+	type distWork struct {
+		src nodeKey
+		tgt nodeKey
+	}
+	workCh := make(chan distWork, len(nodeKeys)*len(nodeKeys))
 	for _, src := range nodeKeys {
 		for _, tgt := range nodeKeys {
-			if src.node.ID == tgt.node.ID {
-				continue
-			}
-			if err := s.deployPublicKeyToNode(ctx, &tgt.node, src.pubKey); err != nil {
-				label := fmt.Sprintf("%s → %s", src.node.Name, tgt.node.Name)
-				slog.Warn("trust: distribute failed", slog.String("pair", label), slog.Any("error", err))
-				result.Failed = append(result.Failed, TrustFail{Node: label, Error: err.Error()})
-			} else {
-				result.Distributed = append(result.Distributed, fmt.Sprintf("%s → %s", src.node.Name, tgt.node.Name))
+			if src.node.ID != tgt.node.ID {
+				workCh <- distWork{src: src, tgt: tgt}
 			}
 		}
 	}
+	close(workCh)
+
+	for w := range workCh {
+		w := w
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			nodeCtx, cancel := context.WithTimeout(ctx, sshTimeout)
+			defer cancel()
+
+			label := fmt.Sprintf("%s → %s", w.src.node.Name, w.tgt.node.Name)
+			if err := s.deployPublicKeyToNode(nodeCtx, &w.tgt.node, w.src.pubKey); err != nil {
+				slog.Warn("trust: distribute failed", slog.String("pair", label), slog.Any("error", err))
+				mu.Lock()
+				result.Failed = append(result.Failed, TrustFail{Node: label, Error: err.Error()})
+				mu.Unlock()
+			} else {
+				mu.Lock()
+				result.Distributed = append(result.Distributed, label)
+				mu.Unlock()
+			}
+		}()
+	}
+	wg.Wait()
 
 	return result, nil
 }
