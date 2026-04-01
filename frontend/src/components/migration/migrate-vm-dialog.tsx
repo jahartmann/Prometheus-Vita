@@ -84,7 +84,7 @@ export function MigrateVmDialog({
   sourceNodeId,
   sourceNodeName,
 }: MigrateVmDialogProps) {
-  const { nodes } = useNodeStore();
+  const { nodes, nodeStatus } = useNodeStore();
   const { startMigration } = useMigrationStore();
 
   const [step, setStep] = useState<Step>("target");
