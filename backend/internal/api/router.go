@@ -480,6 +480,7 @@ func SetupRouter(e *echo.Echo, cfg *config.Config, jwtSvc *auth.JWTService, h Ha
 
 		sshAdmin := nodes.Group("")
 		sshAdmin.Use(middleware.RequireRole(model.RoleAdmin, model.RoleOperator))
+		sshAdmin.POST("/trust", h.SSHKey.TrustNodes)
 		sshAdmin.POST("/:id/ssh-keys", h.SSHKey.Generate)
 		sshAdmin.POST("/:id/ssh-keys/:keyId/deploy", h.SSHKey.Deploy)
 		sshAdmin.POST("/:id/ssh-keys/:keyId/trust", h.SSHKey.TrustAll)

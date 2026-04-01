@@ -82,6 +82,14 @@ func (h *SSHKeyHandler) Rotate(c echo.Context) error {
 	return apiPkg.Success(c, key)
 }
 
+func (h *SSHKeyHandler) TrustNodes(c echo.Context) error {
+	result, err := h.sshkeySvc.EstablishMutualTrust(c.Request().Context())
+	if err != nil {
+		return apiPkg.InternalError(c, "failed to establish trust")
+	}
+	return apiPkg.Success(c, result)
+}
+
 func (h *SSHKeyHandler) TrustAll(c echo.Context) error {
 	keyID, err := uuid.Parse(c.Param("keyId"))
 	if err != nil {

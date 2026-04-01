@@ -194,6 +194,96 @@ func (s *Service) GetByID(ctx context.Context, id uuid.UUID) (*model.SSHKey, err
 	return s.keyRepo.GetByID(ctx, id)
 }
 
+// MutualTrustResult describes the outcome of establishing mutual SSH trust.
+type MutualTrustResult struct {
+	Distributed []string    `json:"distributed"`
+	Failed      []TrustFail `json:"failed,omitempty"`
+}
+
+// EstablishMutualTrust SSHs into every node, reads (or generates) root's
+// ed25519 public key, and distributes it to all other nodes' authorized_keys.
+func (s *Service) EstablishMutualTrust(ctx context.Context) (*MutualTrustResult, error) {
+	nodes, err := s.nodeRepo.List(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list nodes: %w", err)
+	}
+
+	result := &MutualTrustResult{}
+
+	type nodeKey struct {
+		node   model.Node
+		pubKey string
+	}
+	var nodeKeys []nodeKey
+
+	for i := range nodes {
+		node := &nodes[i]
+		pubKey, err := s.getOrCreateNodePublicKey(ctx, node)
+		if err != nil {
+			slog.Warn("trust: get public key failed", slog.String("node", node.Name), slog.Any("error", err))
+			result.Failed = append(result.Failed, TrustFail{
+				Node:  node.Name,
+				Error: fmt.Sprintf("Schlüssel auslesen: %v", err),
+			})
+			continue
+		}
+		nodeKeys = append(nodeKeys, nodeKey{node: *node, pubKey: pubKey})
+	}
+
+	for _, src := range nodeKeys {
+		for _, tgt := range nodeKeys {
+			if src.node.ID == tgt.node.ID {
+				continue
+			}
+			if err := s.deployPublicKeyToNode(ctx, &tgt.node, src.pubKey); err != nil {
+				label := fmt.Sprintf("%s → %s", src.node.Name, tgt.node.Name)
+				slog.Warn("trust: distribute failed", slog.String("pair", label), slog.Any("error", err))
+				result.Failed = append(result.Failed, TrustFail{Node: label, Error: err.Error()})
+			} else {
+				result.Distributed = append(result.Distributed, fmt.Sprintf("%s → %s", src.node.Name, tgt.node.Name))
+			}
+		}
+	}
+
+	return result, nil
+}
+
+// getOrCreateNodePublicKey SSHs into a node and returns root's ed25519 public
+// key, generating a key pair first if none exists.
+func (s *Service) getOrCreateNodePublicKey(ctx context.Context, node *model.Node) (string, error) {
+	privateKey, err := s.encryptor.Decrypt(node.SSHPrivateKey)
+	if err != nil {
+		return "", fmt.Errorf("decrypt node ssh key: %w", err)
+	}
+
+	sshClient, err := s.sshPool.Get(node.ID.String(), ssh.SSHConfig{
+		Host:       node.Hostname,
+		Port:       node.SSHPort,
+		User:       node.SSHUser,
+		PrivateKey: privateKey,
+		HostKey:    node.SSHHostKey,
+	})
+	if err != nil {
+		return "", fmt.Errorf("ssh connection: %w", err)
+	}
+	defer s.sshPool.Return(node.ID.String(), sshClient)
+
+	cmd := `[ -f ~/.ssh/id_ed25519.pub ] || ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -N "" -q 2>/dev/null; cat ~/.ssh/id_ed25519.pub`
+	res, err := sshClient.RunCommand(ctx, cmd)
+	if err != nil {
+		return "", fmt.Errorf("get public key: %w", err)
+	}
+	if res.ExitCode != 0 {
+		return "", fmt.Errorf("get public key failed: %s", res.Stderr)
+	}
+
+	pubKey := strings.TrimSpace(res.Stdout)
+	if pubKey == "" {
+		return "", fmt.Errorf("empty public key returned from node")
+	}
+	return pubKey, nil
+}
+
 func (s *Service) ListByNode(ctx context.Context, nodeID uuid.UUID) ([]model.SSHKey, error) {
 	return s.keyRepo.ListByNode(ctx, nodeID)
 }

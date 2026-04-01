@@ -1039,6 +1039,11 @@ export interface TrustResult {
   failed?: Array<{ node: string; error: string }>;
 }
 
+export interface NodeTrustResult {
+  distributed: string[];
+  failed?: Array<{ node: string; error: string }>;
+}
+
 // Phase 6: API Gateway types
 export interface APIToken {
   id: string;

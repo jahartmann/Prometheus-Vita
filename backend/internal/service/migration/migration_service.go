@@ -562,10 +562,14 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 	if vmDiskUsed <= 0 {
 		vmDiskUsed = vmInfo.MaxDisk
 	}
-	estimatedBackupSize := int64(float64(vmDiskUsed) * 0.85) // 85% of used — conservative estimate with zstd
+	const maxEstimatedBackupSize = 35 * 1024 * 1024 * 1024 // 35 GB cap — vzdump/zstd compresses heavily
+	estimatedBackupSize := int64(float64(vmDiskUsed) * 0.85)
+	if estimatedBackupSize > maxEstimatedBackupSize {
+		estimatedBackupSize = maxEstimatedBackupSize
+	}
 	s.broadcastLog(m.ID, fmt.Sprintf("✓ VM %d (%s) gefunden - Disk: %s belegt / %s alloziert, Status: %s",
 		vmInfo.VMID, vmInfo.Name, formatBytesLog(vmDiskUsed), formatBytesLog(vmInfo.MaxDisk), vmInfo.Status))
-	s.broadcastLog(m.ID, fmt.Sprintf("  Geschätzte Backup-Größe (zstd): ~%s", formatBytesLog(estimatedBackupSize)))
+	s.broadcastLog(m.ID, fmt.Sprintf("  Geschätzte Backup-Größe (zstd, max 35 GB): ~%s", formatBytesLog(estimatedBackupSize)))
 
 	// 3. Check target storage exists and has enough space
 	s.broadcastLog(m.ID, fmt.Sprintf("Prüfe Zielspeicher '%s'...", m.TargetStorage))
