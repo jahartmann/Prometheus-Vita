@@ -211,8 +211,11 @@ export function MigrateVmDialog({
   const targetNode = nodes.find((n) => n.id === targetNodeId);
   const selectedStorage = vmStorages.find((s) => s.storage === targetStorage);
   const vmDiskSize = vm.disk_total || 0;
+  // disk_total is 0 for stopped VMs (Proxmox reports Disk=0 without guest agent).
+  // The backend reads the real size from VM config, so the check may still fail.
+  const diskSizeUnknown = vmDiskSize === 0 && !!selectedStorage;
   const hasEnoughSpace =
-    !selectedStorage || selectedStorage.available >= vmDiskSize;
+    !selectedStorage || diskSizeUnknown || selectedStorage.available >= vmDiskSize;
 
   const handleSubmit = async () => {
     setSubmitting(true);
@@ -636,14 +639,14 @@ export function MigrateVmDialog({
               </div>
             )}
 
-            {!hasEnoughSpace && (
+            {(!hasEnoughSpace || diskSizeUnknown) && (
               <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 p-3 space-y-2">
                 <div className="flex items-center gap-2 text-sm text-amber-600">
                   <AlertTriangle className="h-4 w-4 flex-shrink-0" />
                   <span>
-                    Ziel-Storage hat möglicherweise nicht genug Platz (
-                    {formatBytes(selectedStorage?.available ?? 0)} frei,{" "}
-                    {formatBytes(vmDiskSize)} benötigt). Mit vzdump-Komprimierung kann der tatsächliche Bedarf deutlich geringer sein.
+                    {diskSizeUnknown
+                      ? `VM-Disk-Größe unbekannt (VM gestoppt). Backend prüft die tatsächliche Größe — verfügbar: ${formatBytes(selectedStorage?.available ?? 0)}.`
+                      : `Ziel-Storage hat möglicherweise nicht genug Platz (${formatBytes(selectedStorage?.available ?? 0)} frei, ${formatBytes(vmDiskSize)} benötigt). Mit vzdump-Komprimierung kann der tatsächliche Bedarf deutlich geringer sein.`}
                   </span>
                 </div>
                 <label className="flex items-center gap-2 text-sm text-amber-700 cursor-pointer">
@@ -666,7 +669,7 @@ export function MigrateVmDialog({
               </div>
             )}
 
-            {hasEnoughSpace && (
+            {hasEnoughSpace && !diskSizeUnknown && (
               <div className="flex items-center gap-2 text-xs text-green-600">
                 <CheckCircle2 className="h-3.5 w-3.5" />
                 Alle Voraussetzungen erfuellt. Tags und Konfiguration werden
@@ -684,7 +687,7 @@ export function MigrateVmDialog({
               </Button>
               <Button
                 onClick={handleSubmit}
-                disabled={submitting || (!hasEnoughSpace && !overrideStorageCheck)}
+                disabled={submitting || (!hasEnoughSpace && !diskSizeUnknown && !overrideStorageCheck)}
               >
                 {submitting && (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />

@@ -298,13 +298,14 @@ func (s *Service) EstablishMutualTrust(ctx context.Context) (*MutualTrustResult,
 
 // getOrCreateNodePublicKey SSHs into a node and returns root's ed25519 public
 // key, generating a key pair first if none exists.
+// Uses a direct (non-pooled) connection so concurrent calls don't serialize on the pool mutex.
 func (s *Service) getOrCreateNodePublicKey(ctx context.Context, node *model.Node) (string, error) {
 	privateKey, err := s.encryptor.Decrypt(node.SSHPrivateKey)
 	if err != nil {
-		return "", fmt.Errorf("decrypt node ssh key: %w", err)
+		return "", fmt.Errorf("kein SSH-Schlüssel hinterlegt oder entschlüsselbar: %w", err)
 	}
 
-	sshClient, err := s.sshPool.Get(node.ID.String(), ssh.SSHConfig{
+	sshClient, err := s.sshPool.NewDirect(ssh.SSHConfig{
 		Host:       node.Hostname,
 		Port:       node.SSHPort,
 		User:       node.SSHUser,
@@ -312,22 +313,22 @@ func (s *Service) getOrCreateNodePublicKey(ctx context.Context, node *model.Node
 		HostKey:    node.SSHHostKey,
 	})
 	if err != nil {
-		return "", fmt.Errorf("ssh connection: %w", err)
+		return "", fmt.Errorf("SSH-Verbindung fehlgeschlagen (%s:%d): %w", node.Hostname, node.SSHPort, err)
 	}
-	defer s.sshPool.Return(node.ID.String(), sshClient)
+	defer sshClient.Close()
 
 	cmd := `[ -f ~/.ssh/id_ed25519.pub ] || ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -N "" -q 2>/dev/null; cat ~/.ssh/id_ed25519.pub`
 	res, err := sshClient.RunCommand(ctx, cmd)
 	if err != nil {
-		return "", fmt.Errorf("get public key: %w", err)
+		return "", fmt.Errorf("Befehl fehlgeschlagen: %w", err)
 	}
 	if res.ExitCode != 0 {
-		return "", fmt.Errorf("get public key failed: %s", res.Stderr)
+		return "", fmt.Errorf("ssh-keygen/cat fehlgeschlagen (exit %d): %s", res.ExitCode, res.Stderr)
 	}
 
 	pubKey := strings.TrimSpace(res.Stdout)
 	if pubKey == "" {
-		return "", fmt.Errorf("empty public key returned from node")
+		return "", fmt.Errorf("leerer Public-Key zurückgegeben")
 	}
 	return pubKey, nil
 }
@@ -406,13 +407,14 @@ func (s *Service) TrustKeyOnAllNodes(ctx context.Context, keyID uuid.UUID) (*Tru
 
 // deployPublicKeyToNode SSHs into target using its own stored credentials and
 // appends publicKey to its authorized_keys (idempotent).
+// Uses a direct (non-pooled) connection so concurrent calls don't serialize on the pool mutex.
 func (s *Service) deployPublicKeyToNode(ctx context.Context, node *model.Node, publicKey string) error {
 	privateKey, err := s.encryptor.Decrypt(node.SSHPrivateKey)
 	if err != nil {
-		return fmt.Errorf("decrypt node ssh key: %w", err)
+		return fmt.Errorf("kein SSH-Schlüssel hinterlegt oder entschlüsselbar: %w", err)
 	}
 
-	sshClient, err := s.sshPool.Get(node.ID.String(), ssh.SSHConfig{
+	sshClient, err := s.sshPool.NewDirect(ssh.SSHConfig{
 		Host:       node.Hostname,
 		Port:       node.SSHPort,
 		User:       node.SSHUser,
@@ -420,9 +422,9 @@ func (s *Service) deployPublicKeyToNode(ctx context.Context, node *model.Node, p
 		HostKey:    node.SSHHostKey,
 	})
 	if err != nil {
-		return fmt.Errorf("ssh connection: %w", err)
+		return fmt.Errorf("SSH-Verbindung fehlgeschlagen (%s:%d): %w", node.Hostname, node.SSHPort, err)
 	}
-	defer s.sshPool.Return(node.ID.String(), sshClient)
+	defer sshClient.Close()
 
 	pubKey := strings.TrimSpace(publicKey)
 	cmd := fmt.Sprintf(
