@@ -26,6 +26,7 @@ import {
   MemoryStick,
   Tag,
   CheckCircle2,
+  AlertTriangle,
 } from "lucide-react";
 
 interface MigrateVmDialogProps {
