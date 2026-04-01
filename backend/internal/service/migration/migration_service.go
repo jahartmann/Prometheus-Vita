@@ -1023,9 +1023,11 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 	}
 
 	// Convert filesystem path to Proxmox volume ID format.
-	// Use the storage where the dump was actually transferred to.
+	// Only use tgtVzdumpStorage if the file was actually resolved to that storage's path.
+	// If targetDumpDir is still the default (/var/lib/vz/dump), the storage path resolution
+	// failed (e.g. PBS storage) and the file ended up in local:backup/ instead.
 	restoreStorageName := "local"
-	if tgtVzdumpStorage != "" {
+	if tgtVzdumpStorage != "" && targetDumpDir != "/var/lib/vz/dump" {
 		restoreStorageName = tgtVzdumpStorage
 	}
 	restoreArchive := restoreStorageName + ":backup/" + vzdumpFilename
