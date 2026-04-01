@@ -103,6 +103,7 @@ export function MigrateVmDialog({
   const [newVmid, setNewVmid] = useState<string>("");
   const [cleanupSource, setCleanupSource] = useState(true);
   const [cleanupTarget, setCleanupTarget] = useState(true);
+  const [overrideStorageCheck, setOverrideStorageCheck] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -120,6 +121,7 @@ export function MigrateVmDialog({
       setStorages([]);
       setMode("snapshot");
       setNewVmid("");
+      setOverrideStorageCheck(false);
       setError("");
       setStorageError("");
     }
@@ -225,6 +227,7 @@ export function MigrateVmDialog({
         new_vmid: newVmid ? parseInt(newVmid) : undefined,
         cleanup_source: cleanupSource,
         cleanup_target: cleanupTarget,
+        override_storage_check: overrideStorageCheck,
       });
       onOpenChange(false);
     } catch (err: unknown) {
@@ -634,13 +637,24 @@ export function MigrateVmDialog({
             )}
 
             {!hasEnoughSpace && (
-              <div className="flex items-center gap-2 text-sm text-amber-600 bg-amber-50 dark:bg-amber-950/30 rounded-lg p-3">
-                <AlertTriangle className="h-4 w-4 flex-shrink-0" />
-                <span>
-                  Der Ziel-Storage hat möglicherweise nicht genug Platz (
-                  {formatBytes(selectedStorage?.available ?? 0)} frei,{" "}
-                  {formatBytes(vmDiskSize)} benötigt).
-                </span>
+              <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 p-3 space-y-2">
+                <div className="flex items-center gap-2 text-sm text-amber-600">
+                  <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+                  <span>
+                    Ziel-Storage hat möglicherweise nicht genug Platz (
+                    {formatBytes(selectedStorage?.available ?? 0)} frei,{" "}
+                    {formatBytes(vmDiskSize)} benötigt). Mit vzdump-Komprimierung kann der tatsächliche Bedarf deutlich geringer sein.
+                  </span>
+                </div>
+                <label className="flex items-center gap-2 text-sm text-amber-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={overrideStorageCheck}
+                    onChange={(e) => setOverrideStorageCheck(e.target.checked)}
+                    className="rounded"
+                  />
+                  Speicherplatz-Prüfung überschreiben und trotzdem fortfahren
+                </label>
               </div>
             )}
 
@@ -668,7 +682,10 @@ export function MigrateVmDialog({
               <Button variant="outline" onClick={() => setStep("options")}>
                 Zurück
               </Button>
-              <Button onClick={handleSubmit} disabled={submitting}>
+              <Button
+                onClick={handleSubmit}
+                disabled={submitting || (!hasEnoughSpace && !overrideStorageCheck)}
+              >
                 {submitting && (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 )}

@@ -28,6 +28,7 @@ interface MigrationState {
     new_vmid?: number;
     cleanup_source?: boolean;
     cleanup_target?: boolean;
+    override_storage_check?: boolean;
   }) => Promise<VMMigration>;
   cancelMigration: (id: string) => Promise<void>;
   deleteMigration: (id: string) => Promise<void>;

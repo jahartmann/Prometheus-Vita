@@ -909,6 +909,53 @@ func (c *Client) GetClusterStorages(ctx context.Context) ([]StorageInfo, error) 
 	return storages, nil
 }
 
+// GetClusterStoragesForNode fetches storage info for a specific PVE node from
+// the cluster resources endpoint. This is used as a fallback when the direct
+// node storage endpoint fails, and correctly filters by node name.
+func (c *Client) GetClusterStoragesForNode(ctx context.Context, nodeName string) ([]StorageInfo, error) {
+	data, err := c.doRequest(ctx, http.MethodGet, "/cluster/resources?type=storage")
+	if err != nil {
+		return nil, err
+	}
+
+	var raw []struct {
+		Storage    string `json:"storage"`
+		Node       string `json:"node"`
+		Type       string `json:"type"`
+		Content    string `json:"content"`
+		MaxDisk    int64  `json:"maxdisk"`
+		Disk       int64  `json:"disk"`
+		Status     string `json:"status"`
+		Shared     int    `json:"shared"`
+		PluginType string `json:"plugintype"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, fmt.Errorf("unmarshal cluster storages: %w", err)
+	}
+
+	storages := make([]StorageInfo, 0)
+	for _, r := range raw {
+		if r.Node != nodeName {
+			continue
+		}
+		s := StorageInfo{
+			Storage:   r.Storage,
+			Type:      r.Type,
+			Content:   r.Content,
+			Total:     r.MaxDisk,
+			Used:      r.Disk,
+			Available: r.MaxDisk - r.Disk,
+			Active:    r.Status != "unknown",
+			Shared:    r.Shared == 1,
+		}
+		if s.Total > 0 {
+			s.UsagePercent = float64(s.Used) / float64(s.Total) * 100
+		}
+		storages = append(storages, s)
+	}
+	return storages, nil
+}
+
 // GetStorageContent returns content of a specific type from a storage on a node.
 func (c *Client) GetStorageContent(ctx context.Context, node, storage, contentType string) ([]StorageContent, error) {
 	path := fmt.Sprintf("/nodes/%s/storage/%s/content?content=%s", node, url.QueryEscape(storage), url.QueryEscape(contentType))

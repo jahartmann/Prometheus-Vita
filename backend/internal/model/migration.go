@@ -59,9 +59,10 @@ type VMMigration struct {
 	TransferSpeedBps  int64          `json:"transfer_speed_bps"`
 	NewVMID          *int            `json:"new_vmid,omitempty"`
 	RestoreTaskUPID  *string         `json:"restore_task_upid,omitempty"`
-	CleanupSource    bool            `json:"cleanup_source"`
-	CleanupTarget    bool            `json:"cleanup_target"`
-	ErrorMessage     string          `json:"error_message,omitempty"`
+	CleanupSource        bool            `json:"cleanup_source"`
+	CleanupTarget        bool            `json:"cleanup_target"`
+	OverrideStorageCheck bool            `json:"override_storage_check,omitempty"` // not persisted in DB
+	ErrorMessage         string          `json:"error_message,omitempty"`
 	StartedAt        *time.Time      `json:"started_at,omitempty"`
 	CompletedAt      *time.Time      `json:"completed_at,omitempty"`
 	CreatedAt        time.Time       `json:"created_at"`
@@ -76,8 +77,9 @@ type StartMigrationRequest struct {
 	TargetStorage string        `json:"target_storage" validate:"required"`
 	Mode          MigrationMode `json:"mode"`
 	NewVMID       *int          `json:"new_vmid,omitempty"`
-	CleanupSource bool          `json:"cleanup_source"`
-	CleanupTarget bool          `json:"cleanup_target"`
+	CleanupSource        bool          `json:"cleanup_source"`
+	CleanupTarget        bool          `json:"cleanup_target"`
+	OverrideStorageCheck bool          `json:"override_storage_check,omitempty"`
 }
 
 type MigrationResponse struct {

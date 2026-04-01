@@ -646,16 +646,19 @@ func (s *Service) GetStorage(ctx context.Context, id uuid.UUID) ([]proxmox.Stora
 		slog.Warn("GetStorage: direct storage fetch failed",
 			slog.String("node", node.Name), slog.String("pve_node", pveNode), slog.Any("error", storErr))
 
-		// Try cluster-level endpoint (doesn't need correct node name)
-		clusterStorage, clusterErr := client.GetClusterStorages(ctx)
-		if clusterErr == nil {
-			slog.Info("GetStorage: SUCCESS via cluster endpoint",
+		// Try cluster resources endpoint filtered by this node (avoids returning wrong node's storage)
+		clusterStorage, clusterErr := client.GetClusterStoragesForNode(ctx, pveNode)
+		if clusterErr == nil && len(clusterStorage) > 0 {
+			slog.Info("GetStorage: SUCCESS via cluster endpoint (node-filtered)",
 				slog.String("node", node.Name),
+				slog.String("pve_node", pveNode),
 				slog.Int("count", len(clusterStorage)))
 			return clusterStorage, nil
 		}
-		slog.Warn("GetStorage: cluster endpoint also failed",
-			slog.String("node", node.Name), slog.Any("error", clusterErr))
+		if clusterErr != nil {
+			slog.Warn("GetStorage: cluster endpoint also failed",
+				slog.String("node", node.Name), slog.Any("error", clusterErr))
+		}
 
 		// The PVE node name might be wrong - try re-resolving it
 		if storage, resolved := s.retryStorageWithResolvedName(ctx, node, client, pveNode); resolved {
