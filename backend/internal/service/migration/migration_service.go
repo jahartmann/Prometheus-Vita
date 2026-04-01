@@ -599,22 +599,10 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 		targetStorageInfo.Storage, formatBytesLog(targetStorageInfo.Available),
 		formatBytesLog(targetStorageInfo.Total), targetStorageInfo.UsagePercent))
 
-	// Check if target storage has enough space for the VM disk (used size)
-	if targetStorageInfo.Total > 0 && vmDiskUsed > 0 {
-		if targetStorageInfo.Available < vmDiskUsed {
-			if m.OverrideStorageCheck {
-				s.broadcastLog(m.ID, fmt.Sprintf("⚠ Wenig Speicherplatz auf '%s': benötigt ~%s, verfügbar %s — Override aktiv, fahre fort",
-					m.TargetStorage, formatBytesLog(vmDiskUsed), formatBytesLog(targetStorageInfo.Available)))
-			} else {
-				handleError("preflight", fmt.Errorf("nicht genügend Speicherplatz auf '%s': benötigt ~%s, verfügbar %s",
-					m.TargetStorage, formatBytesLog(vmDiskUsed), formatBytesLog(targetStorageInfo.Available)))
-				return
-			}
-		} else {
-			s.broadcastLog(m.ID, fmt.Sprintf("✓ Genügend Speicherplatz auf Ziel: benötigt ~%s, verfügbar %s",
-				formatBytesLog(vmDiskUsed), formatBytesLog(targetStorageInfo.Available)))
-		}
-	}
+	// NOTE: target storage space check disabled — Proxmox-reported sizes are unreliable
+	// (especially for LVM-thin pools) and the actual vzdump restore determines fit at runtime.
+	s.broadcastLog(m.ID, fmt.Sprintf("Zielspeicher '%s': %s frei (Speicherplatz-Prüfung deaktiviert)",
+		m.TargetStorage, formatBytesLog(targetStorageInfo.Available)))
 
 	// 4. Find a vzdump-capable storage on source with enough real disk space
 	s.broadcastLog(m.ID, "Suche Vzdump-Storage mit genug Speicherplatz auf Source...")

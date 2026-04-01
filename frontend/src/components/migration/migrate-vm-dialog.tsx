@@ -26,7 +26,6 @@ import {
   MemoryStick,
   Tag,
   CheckCircle2,
-  AlertTriangle,
 } from "lucide-react";
 
 interface MigrateVmDialogProps {
@@ -85,7 +84,7 @@ export function MigrateVmDialog({
   sourceNodeId,
   sourceNodeName,
 }: MigrateVmDialogProps) {
-  const { nodes, nodeStatus } = useNodeStore();
+  const { nodes } = useNodeStore();
   const { startMigration } = useMigrationStore();
 
   const [step, setStep] = useState<Step>("target");
@@ -94,16 +93,10 @@ export function MigrateVmDialog({
   const [storages, setStorages] = useState<StorageOption[]>([]);
   const [loadingStorages, setLoadingStorages] = useState(false);
   const [storageError, setStorageError] = useState("");
-  const [targetResources, setTargetResources] = useState<{
-    cpuFree: number;
-    memFree: number;
-    memTotal: number;
-  } | null>(null);
   const [mode, setMode] = useState<MigrationMode>("snapshot");
   const [newVmid, setNewVmid] = useState<string>("");
   const [cleanupSource, setCleanupSource] = useState(true);
   const [cleanupTarget, setCleanupTarget] = useState(true);
-  const [overrideStorageCheck, setOverrideStorageCheck] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -121,7 +114,6 @@ export function MigrateVmDialog({
       setStorages([]);
       setMode("snapshot");
       setNewVmid("");
-      setOverrideStorageCheck(false);
       setError("");
       setStorageError("");
     }
@@ -168,21 +160,6 @@ export function MigrateVmDialog({
   }, [targetNodeId]);
 
   // Load target node resources when target is selected
-  useEffect(() => {
-    if (!targetNodeId) {
-      setTargetResources(null);
-      return;
-    }
-    const st = nodeStatus[targetNodeId];
-    if (st) {
-      setTargetResources({
-        cpuFree: 100 - st.cpu_usage,
-        memFree: st.memory_total - st.memory_used,
-        memTotal: st.memory_total,
-      });
-    }
-  }, [targetNodeId, nodeStatus]);
-
   // Filter storages: only those that can hold VM images/rootdir
   const vmStorages = useMemo(() => {
     const contentNeeded = vm.type === "lxc" ? "rootdir" : "images";
@@ -210,12 +187,6 @@ export function MigrateVmDialog({
 
   const targetNode = nodes.find((n) => n.id === targetNodeId);
   const selectedStorage = vmStorages.find((s) => s.storage === targetStorage);
-  const vmDiskSize = vm.disk_total || 0;
-  // disk_total is 0 for stopped VMs (Proxmox reports Disk=0 without guest agent).
-  // The backend reads the real size from VM config, so the check may still fail.
-  const diskSizeUnknown = vmDiskSize === 0 && !!selectedStorage;
-  const hasEnoughSpace =
-    !selectedStorage || diskSizeUnknown || selectedStorage.available >= vmDiskSize;
 
   const handleSubmit = async () => {
     setSubmitting(true);
@@ -230,7 +201,6 @@ export function MigrateVmDialog({
         new_vmid: newVmid ? parseInt(newVmid) : undefined,
         cleanup_source: cleanupSource,
         cleanup_target: cleanupTarget,
-        override_storage_check: overrideStorageCheck,
       });
       onOpenChange(false);
     } catch (err: unknown) {
@@ -420,7 +390,6 @@ export function MigrateVmDialog({
               <div className="grid gap-2">
                 {vmStorages.map((s) => {
                   const isSuggested = s.storage === suggestedStorage;
-                  const tooSmall = vmDiskSize > 0 && s.available < vmDiskSize;
                   return (
                     <button
                       key={s.storage}
@@ -439,10 +408,7 @@ export function MigrateVmDialog({
                             {s.type}
                           </Badge>
                           {s.shared && (
-                            <Badge
-                              variant="secondary"
-                              className="text-xs"
-                            >
+                            <Badge variant="secondary" className="text-xs">
                               shared
                             </Badge>
                           )}
@@ -456,25 +422,9 @@ export function MigrateVmDialog({
                           {s.content}
                         </p>
                       </div>
-                      <div className="text-right text-xs">
-                        <p
-                          className={
-                            tooSmall
-                              ? "text-destructive font-medium"
-                              : "text-muted-foreground"
-                          }
-                        >
-                          {formatBytes(s.available)} frei
-                        </p>
-                        <p className="text-muted-foreground">
-                          {formatBytes(s.used)} / {formatBytes(s.total)}
-                        </p>
-                        {tooSmall && (
-                          <p className="text-destructive text-xs mt-0.5 flex items-center gap-1">
-                            <AlertTriangle className="h-3 w-3" />
-                            Zu wenig Platz
-                          </p>
-                        )}
+                      <div className="text-right text-xs text-muted-foreground">
+                        <p>{formatBytes(s.available)} frei</p>
+                        <p>{formatBytes(s.used)} / {formatBytes(s.total)}</p>
                       </div>
                     </button>
                   );
@@ -628,38 +578,6 @@ export function MigrateVmDialog({
               )}
             </div>
 
-            {targetResources && vm.memory_total > targetResources.memFree && (
-              <div className="flex items-center gap-2 text-sm text-amber-600 bg-amber-50 dark:bg-amber-950/30 rounded-lg p-3">
-                <AlertTriangle className="h-4 w-4 flex-shrink-0" />
-                <span>
-                  Ziel-Node hat möglicherweise nicht genug RAM (
-                  {formatBytes(targetResources.memFree)} frei, VM benötigt{" "}
-                  {formatBytes(vm.memory_total)}).
-                </span>
-              </div>
-            )}
-
-            {(!hasEnoughSpace || diskSizeUnknown) && (
-              <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 p-3 space-y-2">
-                <div className="flex items-center gap-2 text-sm text-amber-600">
-                  <AlertTriangle className="h-4 w-4 flex-shrink-0" />
-                  <span>
-                    {diskSizeUnknown
-                      ? `VM-Disk-Größe unbekannt (VM gestoppt). Backend prüft die tatsächliche Größe — verfügbar: ${formatBytes(selectedStorage?.available ?? 0)}.`
-                      : `Ziel-Storage hat möglicherweise nicht genug Platz (${formatBytes(selectedStorage?.available ?? 0)} frei, ${formatBytes(vmDiskSize)} benötigt). Mit vzdump-Komprimierung kann der tatsächliche Bedarf deutlich geringer sein.`}
-                  </span>
-                </div>
-                <label className="flex items-center gap-2 text-sm text-amber-700 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={overrideStorageCheck}
-                    onChange={(e) => setOverrideStorageCheck(e.target.checked)}
-                    className="rounded"
-                  />
-                  Speicherplatz-Prüfung überschreiben und trotzdem fortfahren
-                </label>
-              </div>
-            )}
 
             {mode === "stop" && (
               <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-50 dark:bg-amber-950/30 rounded-lg p-2">
@@ -669,13 +587,10 @@ export function MigrateVmDialog({
               </div>
             )}
 
-            {hasEnoughSpace && !diskSizeUnknown && (
-              <div className="flex items-center gap-2 text-xs text-green-600">
-                <CheckCircle2 className="h-3.5 w-3.5" />
-                Alle Voraussetzungen erfuellt. Tags und Konfiguration werden
-                übernommen.
-              </div>
-            )}
+            <div className="flex items-center gap-2 text-xs text-green-600">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              Tags und Konfiguration werden übernommen.
+            </div>
 
             {error && (
               <p className="text-sm text-destructive">{error}</p>
@@ -687,7 +602,7 @@ export function MigrateVmDialog({
               </Button>
               <Button
                 onClick={handleSubmit}
-                disabled={submitting || (!hasEnoughSpace && !diskSizeUnknown && !overrideStorageCheck)}
+                disabled={submitting}
               >
                 {submitting && (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
