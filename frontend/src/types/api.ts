@@ -46,6 +46,39 @@ export interface UserResponse {
   last_login?: string | null;
 }
 
+export interface UserInvitation {
+  id: string;
+  username: string;
+  email: string;
+  role: string;
+  token_prefix: string;
+  expires_at: string;
+  accepted_at?: string | null;
+  created_by: string;
+  created_at: string;
+}
+
+export interface CreateUserInvitationRequest {
+  username: string;
+  email?: string;
+  role: string;
+  expires_in_hours?: number;
+}
+
+export interface CreateUserInvitationResponse {
+  invitation: UserInvitation;
+  token: string;
+}
+
+export interface UserSession {
+  id: string;
+  user_id: string;
+  expires_at: string;
+  created_at: string;
+  revoked: boolean;
+  is_active: boolean;
+}
+
 export interface CreateUserRequest {
   username: string;
   email?: string;
@@ -91,6 +124,7 @@ export interface Node {
   port: number;
   is_online: boolean;
   last_seen?: string | null;
+  environment_id?: string | null;
   metadata?: Record<string, unknown>;
   created_at: string;
   updated_at: string;
@@ -1081,6 +1115,13 @@ export interface AuditLogEntry {
   status_code: number;
   ip_address?: string;
   user_agent?: string;
+  request_body?: {
+    critical?: boolean;
+    category?: string;
+    action?: string;
+    risk?: "low" | "medium" | "high" | string;
+    success?: boolean;
+  } | null;
   duration_ms: number;
   created_at: string;
 }
@@ -1209,7 +1250,7 @@ export interface SecurityStats {
 export interface VMPermission {
   id: string;
   user_id: string;
-  target_type: "vm" | "group";
+  target_type: "vm" | "group" | "node" | "environment";
   target_id: string;
   node_id: string;
   permissions: string[];
@@ -1398,4 +1439,100 @@ export interface VMDependency {
   target_vm_type?: string;
   source_status?: string;
   target_status?: string;
+}
+
+// Operations aggregation types (Phase 6)
+export interface OperationTask {
+  id: string;
+  type: "migration" | "backup" | "incident" | "notification" | string;
+  title: string;
+  detail: string;
+  status: "running" | "pending" | "failed" | "completed" | "warning" | string;
+  severity: "info" | "warning" | "critical" | string;
+  progress: number;
+  entity_id?: string;
+  node_id?: string;
+  href: string;
+  due_at?: string;
+  created_at: string;
+}
+
+export interface TimelineEvent {
+  id: string;
+  source: string;
+  severity: "info" | "warning" | "critical" | string;
+  title: string;
+  detail: string;
+  actor: string;
+  entity_id?: string;
+  node_id?: string;
+  href: string;
+  created_at: string;
+}
+
+export interface RCACandidate {
+  id: string;
+  title: string;
+  severity: "info" | "warning" | "critical" | string;
+  node_id?: string;
+  evidence: string[];
+  recommendation: string;
+  href: string;
+}
+
+export interface RCAAnalyzeResponse {
+  summary: string;
+  model_used?: string;
+  candidates: RCACandidate[];
+  timeline: TimelineEvent[];
+  generated_at: string;
+}
+
+export interface KnowledgeGraphNode {
+  id: string;
+  type: string;
+  label: string;
+  status?: string;
+  node_id?: string;
+  metadata?: Record<string, string>;
+}
+
+export interface KnowledgeGraphEdge {
+  id: string;
+  from: string;
+  to: string;
+  type: string;
+  label?: string;
+  status?: string;
+}
+
+export interface KnowledgeGraphResponse {
+  nodes: KnowledgeGraphNode[];
+  edges: KnowledgeGraphEdge[];
+  stats: {
+    nodes: number;
+    vms: number;
+    devices: number;
+    services: number;
+    dependencies: number;
+  };
+  generated_at: string;
+}
+
+export interface OperationsReportResponse {
+  text: string;
+  model_used?: string;
+  counts: Record<string, number>;
+  generated_at: string;
+}
+
+export interface LogAnalysis {
+  id: string;
+  node_ids: string[];
+  time_from: string;
+  time_to: string;
+  report_json: unknown;
+  model_used: string;
+  schedule_id?: string;
+  created_at: string;
 }

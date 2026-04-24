@@ -17,6 +17,7 @@ type LogAnalysisRepository interface {
 	Create(ctx context.Context, analysis *model.LogAnalysis) error
 	GetByID(ctx context.Context, id uuid.UUID) (*model.LogAnalysis, error)
 	ListByNodes(ctx context.Context, nodeIDs []uuid.UUID, limit, offset int) ([]model.LogAnalysis, error)
+	ListFiltered(ctx context.Context, filter model.QueryFilter, scheduleID *uuid.UUID, nodeIDs []uuid.UUID) ([]model.LogAnalysis, error)
 	DeleteOlderThan(ctx context.Context, before time.Time) (int64, error)
 }
 
@@ -79,6 +80,54 @@ func (r *pgLogAnalysisRepository) ListByNodes(ctx context.Context, nodeIDs []uui
 	}
 	defer rows.Close()
 
+	var analyses []model.LogAnalysis
+	for rows.Next() {
+		var a model.LogAnalysis
+		if err := rows.Scan(&a.ID, &a.NodeIDs, &a.TimeFrom, &a.TimeTo, &a.ReportJSON, &a.ModelUsed, &a.ScheduleID, &a.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan log analysis: %w", err)
+		}
+		analyses = append(analyses, a)
+	}
+	return analyses, rows.Err()
+}
+
+func (r *pgLogAnalysisRepository) ListFiltered(ctx context.Context, filter model.QueryFilter, scheduleID *uuid.UUID, nodeIDs []uuid.UUID) ([]model.LogAnalysis, error) {
+	limit := filter.NormalizedLimit(50, 300)
+	if len(nodeIDs) == 0 {
+		rows, err := r.db.Query(ctx,
+			`SELECT id, node_ids, time_from, time_to, report_json, model_used, schedule_id, created_at
+			 FROM log_analyses
+			 WHERE ($1::timestamptz IS NULL OR created_at >= $1)
+			   AND ($2::timestamptz IS NULL OR created_at <= $2)
+			   AND ($3::uuid IS NULL OR schedule_id = $3)
+			   AND ($4 = '' OR model_used ILIKE '%' || $4 || '%' OR report_json::text ILIKE '%' || $4 || '%')
+			 ORDER BY created_at DESC LIMIT $5 OFFSET $6`,
+			filter.From, filter.To, scheduleID, filter.Query, limit, filter.Offset)
+		if err != nil {
+			return nil, fmt.Errorf("list filtered log analyses: %w", err)
+		}
+		defer rows.Close()
+		return scanLogAnalyses(rows)
+	}
+
+	rows, err := r.db.Query(ctx,
+		`SELECT id, node_ids, time_from, time_to, report_json, model_used, schedule_id, created_at
+		 FROM log_analyses
+		 WHERE node_ids && $1::uuid[]
+		   AND ($2::timestamptz IS NULL OR created_at >= $2)
+		   AND ($3::timestamptz IS NULL OR created_at <= $3)
+		   AND ($4::uuid IS NULL OR schedule_id = $4)
+		   AND ($5 = '' OR model_used ILIKE '%' || $5 || '%' OR report_json::text ILIKE '%' || $5 || '%')
+		 ORDER BY created_at DESC LIMIT $6 OFFSET $7`,
+		nodeIDs, filter.From, filter.To, scheduleID, filter.Query, limit, filter.Offset)
+	if err != nil {
+		return nil, fmt.Errorf("list filtered log analyses: %w", err)
+	}
+	defer rows.Close()
+	return scanLogAnalyses(rows)
+}
+
+func scanLogAnalyses(rows pgx.Rows) ([]model.LogAnalysis, error) {
 	var analyses []model.LogAnalysis
 	for rows.Next() {
 		var a model.LogAnalysis

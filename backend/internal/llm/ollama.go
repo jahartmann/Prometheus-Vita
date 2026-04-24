@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sync"
 	"time"
 )
 
@@ -17,6 +18,7 @@ type ModelInfo struct {
 }
 
 type OllamaProvider struct {
+	mu      sync.RWMutex
 	baseURL string
 	client  *http.Client
 }
@@ -131,7 +133,7 @@ func (p *OllamaProvider) Complete(ctx context.Context, req CompletionRequest) (*
 		return nil, fmt.Errorf("marshal ollama request: %w", err)
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, p.baseURL+"/api/chat", bytes.NewReader(body))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, p.BaseURL()+"/api/chat", bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("create ollama request: %w", err)
 	}
@@ -186,15 +188,19 @@ func (p *OllamaProvider) Complete(ctx context.Context, req CompletionRequest) (*
 }
 
 func (p *OllamaProvider) SetBaseURL(url string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	p.baseURL = url
 }
 
 func (p *OllamaProvider) BaseURL() string {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
 	return p.baseURL
 }
 
 func (p *OllamaProvider) DiscoverModels(ctx context.Context) ([]ModelInfo, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.baseURL+"/api/tags", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.BaseURL()+"/api/tags", nil)
 	if err != nil {
 		return nil, fmt.Errorf("create discover request: %w", err)
 	}

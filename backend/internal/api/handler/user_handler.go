@@ -66,6 +66,74 @@ func (h *UserHandler) Create(c echo.Context) error {
 	return apiPkg.Created(c, user)
 }
 
+func (h *UserHandler) ListInvitations(c echo.Context) error {
+	invitations, err := h.service.ListInvitations(c.Request().Context())
+	if err != nil {
+		return apiPkg.InternalError(c, "failed to list invitations")
+	}
+	return apiPkg.Success(c, invitations)
+}
+
+func (h *UserHandler) CreateInvitation(c echo.Context) error {
+	var req model.CreateUserInvitationRequest
+	if err := c.Bind(&req); err != nil {
+		return apiPkg.BadRequest(c, "invalid request body")
+	}
+	if req.Username == "" {
+		return apiPkg.BadRequest(c, "username is required")
+	}
+	if !req.Role.IsValid() {
+		return apiPkg.BadRequest(c, "role must be 'admin', 'operator', or 'viewer'")
+	}
+	currentUserID, ok := c.Get(middleware.ContextKeyUserID).(uuid.UUID)
+	if !ok {
+		return apiPkg.Unauthorized(c, "user not found in context")
+	}
+	resp, err := h.service.CreateInvitation(c.Request().Context(), req, currentUserID)
+	if err != nil {
+		if errors.Is(err, userService.ErrUsernameTaken) {
+			return apiPkg.BadRequest(c, "username already taken")
+		}
+		return apiPkg.InternalError(c, "failed to create invitation")
+	}
+	return apiPkg.Created(c, resp)
+}
+
+func (h *UserHandler) DeleteInvitation(c echo.Context) error {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return apiPkg.BadRequest(c, "invalid invitation id")
+	}
+	if err := h.service.DeleteInvitation(c.Request().Context(), id); err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return apiPkg.NotFound(c, "invitation not found")
+		}
+		return apiPkg.InternalError(c, "failed to delete invitation")
+	}
+	return apiPkg.NoContent(c)
+}
+
+func (h *UserHandler) AcceptInvitation(c echo.Context) error {
+	var req model.AcceptUserInvitationRequest
+	if err := c.Bind(&req); err != nil {
+		return apiPkg.BadRequest(c, "invalid request body")
+	}
+	user, err := h.service.AcceptInvitation(c.Request().Context(), req)
+	if err != nil {
+		if errors.Is(err, userService.ErrInvitationInvalid) {
+			return apiPkg.BadRequest(c, "invitation is invalid")
+		}
+		if errors.Is(err, userService.ErrInvitationExpired) {
+			return apiPkg.BadRequest(c, "invitation is expired")
+		}
+		if errors.Is(err, userService.ErrUsernameTaken) {
+			return apiPkg.BadRequest(c, "username already taken")
+		}
+		return apiPkg.InternalError(c, "failed to accept invitation")
+	}
+	return apiPkg.Created(c, user)
+}
+
 func (h *UserHandler) Update(c echo.Context) error {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -88,6 +156,59 @@ func (h *UserHandler) Update(c echo.Context) error {
 		return apiPkg.InternalError(c, "failed to update user")
 	}
 	return apiPkg.Success(c, user)
+}
+
+func (h *UserHandler) ListSessions(c echo.Context) error {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return apiPkg.BadRequest(c, "invalid user id")
+	}
+	sessions, err := h.service.ListSessions(c.Request().Context(), id)
+	if err != nil {
+		return apiPkg.InternalError(c, "failed to list sessions")
+	}
+	return apiPkg.Success(c, sessions)
+}
+
+func (h *UserHandler) RevokeSession(c echo.Context) error {
+	userID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return apiPkg.BadRequest(c, "invalid user id")
+	}
+	sessionID, err := uuid.Parse(c.Param("sessionId"))
+	if err != nil {
+		return apiPkg.BadRequest(c, "invalid session id")
+	}
+	if err := h.service.RevokeSession(c.Request().Context(), userID, sessionID); err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return apiPkg.NotFound(c, "session not found")
+		}
+		return apiPkg.InternalError(c, "failed to revoke session")
+	}
+	return apiPkg.Success(c, map[string]string{"status": "revoked"})
+}
+
+func (h *UserHandler) RevokeAllAccess(c echo.Context) error {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return apiPkg.BadRequest(c, "invalid user id")
+	}
+	if err := h.service.RevokeAllAccess(c.Request().Context(), id); err != nil {
+		return apiPkg.InternalError(c, "failed to revoke access")
+	}
+	return apiPkg.Success(c, map[string]string{"status": "revoked"})
+}
+
+func (h *UserHandler) ListAPITokens(c echo.Context) error {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return apiPkg.BadRequest(c, "invalid user id")
+	}
+	tokens, err := h.service.ListAPITokens(c.Request().Context(), id)
+	if err != nil {
+		return apiPkg.InternalError(c, "failed to list api tokens")
+	}
+	return apiPkg.Success(c, tokens)
 }
 
 func (h *UserHandler) Delete(c echo.Context) error {

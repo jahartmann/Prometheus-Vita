@@ -25,7 +25,7 @@ func buildSystemPrompt(autonomyLevel int) string {
 	case model.AutonomyConfirm:
 		autonomyDesc = "Dein Autonomie-Level ist 'Mit Bestaetigung'. Schreibende Aktionen erfordern eine Genehmigung des Benutzers."
 	case model.AutonomyFullAuto:
-		autonomyDesc = "Dein Autonomie-Level ist 'Voll-Automatisch'. Du darfst alle Aktionen sofort ausfuehren."
+		autonomyDesc = "Dein Autonomie-Level ist 'Voll-Automatisch'. Du darfst nur explizit erlaubte risikoarme Aktionen sofort ausfuehren. Mittlere, hohe und kritische Aktionen benoetigen weiterhin eine Genehmigung."
 	}
 
 	return fmt.Sprintf(`Du bist Prometheus, ein autonomer KI-Assistent fuer Proxmox-Infrastruktur-Management.
@@ -60,6 +60,7 @@ type Service struct {
 	toolCallRepo    repository.ToolCallRepository
 	approvalRepo    repository.ApprovalRepository
 	userRepo        repository.UserRepository
+	rolePermissionRepo repository.RolePermissionRepository
 	agentConfigRepo repository.AgentConfigRepository
 }
 
@@ -71,6 +72,7 @@ func NewService(
 	toolCallRepo repository.ToolCallRepository,
 	approvalRepo repository.ApprovalRepository,
 	userRepo repository.UserRepository,
+	rolePermissionRepo repository.RolePermissionRepository,
 	agentConfigRepo repository.AgentConfigRepository,
 ) *Service {
 	return &Service{
@@ -81,12 +83,17 @@ func NewService(
 		toolCallRepo:    toolCallRepo,
 		approvalRepo:    approvalRepo,
 		userRepo:        userRepo,
+		rolePermissionRepo: rolePermissionRepo,
 		agentConfigRepo: agentConfigRepo,
 	}
 }
 
 func (s *Service) GetTool(name string) (Tool, bool) {
 	return s.toolRegistry.Get(name)
+}
+
+func (s *Service) ToolCatalog() []ToolCatalogEntry {
+	return s.toolRegistry.SecurityCatalog()
 }
 
 // getConfiguredModel reads the model from agent_config table. Returns empty string if not configured.
@@ -99,6 +106,67 @@ func (s *Service) getConfiguredModel(ctx context.Context) string {
 		return ""
 	}
 	return model
+}
+
+func (s *Service) getAgentConfigBool(ctx context.Context, key string, fallback bool) bool {
+	if s.agentConfigRepo == nil {
+		return fallback
+	}
+	value, err := s.agentConfigRepo.Get(ctx, key)
+	if err != nil {
+		return fallback
+	}
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "true", "1", "yes", "on":
+		return true
+	case "false", "0", "no", "off":
+		return false
+	default:
+		return fallback
+	}
+}
+
+func (s *Service) toolRequiresApproval(ctx context.Context, autonomyLevel int, tool Tool, security ToolSecurity) bool {
+	if tool.ReadOnly() {
+		return s.getAgentConfigBool(ctx, "agent_approval_low_risk", false) && security.Risk == ToolRiskLow
+	}
+	switch autonomyLevel {
+	case model.AutonomyReadOnly:
+		return false
+	case model.AutonomyConfirm:
+		return true
+	case model.AutonomyFullAuto:
+		if security.Risk == ToolRiskLow {
+			if s.getAgentConfigBool(ctx, "agent_full_auto_allow_low_risk", false) {
+				return s.getAgentConfigBool(ctx, "agent_approval_low_risk", false)
+			}
+			return true
+		}
+		return true
+	}
+	switch security.Risk {
+	case ToolRiskLow:
+		return s.getAgentConfigBool(ctx, "agent_approval_low_risk", false)
+	case ToolRiskMedium:
+		return s.getAgentConfigBool(ctx, "agent_approval_medium_risk", true)
+	case ToolRiskHigh:
+		return s.getAgentConfigBool(ctx, "agent_approval_high_risk", true)
+	default:
+		return s.getAgentConfigBool(ctx, "agent_approval_critical_risk", true)
+	}
+}
+
+func (s *Service) userAllowsTool(ctx context.Context, user *model.User, permission model.Permission) bool {
+	if user.Role == model.RoleAdmin {
+		return true
+	}
+	permissions := model.RolePermissions(user.Role)
+	if s.rolePermissionRepo != nil {
+		if override, err := s.rolePermissionRepo.Get(ctx, user.Role); err == nil {
+			permissions = override.Permissions
+		}
+	}
+	return model.NewPermissionSet(permissions).Allows(permission)
 }
 
 func (s *Service) Chat(ctx context.Context, userID uuid.UUID, req model.ChatRequest) (*model.ChatResponse, error) {
@@ -314,39 +382,93 @@ func (s *Service) executeTool(ctx context.Context, userID uuid.UUID, convID uuid
 		return fmt.Sprintf(`{"error": "Tool '%s' nicht gefunden"}`, tc.Function.Name)
 	}
 
-	// Check autonomy level for write tools
-	if !tool.ReadOnly() {
-		user, err := s.userRepo.GetByID(ctx, userID)
-		if err == nil {
-			switch user.AutonomyLevel {
-			case model.AutonomyReadOnly:
-				return `{"error": "Dein Autonomie-Level erlaubt keine schreibenden Operationen. Bitte erhoehe das Level in den Einstellungen."}`
-			case model.AutonomyConfirm:
-				// Create pending approval
-				approval := &model.AgentPendingApproval{
-					UserID:         userID,
-					ConversationID: convID,
-					MessageID:      msgID,
-					ToolName:       tc.Function.Name,
-					Arguments:      json.RawMessage(tc.Function.Arguments),
-					Status:         model.ApprovalPending,
-				}
-				if s.approvalRepo != nil {
-					if err := s.approvalRepo.Create(ctx, approval); err != nil {
-						slog.Warn("failed to create approval", slog.Any("error", err))
-					}
-				}
-				return fmt.Sprintf(`{"pending_approval": true, "approval_id": "%s", "message": "Diese Aktion erfordert eine Genehmigung. Bitte genehmige sie im Approval-Bereich."}`, approval.ID.String())
-			// AutonomyFullAuto: fall through to execute
-			}
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return `{"error": "Benutzer konnte nicht geladen werden"}`
+	}
+	security := securityForTool(tool)
+	if !s.userAllowsTool(ctx, user, security.Permission) {
+		result := map[string]interface{}{
+			"error":               "Berechtigung fuer Agent-Tool fehlt",
+			"required_permission": security.Permission,
+			"risk":                security.Risk,
 		}
+		s.recordToolCall(ctx, msgID, tc.Function.Name, json.RawMessage(tc.Function.Arguments), result, "denied", 0, allToolCalls)
+		raw, _ := json.Marshal(result)
+		return string(raw)
 	}
 
-	// Create tool call record
+	if !tool.ReadOnly() && user.AutonomyLevel == model.AutonomyReadOnly {
+		result := map[string]interface{}{
+			"error": "Dein Autonomie-Level erlaubt keine schreibenden Operationen.",
+			"risk":  security.Risk,
+		}
+		s.recordToolCall(ctx, msgID, tc.Function.Name, json.RawMessage(tc.Function.Arguments), result, "denied", 0, allToolCalls)
+		raw, _ := json.Marshal(result)
+		return string(raw)
+	}
+
+	if s.toolRequiresApproval(ctx, user.AutonomyLevel, tool, security) {
+		approval := &model.AgentPendingApproval{
+			UserID:         userID,
+			ConversationID: convID,
+			MessageID:      msgID,
+			ToolName:       tc.Function.Name,
+			Arguments:      json.RawMessage(tc.Function.Arguments),
+			Status:         model.ApprovalPending,
+		}
+		if s.approvalRepo != nil {
+			if err := s.approvalRepo.Create(ctx, approval); err != nil {
+				slog.Warn("failed to create approval", slog.Any("error", err))
+			}
+		}
+		result := map[string]interface{}{
+			"pending_approval":    true,
+			"approval_id":         approval.ID.String(),
+			"risk":                security.Risk,
+			"required_permission": security.Permission,
+			"supports_dry_run":    toolSupportsDryRun(tool),
+			"message":             "Diese Agent-Aktion erfordert eine Genehmigung im Approval-Bereich.",
+		}
+		if previewTool, ok := tool.(DryRunTool); ok {
+			if preview, err := previewTool.Preview(ctx, json.RawMessage(tc.Function.Arguments)); err == nil {
+				result["preview"] = json.RawMessage(preview)
+			}
+		}
+		s.recordToolCall(ctx, msgID, tc.Function.Name, json.RawMessage(tc.Function.Arguments), result, "pending_approval", 0, allToolCalls)
+		raw, _ := json.Marshal(result)
+		return string(raw)
+	}
+
+	resultStr, agentTC := s.executeToolDirect(ctx, msgID, tc.Function.Name, tool, json.RawMessage(tc.Function.Arguments))
+	if agentTC != nil {
+		*allToolCalls = append(*allToolCalls, *agentTC)
+	}
+	return resultStr
+}
+
+func (s *Service) ExecuteApprovedTool(ctx context.Context, userID uuid.UUID, approval *model.AgentPendingApproval) (json.RawMessage, error) {
+	tool, ok := s.toolRegistry.Get(approval.ToolName)
+	if !ok {
+		return nil, fmt.Errorf("tool not found")
+	}
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	security := securityForTool(tool)
+	if !s.userAllowsTool(ctx, user, security.Permission) {
+		return nil, fmt.Errorf("required permission missing: %s", security.Permission)
+	}
+	resultStr, _ := s.executeToolDirect(ctx, approval.MessageID, approval.ToolName, tool, approval.Arguments)
+	return json.RawMessage(resultStr), nil
+}
+
+func (s *Service) executeToolDirect(ctx context.Context, msgID uuid.UUID, toolName string, tool Tool, args json.RawMessage) (string, *model.AgentToolCall) {
 	agentTC := &model.AgentToolCall{
 		MessageID: msgID,
-		ToolName:  tc.Function.Name,
-		Arguments: json.RawMessage(tc.Function.Arguments),
+		ToolName:  toolName,
+		Arguments: args,
 		Status:    "running",
 	}
 	if err := s.toolCallRepo.Create(ctx, agentTC); err != nil {
@@ -354,7 +476,7 @@ func (s *Service) executeTool(ctx context.Context, userID uuid.UUID, convID uuid
 	}
 
 	start := time.Now()
-	result, err := tool.Execute(ctx, json.RawMessage(tc.Function.Arguments))
+	result, err := tool.Execute(ctx, args)
 	duration := time.Since(start)
 	durationMs := int(duration.Milliseconds())
 
@@ -386,9 +508,30 @@ func (s *Service) executeTool(ctx context.Context, userID uuid.UUID, convID uuid
 	agentTC.Result = resultJSON
 	agentTC.Status = status
 	agentTC.DurationMs = durationMs
-	*allToolCalls = append(*allToolCalls, *agentTC)
 
-	return resultStr
+	return resultStr, agentTC
+}
+
+func (s *Service) recordToolCall(ctx context.Context, msgID uuid.UUID, toolName string, args json.RawMessage, result map[string]interface{}, status string, durationMs int, allToolCalls *[]model.AgentToolCall) {
+	resultJSON, _ := json.Marshal(result)
+	agentTC := &model.AgentToolCall{
+		MessageID:  msgID,
+		ToolName:   toolName,
+		Arguments:  args,
+		Result:     resultJSON,
+		Status:     status,
+		DurationMs: durationMs,
+	}
+	if err := s.toolCallRepo.Create(ctx, agentTC); err != nil {
+		slog.Warn("failed to create tool call record", slog.Any("error", err))
+		return
+	}
+	if err := s.toolCallRepo.UpdateResult(ctx, agentTC.ID, resultJSON, status, durationMs); err != nil {
+		slog.Warn("failed to update tool call result", slog.Any("error", err))
+	}
+	if allToolCalls != nil {
+		*allToolCalls = append(*allToolCalls, *agentTC)
+	}
 }
 
 func (s *Service) autoGenerateTitle(ctx context.Context, convID uuid.UUID, firstMessage string) {

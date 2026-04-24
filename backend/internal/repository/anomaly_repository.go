@@ -16,6 +16,7 @@ type AnomalyRepository interface {
 	GetByID(ctx context.Context, id uuid.UUID) (*model.AnomalyRecord, error)
 	ListUnresolved(ctx context.Context) ([]model.AnomalyRecord, error)
 	ListByNode(ctx context.Context, nodeID uuid.UUID) ([]model.AnomalyRecord, error)
+	ListFiltered(ctx context.Context, filter model.QueryFilter) ([]model.AnomalyRecord, error)
 	Resolve(ctx context.Context, id uuid.UUID) error
 }
 
@@ -93,6 +94,37 @@ func (r *pgAnomalyRepository) ListByNode(ctx context.Context, nodeID uuid.UUID) 
 		if err := rows.Scan(&a.ID, &a.NodeID, &a.Metric, &a.Value, &a.ZScore, &a.Mean, &a.StdDev,
 			&a.Severity, &a.IsResolved, &a.DetectedAt, &a.ResolvedAt); err != nil {
 			return nil, fmt.Errorf("scan anomaly: %w", err)
+		}
+		records = append(records, a)
+	}
+	return records, rows.Err()
+}
+
+func (r *pgAnomalyRepository) ListFiltered(ctx context.Context, filter model.QueryFilter) ([]model.AnomalyRecord, error) {
+	limit := filter.NormalizedLimit(100, 500)
+	rows, err := r.db.Query(ctx,
+		`SELECT id, node_id, metric, value, z_score, mean, stddev, severity, is_resolved, detected_at, resolved_at
+		 FROM anomaly_records
+		 WHERE ($1::timestamptz IS NULL OR detected_at >= $1)
+		   AND ($2::timestamptz IS NULL OR detected_at <= $2)
+		   AND ($3::uuid IS NULL OR node_id = $3)
+		   AND ($4 = '' OR $4 = 'all' OR severity = $4)
+		   AND ($5 = '' OR $5 = 'all' OR ($5 = 'resolved' AND is_resolved = true) OR ($5 = 'open' AND is_resolved = false) OR ($5 = 'unresolved' AND is_resolved = false))
+		   AND ($6 = '' OR metric ILIKE '%' || $6 || '%')
+		 ORDER BY detected_at DESC
+		 LIMIT $7 OFFSET $8`,
+		filter.From, filter.To, filter.NodeID, filter.Severity, filter.Status, filter.Query, limit, filter.Offset)
+	if err != nil {
+		return nil, fmt.Errorf("list filtered anomalies: %w", err)
+	}
+	defer rows.Close()
+
+	var records []model.AnomalyRecord
+	for rows.Next() {
+		var a model.AnomalyRecord
+		if err := rows.Scan(&a.ID, &a.NodeID, &a.Metric, &a.Value, &a.ZScore, &a.Mean, &a.StdDev,
+			&a.Severity, &a.IsResolved, &a.DetectedAt, &a.ResolvedAt); err != nil {
+			return nil, fmt.Errorf("scan filtered anomaly: %w", err)
 		}
 		records = append(records, a)
 	}

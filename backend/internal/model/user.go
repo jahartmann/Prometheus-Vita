@@ -113,6 +113,71 @@ func (u *User) ToResponse() UserResponse {
 	}
 }
 
+type UserInvitation struct {
+	ID          uuid.UUID  `json:"id"`
+	Username    string     `json:"username"`
+	Email       string     `json:"email"`
+	Role        UserRole   `json:"role"`
+	TokenHash   string     `json:"-"`
+	TokenPrefix string     `json:"token_prefix"`
+	ExpiresAt   time.Time  `json:"expires_at"`
+	AcceptedAt  *time.Time `json:"accepted_at,omitempty"`
+	CreatedBy   uuid.UUID  `json:"created_by"`
+	CreatedAt   time.Time  `json:"created_at"`
+}
+
+type UserInvitationResponse struct {
+	ID          uuid.UUID  `json:"id"`
+	Username    string     `json:"username"`
+	Email       string     `json:"email"`
+	Role        UserRole   `json:"role"`
+	TokenPrefix string     `json:"token_prefix"`
+	ExpiresAt   time.Time  `json:"expires_at"`
+	AcceptedAt  *time.Time `json:"accepted_at,omitempty"`
+	CreatedBy   uuid.UUID  `json:"created_by"`
+	CreatedAt   time.Time  `json:"created_at"`
+}
+
+func (i *UserInvitation) ToResponse() UserInvitationResponse {
+	return UserInvitationResponse{
+		ID:          i.ID,
+		Username:    i.Username,
+		Email:       i.Email,
+		Role:        i.Role,
+		TokenPrefix: i.TokenPrefix,
+		ExpiresAt:   i.ExpiresAt,
+		AcceptedAt:  i.AcceptedAt,
+		CreatedBy:   i.CreatedBy,
+		CreatedAt:   i.CreatedAt,
+	}
+}
+
+type CreateUserInvitationRequest struct {
+	Username       string   `json:"username" validate:"required"`
+	Email          string   `json:"email"`
+	Role           UserRole `json:"role" validate:"required"`
+	ExpiresInHours int      `json:"expires_in_hours,omitempty"`
+}
+
+type CreateUserInvitationResponse struct {
+	Invitation UserInvitationResponse `json:"invitation"`
+	Token      string                 `json:"token"`
+}
+
+type AcceptUserInvitationRequest struct {
+	Token    string `json:"token" validate:"required"`
+	Password string `json:"password" validate:"required"`
+}
+
+type UserSession struct {
+	ID        uuid.UUID `json:"id"`
+	UserID    uuid.UUID `json:"user_id"`
+	ExpiresAt time.Time `json:"expires_at"`
+	CreatedAt time.Time `json:"created_at"`
+	Revoked   bool      `json:"revoked"`
+	IsActive  bool      `json:"is_active"`
+}
+
 type CreateUserRequest struct {
 	Username string   `json:"username" validate:"required"`
 	Email    string   `json:"email"`

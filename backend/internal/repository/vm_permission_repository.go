@@ -22,6 +22,30 @@ type VMPermissionRepository interface {
 	GetEffectivePermissions(ctx context.Context, userID, nodeID uuid.UUID, vmid int) ([]string, error)
 }
 
+const vmPermissionEffectiveSQL = `
+	-- Direct VM permission
+	SELECT permissions FROM vm_permissions
+	WHERE user_id = $1 AND node_id = $2
+	  AND target_type = 'vm' AND target_id = $3::text
+	UNION ALL
+	-- Group-based permission: user has permission on a group that contains this VM
+	SELECT vp.permissions FROM vm_permissions vp
+	JOIN vm_group_members gm ON vp.target_id = gm.group_id::text
+	WHERE vp.user_id = $1 AND vp.target_type = 'group'
+	  AND vp.node_id = $2 AND gm.node_id = $2 AND gm.vmid = $3::integer
+	UNION ALL
+	-- Node-scoped permission: applies to all VMs on this node
+	SELECT permissions FROM vm_permissions
+	WHERE user_id = $1 AND node_id = $2
+	  AND target_type = 'node' AND target_id = $2::text
+	UNION ALL
+	-- Environment-scoped permission: applies to VMs on nodes in the environment
+	SELECT vp.permissions FROM vm_permissions vp
+	JOIN nodes n ON n.environment_id::text = vp.target_id
+	WHERE vp.user_id = $1 AND vp.target_type = 'environment'
+	  AND vp.node_id = $2 AND n.id = $2
+`
+
 type pgVMPermissionRepository struct {
 	db *pgxpool.Pool
 }
@@ -155,18 +179,8 @@ func (r *pgVMPermissionRepository) HasPermission(ctx context.Context, userID uui
 	var exists bool
 	err := r.db.QueryRow(ctx,
 		`SELECT EXISTS(
-			-- Direct VM permission
-			SELECT 1 FROM vm_permissions
-			WHERE user_id = $1 AND node_id = $2
-			  AND target_type = 'vm' AND target_id = $3
-			  AND $4 = ANY(permissions)
-			UNION
-			-- Group-based permission: user has permission on a group that contains this VM
-			SELECT 1 FROM vm_permissions vp
-			JOIN vm_group_members gm ON vp.target_id = gm.group_id::text
-			WHERE vp.user_id = $1 AND vp.target_type = 'group'
-			  AND gm.node_id = $2 AND gm.vmid = $3::integer
-			  AND $4 = ANY(vp.permissions)
+			SELECT 1 FROM (`+vmPermissionEffectiveSQL+`) effective
+			WHERE $4 = ANY(permissions)
 		)`, userID, nodeID, vmid, permission,
 	).Scan(&exists)
 	if err != nil {
@@ -180,15 +194,7 @@ func (r *pgVMPermissionRepository) HasPermission(ctx context.Context, userID uui
 func (r *pgVMPermissionRepository) GetEffectivePermissions(ctx context.Context, userID, nodeID uuid.UUID, vmid int) ([]string, error) {
 	rows, err := r.db.Query(ctx,
 		`SELECT DISTINCT unnest(permissions) FROM (
-			-- Direct VM permissions
-			SELECT permissions FROM vm_permissions
-			WHERE user_id = $1 AND target_type = 'vm' AND target_id = $3::text AND node_id = $2
-			UNION ALL
-			-- Group-based permissions
-			SELECT vp.permissions FROM vm_permissions vp
-			JOIN vm_group_members gm ON vp.target_id = gm.group_id::text
-			WHERE vp.user_id = $1 AND vp.target_type = 'group'
-			  AND gm.node_id = $2 AND gm.vmid = $3
+			`+vmPermissionEffectiveSQL+`
 		) sub`, userID, nodeID, vmid,
 	)
 	if err != nil {

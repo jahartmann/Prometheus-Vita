@@ -136,14 +136,14 @@ func Load() (*Config, error) {
 		},
 		JWT: JWTConfig{
 			Secret:             getEnv("JWT_SECRET", ""),
-			AccessTokenExpiry:  getEnvInt("JWT_ACCESS_EXPIRY_MINUTES", 15), // 15 minutes
-			RefreshTokenExpiry: getEnvInt("JWT_REFRESH_EXPIRY_HOURS", 168),   // 7 days
+			AccessTokenExpiry:  getEnvIntAny([]string{"JWT_ACCESS_EXPIRY_MINUTES", "JWT_ACCESS_TOKEN_EXPIRY"}, 15), // 15 minutes
+			RefreshTokenExpiry: getEnvIntAny([]string{"JWT_REFRESH_EXPIRY_HOURS", "JWT_REFRESH_TOKEN_EXPIRY"}, 168),  // 7 days
 		},
 		Encryption: EncryptionConfig{
 			Key: getEnv("ENCRYPTION_KEY", ""),
 		},
 		CORS: CORSConfig{
-			AllowOrigins: parseCORSOrigins(getEnv("CORS_ALLOW_ORIGINS", "")),
+			AllowOrigins: parseCORSOrigins(getEnvAny([]string{"CORS_ALLOW_ORIGINS", "CORS_ALLOWED_ORIGINS"}, "")),
 			AllowMethods: []string{"GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"},
 			AllowHeaders: []string{"Authorization", "Content-Type", "X-Request-ID", "X-API-Key"},
 		},
@@ -219,10 +219,30 @@ func getEnv(key, fallback string) string {
 	return fallback
 }
 
+func getEnvAny(keys []string, fallback string) string {
+	for _, key := range keys {
+		if v := os.Getenv(key); v != "" {
+			return v
+		}
+	}
+	return fallback
+}
+
 func getEnvInt(key string, fallback int) int {
 	if v := os.Getenv(key); v != "" {
 		if i, err := strconv.Atoi(v); err == nil {
 			return i
+		}
+	}
+	return fallback
+}
+
+func getEnvIntAny(keys []string, fallback int) int {
+	for _, key := range keys {
+		if v := os.Getenv(key); v != "" {
+			if i, err := strconv.Atoi(v); err == nil {
+				return i
+			}
 		}
 	}
 	return fallback

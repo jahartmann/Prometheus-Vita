@@ -242,6 +242,10 @@ func (s *Service) ListAllBackups(ctx context.Context) ([]model.ConfigBackup, err
 	return s.backupRepo.ListAll(ctx)
 }
 
+func (s *Service) ListFilteredBackups(ctx context.Context, filter model.QueryFilter) ([]model.ConfigBackup, error) {
+	return s.backupRepo.ListFiltered(ctx, filter)
+}
+
 // ListBackups returns all backups for the given node, ordered by creation
 // time descending.
 func (s *Service) ListBackups(ctx context.Context, nodeID uuid.UUID) ([]model.ConfigBackup, error) {

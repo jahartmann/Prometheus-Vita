@@ -292,6 +292,10 @@ func (s *Service) ListMigrations(ctx context.Context) ([]model.VMMigration, erro
 	return s.migrationRepo.List(ctx)
 }
 
+func (s *Service) ListFilteredMigrations(ctx context.Context, filter model.QueryFilter) ([]model.VMMigration, error) {
+	return s.migrationRepo.ListFiltered(ctx, filter)
+}
+
 func (s *Service) ListByNode(ctx context.Context, nodeID uuid.UUID) ([]model.VMMigration, error) {
 	return s.migrationRepo.ListByNode(ctx, nodeID)
 }

@@ -70,6 +70,9 @@ func (t *RestoreConfigTool) Execute(ctx context.Context, args json.RawMessage) (
 	if params.DryRun != nil {
 		dryRun = *params.DryRun
 	}
+	if dryRun {
+		return t.Preview(ctx, args)
+	}
 
 	req := model.RestoreRequest{
 		FilePaths: params.FilePaths,
@@ -92,4 +95,32 @@ func (t *RestoreConfigTool) Execute(ctx context.Context, args json.RawMessage) (
 	}
 
 	return json.Marshal(result)
+}
+
+func (t *RestoreConfigTool) Preview(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {
+	var params struct {
+		BackupID  string   `json:"backup_id"`
+		FilePaths []string `json:"file_paths"`
+	}
+	if err := json.Unmarshal(args, &params); err != nil {
+		return nil, fmt.Errorf("parse arguments: %w", err)
+	}
+	backupID, err := uuid.Parse(params.BackupID)
+	if err != nil {
+		return json.Marshal(map[string]string{"error": "Ungueltige Backup-ID"})
+	}
+	req := model.RestoreRequest{
+		FilePaths: params.FilePaths,
+		DryRun:    true,
+	}
+	preview, err := t.restoreService.RestoreFiles(ctx, backupID, req)
+	if err != nil {
+		return json.Marshal(map[string]string{"error": fmt.Sprintf("Fehler bei der Restore-Vorschau: %v", err)})
+	}
+	return json.Marshal(map[string]interface{}{
+		"dry_run": true,
+		"action":  "restore_config",
+		"files":   preview.Files,
+		"message": "Restore-Vorschau erzeugt. Fuer echte Wiederherstellung dry_run=false setzen und Approval freigeben.",
+	})
 }

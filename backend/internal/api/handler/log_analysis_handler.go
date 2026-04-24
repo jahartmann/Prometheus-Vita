@@ -48,9 +48,9 @@ func (h *LogAnalysisHandler) ListAnomalies(c echo.Context) error {
 		return response.BadRequest(c, "invalid node id")
 	}
 
-	limit, offset := ParsePagination(c)
-
-	anomalies, err := h.anomalyRepo.ListByNode(c.Request().Context(), nodeID, limit, offset)
+	filter := ParseQueryFilter(c)
+	filter.NodeID = &nodeID
+	anomalies, err := h.anomalyRepo.ListFiltered(c.Request().Context(), filter)
 	if err != nil {
 		return response.InternalError(c, "failed to list anomalies")
 	}
@@ -103,9 +103,16 @@ func (h *LogAnalysisHandler) ListAnalyses(c echo.Context) error {
 		}
 	}
 
-	limit, offset := ParsePagination(c)
+	var scheduleID *uuid.UUID
+	if raw := c.QueryParam("schedule_id"); raw != "" {
+		parsed, err := uuid.Parse(raw)
+		if err != nil {
+			return response.BadRequest(c, "invalid schedule_id")
+		}
+		scheduleID = &parsed
+	}
 
-	analyses, err := h.analysisRepo.ListByNodes(c.Request().Context(), nodeIDs, limit, offset)
+	analyses, err := h.analysisRepo.ListFiltered(c.Request().Context(), ParseQueryFilter(c), scheduleID, nodeIDs)
 	if err != nil {
 		return response.InternalError(c, "failed to list analyses")
 	}

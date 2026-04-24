@@ -16,6 +16,7 @@ type LogAnomalyRepository interface {
 	Create(ctx context.Context, anomaly *model.LogAnomaly) error
 	GetByID(ctx context.Context, id uuid.UUID) (*model.LogAnomaly, error)
 	ListByNode(ctx context.Context, nodeID uuid.UUID, limit, offset int) ([]model.LogAnomaly, error)
+	ListFiltered(ctx context.Context, filter model.QueryFilter) ([]model.LogAnomaly, error)
 	Acknowledge(ctx context.Context, id, userID uuid.UUID) error
 	DeleteOlderThan(ctx context.Context, before time.Time) (int64, error)
 }
@@ -75,6 +76,39 @@ func (r *pgLogAnomalyRepository) ListByNode(ctx context.Context, nodeID uuid.UUI
 		if err := rows.Scan(&a.ID, &a.NodeID, &a.Timestamp, &a.Source, &a.Severity, &a.AnomalyScore,
 			&a.Category, &a.Summary, &a.RawLog, &a.IsAcknowledged, &a.AcknowledgedAt, &a.AcknowledgedBy, &a.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan log anomaly: %w", err)
+		}
+		anomalies = append(anomalies, a)
+	}
+	return anomalies, rows.Err()
+}
+
+func (r *pgLogAnomalyRepository) ListFiltered(ctx context.Context, filter model.QueryFilter) ([]model.LogAnomaly, error) {
+	limit := filter.NormalizedLimit(100, 500)
+	rows, err := r.db.Query(ctx,
+		`SELECT id, node_id, timestamp, source, severity, anomaly_score, category, summary, raw_log, is_acknowledged, acknowledged_at, acknowledged_by, created_at
+		 FROM log_anomalies
+		 WHERE ($1::timestamptz IS NULL OR timestamp >= $1)
+		   AND ($2::timestamptz IS NULL OR timestamp <= $2)
+		   AND ($3::uuid IS NULL OR node_id = $3)
+		   AND ($4 = '' OR $4 = 'all' OR severity = $4)
+		   AND ($5 = '' OR $5 = 'all' OR category = $5)
+		   AND ($6 = '' OR $6 = 'all' OR source = $6)
+		   AND ($7 = '' OR $7 = 'all' OR ($7 = 'acknowledged' AND is_acknowledged = true) OR ($7 = 'open' AND is_acknowledged = false) OR ($7 = 'unacknowledged' AND is_acknowledged = false))
+		   AND ($8 = '' OR summary ILIKE '%' || $8 || '%' OR raw_log ILIKE '%' || $8 || '%')
+		 ORDER BY timestamp DESC
+		 LIMIT $9 OFFSET $10`,
+		filter.From, filter.To, filter.NodeID, filter.Severity, filter.Category, filter.Source, filter.Status, filter.Query, limit, filter.Offset)
+	if err != nil {
+		return nil, fmt.Errorf("list filtered log anomalies: %w", err)
+	}
+	defer rows.Close()
+
+	var anomalies []model.LogAnomaly
+	for rows.Next() {
+		var a model.LogAnomaly
+		if err := rows.Scan(&a.ID, &a.NodeID, &a.Timestamp, &a.Source, &a.Severity, &a.AnomalyScore,
+			&a.Category, &a.Summary, &a.RawLog, &a.IsAcknowledged, &a.AcknowledgedAt, &a.AcknowledgedBy, &a.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan filtered log anomaly: %w", err)
 		}
 		anomalies = append(anomalies, a)
 	}

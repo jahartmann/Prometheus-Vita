@@ -2,9 +2,12 @@ package user
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/antigravity/prometheus/internal/model"
 	"github.com/antigravity/prometheus/internal/repository"
@@ -18,15 +21,27 @@ var (
 	ErrLastAdmin        = errors.New("cannot delete last admin")
 	ErrWrongPassword    = errors.New("current password is incorrect")
 	ErrPasswordRequired = errors.New("current password is required")
+	ErrInvitationInvalid = errors.New("invitation is invalid")
+	ErrInvitationExpired = errors.New("invitation is expired")
 )
 
 type Service struct {
-	userRepo    repository.UserRepository
-	pwValidator *PasswordValidator
+	userRepo       repository.UserRepository
+	tokenRepo      repository.TokenRepository
+	apiTokenRepo   repository.APITokenRepository
+	invitationRepo repository.UserInvitationRepository
+	pwValidator    *PasswordValidator
 }
 
 func NewService(userRepo repository.UserRepository, pwValidator *PasswordValidator) *Service {
 	return &Service{userRepo: userRepo, pwValidator: pwValidator}
+}
+
+func (s *Service) WithAccessRepositories(tokenRepo repository.TokenRepository, apiTokenRepo repository.APITokenRepository, invitationRepo repository.UserInvitationRepository) *Service {
+	s.tokenRepo = tokenRepo
+	s.apiTokenRepo = apiTokenRepo
+	s.invitationRepo = invitationRepo
+	return s
 }
 
 func (s *Service) List(ctx context.Context) ([]model.UserResponse, error) {
@@ -132,6 +147,11 @@ func (s *Service) Update(ctx context.Context, id uuid.UUID, req model.UpdateUser
 	if err := s.userRepo.Update(ctx, user); err != nil {
 		return nil, fmt.Errorf("update user: %w", err)
 	}
+	if req.IsActive != nil && !*req.IsActive {
+		if err := s.revokeUserAccess(ctx, id); err != nil {
+			return nil, err
+		}
+	}
 
 	resp := user.ToResponse()
 	return &resp, nil
@@ -207,4 +227,157 @@ func (s *Service) ChangePassword(ctx context.Context, id uuid.UUID, req model.Ch
 	}
 
 	return nil
+}
+
+func (s *Service) CreateInvitation(ctx context.Context, req model.CreateUserInvitationRequest, createdBy uuid.UUID) (*model.CreateUserInvitationResponse, error) {
+	if s.invitationRepo == nil {
+		return nil, fmt.Errorf("invitation repository not configured")
+	}
+	if req.Username == "" {
+		return nil, fmt.Errorf("username is required")
+	}
+	if !req.Role.IsValid() {
+		return nil, fmt.Errorf("invalid role: %s", req.Role)
+	}
+	_, err := s.userRepo.GetByUsername(ctx, req.Username)
+	if err == nil {
+		return nil, ErrUsernameTaken
+	}
+	if err != nil && !errors.Is(err, repository.ErrNotFound) {
+		return nil, fmt.Errorf("check username: %w", err)
+	}
+
+	token, err := generateInvitationToken()
+	if err != nil {
+		return nil, err
+	}
+	expiresIn := time.Duration(req.ExpiresInHours) * time.Hour
+	if expiresIn <= 0 {
+		expiresIn = 7 * 24 * time.Hour
+	}
+	if expiresIn > 30*24*time.Hour {
+		expiresIn = 30 * 24 * time.Hour
+	}
+
+	invitation := &model.UserInvitation{
+		Username:    req.Username,
+		Email:       req.Email,
+		Role:        req.Role,
+		TokenHash:   repository.HashToken(token),
+		TokenPrefix: token[:12],
+		ExpiresAt:   time.Now().Add(expiresIn),
+		CreatedBy:   createdBy,
+	}
+	if err := s.invitationRepo.Create(ctx, invitation); err != nil {
+		return nil, err
+	}
+	return &model.CreateUserInvitationResponse{
+		Invitation: invitation.ToResponse(),
+		Token:      token,
+	}, nil
+}
+
+func (s *Service) ListInvitations(ctx context.Context) ([]model.UserInvitationResponse, error) {
+	if s.invitationRepo == nil {
+		return nil, fmt.Errorf("invitation repository not configured")
+	}
+	invitations, err := s.invitationRepo.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	responses := make([]model.UserInvitationResponse, 0, len(invitations))
+	for _, invitation := range invitations {
+		responses = append(responses, invitation.ToResponse())
+	}
+	return responses, nil
+}
+
+func (s *Service) DeleteInvitation(ctx context.Context, id uuid.UUID) error {
+	if s.invitationRepo == nil {
+		return fmt.Errorf("invitation repository not configured")
+	}
+	return s.invitationRepo.Delete(ctx, id)
+}
+
+func (s *Service) AcceptInvitation(ctx context.Context, req model.AcceptUserInvitationRequest) (*model.UserResponse, error) {
+	if s.invitationRepo == nil {
+		return nil, fmt.Errorf("invitation repository not configured")
+	}
+	if req.Token == "" || req.Password == "" {
+		return nil, ErrInvitationInvalid
+	}
+	invitation, err := s.invitationRepo.GetByTokenHash(ctx, repository.HashToken(req.Token))
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, ErrInvitationInvalid
+		}
+		return nil, err
+	}
+	if invitation.AcceptedAt != nil {
+		return nil, ErrInvitationInvalid
+	}
+	if invitation.ExpiresAt.Before(time.Now()) {
+		return nil, ErrInvitationExpired
+	}
+
+	resp, err := s.Create(ctx, model.CreateUserRequest{
+		Username: invitation.Username,
+		Email:    invitation.Email,
+		Password: req.Password,
+		Role:     invitation.Role,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if err := s.invitationRepo.MarkAccepted(ctx, invitation.ID, time.Now()); err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
+func (s *Service) ListSessions(ctx context.Context, userID uuid.UUID) ([]model.UserSession, error) {
+	if s.tokenRepo == nil {
+		return nil, fmt.Errorf("token repository not configured")
+	}
+	return s.tokenRepo.ListByUser(ctx, userID)
+}
+
+func (s *Service) RevokeSession(ctx context.Context, userID, sessionID uuid.UUID) error {
+	if s.tokenRepo == nil {
+		return fmt.Errorf("token repository not configured")
+	}
+	return s.tokenRepo.RevokeByIDForUser(ctx, sessionID, userID)
+}
+
+func (s *Service) RevokeAllAccess(ctx context.Context, userID uuid.UUID) error {
+	return s.revokeUserAccess(ctx, userID)
+}
+
+func (s *Service) ListAPITokens(ctx context.Context, userID uuid.UUID) ([]model.APIToken, error) {
+	if s.apiTokenRepo == nil {
+		return nil, fmt.Errorf("api token repository not configured")
+	}
+	return s.apiTokenRepo.ListByUser(ctx, userID)
+}
+
+func (s *Service) revokeUserAccess(ctx context.Context, userID uuid.UUID) error {
+	if s.tokenRepo != nil {
+		if err := s.tokenRepo.RevokeAllForUser(ctx, userID); err != nil {
+			return fmt.Errorf("revoke user sessions: %w", err)
+		}
+	}
+	if s.apiTokenRepo != nil {
+		if err := s.apiTokenRepo.RevokeAllForUser(ctx, userID); err != nil {
+			return fmt.Errorf("revoke user api tokens: %w", err)
+		}
+	}
+	return nil
+}
+
+func generateInvitationToken() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("generate invitation token: %w", err)
+	}
+	return "pm_inv_" + hex.EncodeToString(b), nil
 }

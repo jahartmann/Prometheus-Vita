@@ -7,6 +7,11 @@ import (
 )
 
 const (
+	VMPermissionTargetVM          = "vm"
+	VMPermissionTargetGroup       = "group"
+	VMPermissionTargetNode        = "node"
+	VMPermissionTargetEnvironment = "environment"
+
 	PermVMView           = "vm.view"
 	PermVMShell          = "vm.shell"
 	PermVMFilesRead      = "vm.files.read"
@@ -24,6 +29,31 @@ var AllVMPermissions = []string{
 	PermVMView, PermVMShell, PermVMFilesRead, PermVMFilesWrite,
 	PermVMSystemView, PermVMSystemService, PermVMSystemKill,
 	PermVMSystemPackages, PermVMPower, PermVMSnapshots, PermVMAIProactive,
+}
+
+var AllVMPermissionTargets = []string{
+	VMPermissionTargetVM,
+	VMPermissionTargetGroup,
+	VMPermissionTargetNode,
+	VMPermissionTargetEnvironment,
+}
+
+func IsValidVMPermissionTarget(targetType string) bool {
+	for _, target := range AllVMPermissionTargets {
+		if target == targetType {
+			return true
+		}
+	}
+	return false
+}
+
+func IsValidVMPermission(permission string) bool {
+	for _, candidate := range AllVMPermissions {
+		if candidate == permission {
+			return true
+		}
+	}
+	return false
 }
 
 type VMPermission struct {

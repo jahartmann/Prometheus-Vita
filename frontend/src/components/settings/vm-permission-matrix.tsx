@@ -26,8 +26,9 @@ import { toast } from "sonner";
 import { useVMPermissionStore } from "@/stores/vm-permission-store";
 import { useUserStore } from "@/stores/user-store";
 import { useNodeStore } from "@/stores/node-store";
+import { useEnvironmentStore } from "@/stores/environment-store";
 import { vmPermissionApi, nodeApi, toArray } from "@/lib/api";
-import type { VMPermission, VM, VMGroup } from "@/types/api";
+import type { Environment, VMPermission, VM, VMGroup } from "@/types/api";
 import { vmGroupApi } from "@/lib/api";
 
 // Permission categories for grouping
@@ -56,24 +57,28 @@ const permShortLabels: Record<string, string> = {
 
 interface PermissionChange {
   userId: string;
-  targetType: "vm" | "group";
+  targetType: TargetType;
   targetId: string;
   nodeId: string;
   permissions: string[];
 }
 
+type TargetType = "vm" | "group" | "node" | "environment";
+
 type TargetEntry = {
   id: string;
   label: string;
-  type: "vm" | "group";
+  type: TargetType;
   nodeId: string;
   vmid?: number;
+  targetId: string;
 };
 
 export function VMPermissionMatrix() {
   const { permissions, fetchPermissions } = useVMPermissionStore();
   const { users, fetchUsers } = useUserStore();
   const { nodes, fetchNodes } = useNodeStore();
+  const { environments, fetchEnvironments } = useEnvironmentStore();
 
   const [vms, setVMs] = useState<Record<string, VM[]>>({});
   const [groups, setGroups] = useState<VMGroup[]>([]);
@@ -86,8 +91,9 @@ export function VMPermissionMatrix() {
     fetchPermissions();
     fetchUsers();
     fetchNodes();
+    fetchEnvironments();
     vmGroupApi.list().then((r) => setGroups(toArray<VMGroup>(r.data))).catch(() => {});
-  }, [fetchPermissions, fetchUsers, fetchNodes]);
+  }, [fetchPermissions, fetchUsers, fetchNodes, fetchEnvironments]);
 
   useEffect(() => {
     const loadVMs = async () => {
@@ -105,13 +111,39 @@ export function VMPermissionMatrix() {
     if (nodes.length > 0) loadVMs();
   }, [nodes]);
 
-  // Build target entries (VMs + Groups)
+  const environmentById = useMemo(() => {
+    return new Map<string, Environment>(environments.map((env) => [env.id, env]));
+  }, [environments]);
+
+  // Build target entries (VMs + Groups + Nodes + Environments)
   const targets: TargetEntry[] = useMemo(() => {
     const entries: TargetEntry[] = [];
+    const visibleNodes = nodes.filter((node) => filterNode === "all" || node.id === filterNode);
+
+    for (const node of visibleNodes) {
+      entries.push({
+        id: `node:${node.id}`,
+        label: `[Node] ${node.name}`,
+        type: "node",
+        nodeId: node.id,
+        targetId: node.id,
+      });
+    }
+
+    for (const node of visibleNodes) {
+      if (!node.environment_id) continue;
+      const env = environmentById.get(node.environment_id);
+      entries.push({
+        id: `environment:${node.environment_id}:${node.id}`,
+        label: `[Umgebung] ${env?.name ?? node.environment_id} / ${node.name}`,
+        type: "environment",
+        nodeId: node.id,
+        targetId: node.environment_id,
+      });
+    }
 
     // Add VMs
-    for (const node of nodes) {
-      if (filterNode !== "all" && node.id !== filterNode) continue;
+    for (const node of visibleNodes) {
       const nodeVMs = vms[node.id] || [];
       for (const vm of nodeVMs) {
         entries.push({
@@ -120,22 +152,26 @@ export function VMPermissionMatrix() {
           type: "vm",
           nodeId: node.id,
           vmid: vm.vmid,
+          targetId: String(vm.vmid),
         });
       }
     }
 
     // Add Groups
     for (const group of groups) {
-      entries.push({
-        id: `group:${group.id}`,
-        label: `[Gruppe] ${group.name}`,
-        type: "group",
-        nodeId: nodes[0]?.id || "", // Groups aren't node-scoped in display, but permissions are
-      });
+      for (const node of visibleNodes) {
+        entries.push({
+          id: `group:${group.id}:${node.id}`,
+          label: `[Gruppe] ${group.name} / ${node.name}`,
+          type: "group",
+          nodeId: node.id,
+          targetId: group.id,
+        });
+      }
     }
 
     return entries;
-  }, [nodes, vms, groups, filterNode]);
+  }, [nodes, vms, groups, filterNode, environmentById]);
 
   // Filtered users (show all users including admins)
   const filteredUsers = useMemo(() => {
@@ -157,12 +193,7 @@ export function VMPermissionMatrix() {
   }, [permissions]);
 
   const getPermKey = (userId: string, target: TargetEntry): string => {
-    if (target.type === "group") {
-      const groupId = target.id.replace("group:", "");
-      // For group permissions, we need a node_id; use the first node
-      return `${userId}:group:${groupId}:${nodes[0]?.id || ""}`;
-    }
-    return `${userId}:vm:${String(target.vmid)}:${target.nodeId}`;
+    return `${userId}:${target.type}:${target.targetId}:${target.nodeId}`;
   };
 
   const getCurrentPerms = useCallback((userId: string, target: TargetEntry): string[] => {
@@ -176,9 +207,21 @@ export function VMPermissionMatrix() {
 
   const isInherited = useCallback((userId: string, target: TargetEntry, perm: string): boolean => {
     if (target.type !== "vm") return false;
-    // Check if the user has this permission via any group
+
+    const nodeKey = `${userId}:node:${target.nodeId}:${target.nodeId}`;
+    const nodePerms = permLookup.get(nodeKey)?.permissions || [];
+    if (nodePerms.includes(perm)) return true;
+
+    const node = nodes.find((candidate) => candidate.id === target.nodeId);
+    if (node?.environment_id) {
+      const envKey = `${userId}:environment:${node.environment_id}:${target.nodeId}`;
+      const envPerms = permLookup.get(envKey)?.permissions || [];
+      if (envPerms.includes(perm)) return true;
+    }
+
+    // Check if the user has this permission via any node-scoped group.
     for (const group of groups) {
-      const groupKey = `${userId}:group:${group.id}:${nodes[0]?.id || ""}`;
+      const groupKey = `${userId}:group:${group.id}:${target.nodeId}`;
       const groupPerms = permLookup.get(groupKey)?.permissions || [];
       if (groupPerms.includes(perm)) return true;
     }
@@ -195,19 +238,12 @@ export function VMPermissionMatrix() {
       newPerms = [...current, perm];
     }
 
-    const nodeId = target.type === "group"
-      ? nodes[0]?.id || ""
-      : target.nodeId;
-    const targetId = target.type === "group"
-      ? target.id.replace("group:", "")
-      : String(target.vmid);
-
     const newChanges = new Map(changes);
     newChanges.set(changeKey, {
       userId,
       targetType: target.type,
-      targetId,
-      nodeId,
+      targetId: target.targetId,
+      nodeId: target.nodeId,
       permissions: newPerms,
     });
     setChanges(newChanges);
@@ -359,7 +395,7 @@ export function VMPermissionMatrix() {
                           className={hasChange ? "bg-yellow-50/50 dark:bg-yellow-900/10" : ""}
                         >
                           <TableCell className="sticky left-0 z-10 bg-background text-xs truncate max-w-[200px]">
-                            {target.type === "group" ? (
+                            {target.type !== "vm" ? (
                               <Badge variant="outline" className="text-xs">
                                 {target.label}
                               </Badge>

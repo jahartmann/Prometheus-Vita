@@ -7,8 +7,8 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-// MustChangePassword blocks access to all protected routes (except password
-// change endpoints) when the authenticated user has must_change_password set.
+// MustChangePassword blocks access for inactive users and for users who must
+// change their password before using protected routes.
 func MustChangePassword(userRepo repository.UserRepository) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
@@ -28,6 +28,10 @@ func MustChangePassword(userRepo repository.UserRepository) echo.MiddlewareFunc 
 			user, err := userRepo.GetByID(c.Request().Context(), userID)
 			if err != nil {
 				return next(c)
+			}
+
+			if !user.IsActive {
+				return response.ErrorResponse(c, 403, "Konto ist deaktiviert")
 			}
 
 			if user.MustChangePassword {

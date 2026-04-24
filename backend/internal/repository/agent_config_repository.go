@@ -10,6 +10,7 @@ import (
 type AgentConfigRepository interface {
 	Get(ctx context.Context, key string) (string, error)
 	Set(ctx context.Context, key, value string) error
+	Delete(ctx context.Context, key string) error
 	List(ctx context.Context) (map[string]string, error)
 }
 
@@ -38,6 +39,14 @@ func (r *pgAgentConfigRepository) Set(ctx context.Context, key, value string) er
 	)
 	if err != nil {
 		return fmt.Errorf("set agent config %s: %w", key, err)
+	}
+	return nil
+}
+
+func (r *pgAgentConfigRepository) Delete(ctx context.Context, key string) error {
+	_, err := r.db.Exec(ctx, "DELETE FROM agent_config WHERE key = $1", key)
+	if err != nil {
+		return fmt.Errorf("delete agent config %s: %w", key, err)
 	}
 	return nil
 }

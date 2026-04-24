@@ -16,6 +16,7 @@ type MigrationRepository interface {
 	Create(ctx context.Context, m *model.VMMigration) error
 	GetByID(ctx context.Context, id uuid.UUID) (*model.VMMigration, error)
 	List(ctx context.Context) ([]model.VMMigration, error)
+	ListFiltered(ctx context.Context, filter model.QueryFilter) ([]model.VMMigration, error)
 	ListByStatus(ctx context.Context, statuses []string) ([]model.VMMigration, error)
 	ListByNode(ctx context.Context, nodeID uuid.UUID) ([]model.VMMigration, error)
 	Update(ctx context.Context, m *model.VMMigration) error
@@ -113,6 +114,42 @@ func (r *pgMigrationRepository) List(ctx context.Context) ([]model.VMMigration, 
 			&m.StartedAt, &m.CompletedAt, &m.CreatedAt, &m.UpdatedAt, &m.InitiatedBy,
 		); err != nil {
 			return nil, fmt.Errorf("scan migration: %w", err)
+		}
+		migrations = append(migrations, m)
+	}
+	return migrations, rows.Err()
+}
+
+func (r *pgMigrationRepository) ListFiltered(ctx context.Context, filter model.QueryFilter) ([]model.VMMigration, error) {
+	limit := filter.NormalizedLimit(100, 500)
+	rows, err := r.db.Query(ctx,
+		`SELECT `+migrationColumns+` FROM vm_migrations
+		 WHERE ($1::timestamptz IS NULL OR created_at >= $1)
+		   AND ($2::timestamptz IS NULL OR created_at <= $2)
+		   AND ($3::uuid IS NULL OR source_node_id = $3 OR target_node_id = $3)
+		   AND ($4 = '' OR $4 = 'all' OR status = $4)
+		   AND ($5 = '' OR vm_name ILIKE '%' || $5 || '%' OR vm_type ILIKE '%' || $5 || '%' OR current_step ILIKE '%' || $5 || '%' OR error_message ILIKE '%' || $5 || '%')
+		 ORDER BY created_at DESC
+		 LIMIT $6 OFFSET $7`,
+		filter.From, filter.To, filter.NodeID, filter.Status, filter.Query, limit, filter.Offset)
+	if err != nil {
+		return nil, fmt.Errorf("list filtered migrations: %w", err)
+	}
+	defer rows.Close()
+
+	var migrations []model.VMMigration
+	for rows.Next() {
+		var m model.VMMigration
+		if err := rows.Scan(
+			&m.ID, &m.SourceNodeID, &m.TargetNodeID, &m.VMID, &m.VMName, &m.VMType,
+			&m.Status, &m.Mode, &m.TargetStorage, &m.Progress, &m.CurrentStep,
+			&m.VzdumpFilePath, &m.VzdumpFileSize, &m.VzdumpTaskUPID,
+			&m.TransferBytesSent, &m.TransferSpeedBps,
+			&m.NewVMID, &m.RestoreTaskUPID,
+			&m.CleanupSource, &m.CleanupTarget, &m.ErrorMessage,
+			&m.StartedAt, &m.CompletedAt, &m.CreatedAt, &m.UpdatedAt, &m.InitiatedBy,
+		); err != nil {
+			return nil, fmt.Errorf("scan filtered migration: %w", err)
 		}
 		migrations = append(migrations, m)
 	}

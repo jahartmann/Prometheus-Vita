@@ -18,7 +18,11 @@ func NewAnomalyHandler(service *anomaly.Service) *AnomalyHandler {
 }
 
 func (h *AnomalyHandler) ListUnresolved(c echo.Context) error {
-	records, err := h.service.ListUnresolved(c.Request().Context())
+	filter := ParseQueryFilter(c)
+	if filter.Status == "" {
+		filter.Status = "unresolved"
+	}
+	records, err := h.service.ListFiltered(c.Request().Context(), filter)
 	if err != nil {
 		return apiPkg.InternalError(c, "Fehler beim Abrufen der Anomalien")
 	}
@@ -34,7 +38,9 @@ func (h *AnomalyHandler) ListByNode(c echo.Context) error {
 		return apiPkg.BadRequest(c, "Ungueltige Node-ID")
 	}
 
-	records, err := h.service.ListByNode(c.Request().Context(), nodeID)
+	filter := ParseQueryFilter(c)
+	filter.NodeID = &nodeID
+	records, err := h.service.ListFiltered(c.Request().Context(), filter)
 	if err != nil {
 		return apiPkg.InternalError(c, "Fehler beim Abrufen der Anomalien")
 	}

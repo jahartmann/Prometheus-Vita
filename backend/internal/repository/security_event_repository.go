@@ -13,6 +13,7 @@ type SecurityEventRepository interface {
 	Create(ctx context.Context, event *model.SecurityEvent) error
 	ListUnacknowledged(ctx context.Context) ([]model.SecurityEvent, error)
 	ListByNode(ctx context.Context, nodeID uuid.UUID) ([]model.SecurityEvent, error)
+	ListFiltered(ctx context.Context, filter model.QueryFilter) ([]model.SecurityEvent, error)
 	Acknowledge(ctx context.Context, id uuid.UUID) error
 	ListRecent(ctx context.Context, limit int) ([]model.SecurityEvent, error)
 	CountBySeverity(ctx context.Context) (map[string]int, error)
@@ -62,6 +63,30 @@ func (r *pgSecurityEventRepository) ListByNode(ctx context.Context, nodeID uuid.
 		 FROM security_events WHERE node_id = $1 ORDER BY detected_at DESC LIMIT 100`, nodeID)
 	if err != nil {
 		return nil, fmt.Errorf("list security events by node: %w", err)
+	}
+	defer rows.Close()
+	return r.scanEvents(rows)
+}
+
+func (r *pgSecurityEventRepository) ListFiltered(ctx context.Context, filter model.QueryFilter) ([]model.SecurityEvent, error) {
+	limit := filter.NormalizedLimit(100, 500)
+	status := filter.Status
+	rows, err := r.db.Query(ctx,
+		`SELECT id, node_id, category, severity, title, description, impact, recommendation,
+		        metrics, affected_vms, node_name, is_acknowledged, detected_at, acknowledged_at, analysis_model
+		 FROM security_events
+		 WHERE ($1::timestamptz IS NULL OR detected_at >= $1)
+		   AND ($2::timestamptz IS NULL OR detected_at <= $2)
+		   AND ($3::uuid IS NULL OR node_id = $3)
+		   AND ($4 = '' OR $4 = 'all' OR severity = $4)
+		   AND ($5 = '' OR $5 = 'all' OR category = $5)
+		   AND ($6 = '' OR $6 = 'all' OR ($6 = 'acknowledged' AND is_acknowledged = true) OR ($6 = 'open' AND is_acknowledged = false) OR ($6 = 'unacknowledged' AND is_acknowledged = false))
+		   AND ($7 = '' OR title ILIKE '%' || $7 || '%' OR description ILIKE '%' || $7 || '%' OR impact ILIKE '%' || $7 || '%' OR recommendation ILIKE '%' || $7 || '%')
+		 ORDER BY detected_at DESC
+		 LIMIT $8 OFFSET $9`,
+		filter.From, filter.To, filter.NodeID, filter.Severity, filter.Category, status, filter.Query, limit, filter.Offset)
+	if err != nil {
+		return nil, fmt.Errorf("list filtered security events: %w", err)
 	}
 	defer rows.Close()
 	return r.scanEvents(rows)

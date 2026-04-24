@@ -63,6 +63,26 @@ Frontend (Next.js 15)  ──►  Backend (Go/Echo)  ──►  PostgreSQL 17
 docker compose up postgres redis
 ```
 
+### Local AI / Ollama optional starten
+Ollama ist optional und laeuft ueber das Compose-Profil `ai-local`, damit der normale Stack ohne lokalen LLM-Dienst startet.
+
+```bash
+# 1. In .env fuer Docker Compose setzen:
+# LLM_OLLAMA_URL=http://ollama:11434
+# LLM_DEFAULT_MODEL=llama3
+
+# 2. Ollama starten
+docker compose --profile ai-local up -d ollama
+
+# 3. Modell in das persistente Ollama-Volume ziehen
+docker compose exec ollama ollama pull llama3
+
+# 4. Backend neu starten, falls es bereits laeuft
+docker compose up -d backend
+```
+
+Wenn das Backend direkt auf dem Host gestartet wird, setze stattdessen `LLM_OLLAMA_URL=http://localhost:11434`.
+
 ### Backend lokal
 ```bash
 cd backend
@@ -128,12 +148,20 @@ npm run dev
 | `SERVER_HOST` | `0.0.0.0` | Backend Bind-Adresse |
 | `SERVER_PORT` | `8080` | Backend Port |
 | `JWT_SECRET` | - | JWT Signing Key (min. 32 Zeichen) |
-| `JWT_ACCESS_TOKEN_EXPIRY` | `15` | Access Token Lebensdauer (Minuten) |
-| `JWT_REFRESH_TOKEN_EXPIRY` | `168` | Refresh Token Lebensdauer (Stunden) |
+| `JWT_ACCESS_EXPIRY_MINUTES` | `15` | Access Token Lebensdauer (Minuten) |
+| `JWT_REFRESH_EXPIRY_HOURS` | `168` | Refresh Token Lebensdauer (Stunden) |
 | `ENCRYPTION_KEY` | - | AES-256-GCM Key (64 Hex-Zeichen) |
-| `CORS_ALLOWED_ORIGINS` | `http://localhost:3000` | Erlaubte CORS Origins |
+| `CORS_ALLOW_ORIGINS` | `http://localhost:3000` | Erlaubte CORS Origins |
+| `NEXT_PUBLIC_API_URL` | `http://localhost:8080` | API-Basis-URL fuer das Frontend |
+| `LLM_OLLAMA_URL` | `http://localhost:11434` | Ollama API URL (`http://ollama:11434` in Docker Compose) |
+| `LLM_DEFAULT_MODEL` | `llama3` | Standardmodell fuer lokale LLM-Funktionen |
+| `LLM_OPENAI_KEY` | - | Optionaler OpenAI API-Key |
+| `LLM_OPENAI_URL` | - | Optionale OpenAI-kompatible API-Basis-URL |
+| `LLM_ANTHROPIC_KEY` | - | Optionaler Anthropic API-Key |
 | `ADMIN_USERNAME` | `admin` | Admin-Username beim Seed |
 | `ADMIN_PASSWORD` | (generiert) | Admin-Passwort beim Seed |
+
+WebSocket-Streams laufen ueber den Backend-API-Pfad `WS /api/v1/ws?token=<jwt>` fuer Live-Metriken und `WS /api/v1/ws/logs` fuer Logs. Bei Frontend-Entwicklung sollten API- und WS-Aufrufe ueber dieselbe Backend-Basis-URL bzw. den Next.js-Proxy laufen.
 
 ## Rollen
 

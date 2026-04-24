@@ -117,7 +117,7 @@ export function TokenList({ refreshKey }: TokenListProps) {
                             {p}
                           </Badge>
                         ))
-                      : <span className="text-muted-foreground text-sm">Alle</span>}
+                      : <span className="text-muted-foreground text-sm">Keine Scopes</span>}
                   </div>
                 </TableCell>
                 <TableCell className="text-muted-foreground text-sm">

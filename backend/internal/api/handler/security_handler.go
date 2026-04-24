@@ -20,7 +20,11 @@ func NewSecurityHandler(repo repository.SecurityEventRepository, analysisSvc *in
 }
 
 func (h *SecurityHandler) ListUnacknowledged(c echo.Context) error {
-	events, err := h.repo.ListUnacknowledged(c.Request().Context())
+	filter := ParseQueryFilter(c)
+	if filter.Status == "" {
+		filter.Status = "unacknowledged"
+	}
+	events, err := h.repo.ListFiltered(c.Request().Context(), filter)
 	if err != nil {
 		return apiPkg.InternalError(c, "Fehler beim Abrufen der Security-Events")
 	}
@@ -31,8 +35,7 @@ func (h *SecurityHandler) ListUnacknowledged(c echo.Context) error {
 }
 
 func (h *SecurityHandler) ListRecent(c echo.Context) error {
-	limit, _ := ParsePagination(c)
-	events, err := h.repo.ListRecent(c.Request().Context(), limit)
+	events, err := h.repo.ListFiltered(c.Request().Context(), ParseQueryFilter(c))
 	if err != nil {
 		return apiPkg.InternalError(c, "Fehler beim Abrufen der Security-Events")
 	}
@@ -76,7 +79,9 @@ func (h *SecurityHandler) ListByNode(c echo.Context) error {
 		return apiPkg.BadRequest(c, "Ungueltige Node-ID")
 	}
 
-	events, err := h.repo.ListByNode(c.Request().Context(), nodeID)
+	filter := ParseQueryFilter(c)
+	filter.NodeID = &nodeID
+	events, err := h.repo.ListFiltered(c.Request().Context(), filter)
 	if err != nil {
 		return apiPkg.InternalError(c, "Fehler beim Abrufen der Security-Events")
 	}

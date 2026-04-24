@@ -16,6 +16,7 @@ type BackupRepository interface {
 	GetByID(ctx context.Context, id uuid.UUID) (*model.ConfigBackup, error)
 	ListAll(ctx context.Context) ([]model.ConfigBackup, error)
 	ListByNode(ctx context.Context, nodeID uuid.UUID) ([]model.ConfigBackup, error)
+	ListFiltered(ctx context.Context, filter model.QueryFilter) ([]model.ConfigBackup, error)
 	UpdateStatus(ctx context.Context, id uuid.UUID, status model.BackupStatus, errorMsg string) error
 	UpdateCompleted(ctx context.Context, id uuid.UUID, fileCount int, totalSize int64) error
 	UpdateRecoveryGuide(ctx context.Context, id uuid.UUID, guide string) error
@@ -108,6 +109,39 @@ func (r *pgBackupRepository) ListByNode(ctx context.Context, nodeID uuid.UUID) (
 			&b.FileCount, &b.TotalSize, &b.Status,
 			&b.ErrorMessage, &b.Notes, &b.RecoveryGuide, &b.CreatedAt, &b.CompletedAt); err != nil {
 			return nil, fmt.Errorf("scan backup: %w", err)
+		}
+		backups = append(backups, b)
+	}
+	return backups, rows.Err()
+}
+
+func (r *pgBackupRepository) ListFiltered(ctx context.Context, filter model.QueryFilter) ([]model.ConfigBackup, error) {
+	limit := filter.NormalizedLimit(100, 500)
+	rows, err := r.db.Query(ctx,
+		`SELECT id, node_id, version, backup_type, file_count, total_size,
+		        status, COALESCE(error_message, ''), COALESCE(notes, ''), COALESCE(recovery_guide, ''), created_at, completed_at
+		 FROM config_backups
+		 WHERE ($1::timestamptz IS NULL OR created_at >= $1)
+		   AND ($2::timestamptz IS NULL OR created_at <= $2)
+		   AND ($3::uuid IS NULL OR node_id = $3)
+		   AND ($4 = '' OR $4 = 'all' OR status = $4)
+		   AND ($5 = '' OR $5 = 'all' OR backup_type = $5)
+		   AND ($6 = '' OR notes ILIKE '%' || $6 || '%' OR error_message ILIKE '%' || $6 || '%' OR recovery_guide ILIKE '%' || $6 || '%')
+		 ORDER BY created_at DESC
+		 LIMIT $7 OFFSET $8`,
+		filter.From, filter.To, filter.NodeID, filter.Status, filter.Type, filter.Query, limit, filter.Offset)
+	if err != nil {
+		return nil, fmt.Errorf("list filtered backups: %w", err)
+	}
+	defer rows.Close()
+
+	var backups []model.ConfigBackup
+	for rows.Next() {
+		var b model.ConfigBackup
+		if err := rows.Scan(&b.ID, &b.NodeID, &b.Version, &b.BackupType,
+			&b.FileCount, &b.TotalSize, &b.Status,
+			&b.ErrorMessage, &b.Notes, &b.RecoveryGuide, &b.CreatedAt, &b.CompletedAt); err != nil {
+			return nil, fmt.Errorf("scan filtered backup: %w", err)
 		}
 		backups = append(backups, b)
 	}

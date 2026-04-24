@@ -190,6 +190,15 @@ func (s *Service) ListByNode(ctx context.Context, nodeID uuid.UUID) ([]model.Ano
 	return records, nil
 }
 
+func (s *Service) ListFiltered(ctx context.Context, filter model.QueryFilter) ([]model.AnomalyRecord, error) {
+	records, err := s.anomalyRepo.ListFiltered(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	s.enrichAnomalies(ctx, records)
+	return records, nil
+}
+
 func (s *Service) Resolve(ctx context.Context, id uuid.UUID) error {
 	return s.anomalyRepo.Resolve(ctx, id)
 }

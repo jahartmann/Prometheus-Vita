@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"encoding/json"
 	"errors"
 
 	apiPkg "github.com/antigravity/prometheus/internal/api/response"
@@ -72,13 +71,7 @@ func (h *ApprovalHandler) Approve(c echo.Context) error {
 		return apiPkg.InternalError(c, "Fehler beim Genehmigen")
 	}
 
-	// Execute the tool
-	tool, ok := h.agentService.GetTool(approval.ToolName)
-	if !ok {
-		return apiPkg.InternalError(c, "Tool nicht gefunden")
-	}
-
-	result, err := tool.Execute(c.Request().Context(), json.RawMessage(approval.Arguments))
+	result, err := h.agentService.ExecuteApprovedTool(c.Request().Context(), userID, approval)
 	if err != nil {
 		return apiPkg.Success(c, map[string]interface{}{
 			"status": "approved",
@@ -88,7 +81,7 @@ func (h *ApprovalHandler) Approve(c echo.Context) error {
 
 	return apiPkg.Success(c, map[string]interface{}{
 		"status": "approved",
-		"result": json.RawMessage(result),
+		"result": result,
 	})
 }
 

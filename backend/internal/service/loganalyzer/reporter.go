@@ -11,6 +11,7 @@ import (
 	"github.com/antigravity/prometheus/internal/llm"
 	"github.com/antigravity/prometheus/internal/model"
 	"github.com/antigravity/prometheus/internal/repository"
+	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -39,6 +40,14 @@ func NewReporter(
 // sends them to the LLM for deep analysis, persists the resulting
 // LogAnalysis, and returns it.
 func (r *Reporter) Analyze(ctx context.Context, req model.AnalyzeLogsRequest) (*model.LogAnalysis, error) {
+	return r.analyze(ctx, req, nil)
+}
+
+func (r *Reporter) AnalyzeScheduled(ctx context.Context, req model.AnalyzeLogsRequest, scheduleID uuid.UUID) (*model.LogAnalysis, error) {
+	return r.analyze(ctx, req, &scheduleID)
+}
+
+func (r *Reporter) analyze(ctx context.Context, req model.AnalyzeLogsRequest, scheduleID *uuid.UUID) (*model.LogAnalysis, error) {
 	rawLogs, err := r.collectLogs(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("collect logs: %w", err)
@@ -100,6 +109,7 @@ func (r *Reporter) Analyze(ctx context.Context, req model.AnalyzeLogsRequest) (*
 		TimeTo:     req.TimeTo,
 		ReportJSON: reportJSON,
 		ModelUsed:  modelName,
+		ScheduleID: scheduleID,
 	}
 
 	if err := r.analysisRepo.Create(ctx, analysis); err != nil {

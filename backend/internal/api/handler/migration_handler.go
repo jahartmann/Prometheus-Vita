@@ -56,7 +56,7 @@ func (h *MigrationHandler) Start(c echo.Context) error {
 
 // List handles GET /api/v1/migrations
 func (h *MigrationHandler) List(c echo.Context) error {
-	migrations, err := h.service.ListMigrations(c.Request().Context())
+	migrations, err := h.service.ListFilteredMigrations(c.Request().Context(), ParseQueryFilter(c))
 	if err != nil {
 		return apiPkg.InternalError(c, "failed to list migrations")
 	}
@@ -135,7 +135,9 @@ func (h *MigrationHandler) ListByNode(c echo.Context) error {
 		return apiPkg.BadRequest(c, "invalid node id")
 	}
 
-	migrations, err := h.service.ListByNode(c.Request().Context(), nodeID)
+	filter := ParseQueryFilter(c)
+	filter.NodeID = &nodeID
+	migrations, err := h.service.ListFilteredMigrations(c.Request().Context(), filter)
 	if err != nil {
 		return apiPkg.InternalError(c, "failed to list migrations")
 	}

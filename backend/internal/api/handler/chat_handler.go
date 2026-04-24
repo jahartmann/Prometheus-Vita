@@ -50,6 +50,10 @@ func (h *ChatHandler) Chat(c echo.Context) error {
 	return apiPkg.Success(c, resp)
 }
 
+func (h *ChatHandler) ToolCatalog(c echo.Context) error {
+	return apiPkg.Success(c, h.service.ToolCatalog())
+}
+
 func (h *ChatHandler) ListConversations(c echo.Context) error {
 	userID, ok := c.Get(middleware.ContextKeyUserID).(uuid.UUID)
 	if !ok {

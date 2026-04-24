@@ -61,7 +61,7 @@ func (h *BackupHandler) CreateBackup(c echo.Context) error {
 // ListAll handles GET /backups.
 // It returns all backups across all nodes.
 func (h *BackupHandler) ListAll(c echo.Context) error {
-	backups, err := h.service.ListAllBackups(c.Request().Context())
+	backups, err := h.service.ListFilteredBackups(c.Request().Context(), ParseQueryFilter(c))
 	if err != nil {
 		return apiPkg.InternalError(c, "failed to list backups")
 	}
@@ -77,7 +77,9 @@ func (h *BackupHandler) ListBackups(c echo.Context) error {
 		return apiPkg.BadRequest(c, "invalid node id")
 	}
 
-	backups, err := h.service.ListBackups(c.Request().Context(), nodeID)
+	filter := ParseQueryFilter(c)
+	filter.NodeID = &nodeID
+	backups, err := h.service.ListFilteredBackups(c.Request().Context(), filter)
 	if err != nil {
 		return apiPkg.InternalError(c, "failed to list backups")
 	}

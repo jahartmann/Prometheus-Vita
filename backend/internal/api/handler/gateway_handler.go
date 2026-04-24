@@ -100,9 +100,7 @@ func (h *GatewayHandler) DeleteToken(c echo.Context) error {
 }
 
 func (h *GatewayHandler) ListAuditLog(c echo.Context) error {
-	limit, offset := ParsePagination(c)
-
-	entries, err := h.auditRepo.ListWithAgentActions(c.Request().Context(), limit, offset)
+	entries, err := h.auditRepo.ListWithAgentActionsFiltered(c.Request().Context(), ParseQueryFilter(c))
 	if err != nil {
 		return apiPkg.InternalError(c, "failed to list audit log")
 	}

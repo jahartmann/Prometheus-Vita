@@ -2,10 +2,12 @@ package handler
 
 import (
 	"errors"
+	"time"
 
 	"github.com/antigravity/prometheus/internal/api/response"
 	"github.com/antigravity/prometheus/internal/model"
 	"github.com/antigravity/prometheus/internal/repository"
+	"github.com/antigravity/prometheus/internal/service/backup"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 )
@@ -23,6 +25,9 @@ func (h *LogReportScheduleHandler) Create(c echo.Context) error {
 	if err := c.Bind(&req); err != nil {
 		return response.BadRequest(c, "invalid request body")
 	}
+	if req.TimeWindowHours <= 0 {
+		req.TimeWindowHours = 24
+	}
 	schedule := &model.LogReportSchedule{
 		CronExpression:     req.CronExpression,
 		NodeIDs:            req.NodeIDs,
@@ -30,6 +35,11 @@ func (h *LogReportScheduleHandler) Create(c echo.Context) error {
 		DeliveryChannelIDs: req.DeliveryChannelIDs,
 		IsActive:           true,
 	}
+	nextRun, err := backup.NextRun(schedule.CronExpression, time.Now())
+	if err != nil {
+		return response.BadRequest(c, "invalid cron expression")
+	}
+	schedule.NextRunAt = &nextRun
 	if err := h.repo.Create(c.Request().Context(), schedule); err != nil {
 		return response.InternalError(c, "failed to create log report schedule")
 	}
@@ -68,6 +78,11 @@ func (h *LogReportScheduleHandler) Update(c echo.Context) error {
 
 	if req.CronExpression != nil {
 		schedule.CronExpression = *req.CronExpression
+		nextRun, err := backup.NextRun(schedule.CronExpression, time.Now())
+		if err != nil {
+			return response.BadRequest(c, "invalid cron expression")
+		}
+		schedule.NextRunAt = &nextRun
 	}
 	if req.NodeIDs != nil {
 		schedule.NodeIDs = *req.NodeIDs

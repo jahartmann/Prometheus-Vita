@@ -40,6 +40,17 @@ function statusColor(code: number): string {
   return "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300";
 }
 
+function riskColor(risk?: string): string {
+  if (risk === "high") return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300";
+  if (risk === "medium") return "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300";
+  return "bg-slate-100 text-slate-800 dark:bg-slate-900 dark:text-slate-300";
+}
+
+function formatCategory(category?: string): string {
+  if (!category) return "";
+  return category.replace(/_/g, " ");
+}
+
 function formatTimestamp(dateStr: string): string {
   return new Date(dateStr).toLocaleString("de-DE", {
     day: "2-digit",
@@ -256,7 +267,7 @@ export default function AuditLogPage() {
                     {entry.username || (entry.api_token_id ? "API-Token" : "-")}
                   </TableCell>
                   <TableCell>
-                    <span className="flex items-center gap-2">
+                    <span className="flex flex-wrap items-center gap-2">
                       <Badge
                         variant="secondary"
                         className={methodColors[entry.method] || ""}
@@ -265,6 +276,19 @@ export default function AuditLogPage() {
                       </Badge>
                       {entry.method === "AGENT" && <Bot className="h-4 w-4 text-violet-500" />}
                       <span className="text-sm">{describeAction(entry.method, entry.path)}</span>
+                      {entry.request_body?.risk && (
+                        <Badge
+                          variant="secondary"
+                          className={riskColor(entry.request_body.risk)}
+                        >
+                          {entry.request_body.critical ? "kritisch" : entry.request_body.risk}
+                        </Badge>
+                      )}
+                      {entry.request_body?.category && (
+                        <Badge variant="outline">
+                          {formatCategory(entry.request_body.category)}
+                        </Badge>
+                      )}
                     </span>
                   </TableCell>
                   <TableCell className="font-mono text-sm max-w-[300px] truncate text-muted-foreground">

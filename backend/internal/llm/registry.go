@@ -3,9 +3,11 @@ package llm
 import (
 	"fmt"
 	"strings"
+	"sync"
 )
 
 type Registry struct {
+	mu           sync.RWMutex
 	providers    map[string]Provider
 	defaultModel string
 }
@@ -17,10 +19,14 @@ func NewRegistry() *Registry {
 }
 
 func (r *Registry) Register(name string, provider Provider) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.providers[name] = provider
 }
 
 func (r *Registry) Get(name string) (Provider, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	p, ok := r.providers[name]
 	if !ok {
 		return nil, fmt.Errorf("LLM provider '%s' not found", name)
@@ -29,6 +35,9 @@ func (r *Registry) Get(name string) (Provider, error) {
 }
 
 func (r *Registry) GetForModel(model string) (Provider, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
 	for _, p := range r.providers {
 		for _, m := range p.Models() {
 			if strings.EqualFold(m, model) {
@@ -59,10 +68,14 @@ func (r *Registry) GetForModel(model string) (Provider, error) {
 }
 
 func (r *Registry) SetDefault(model string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.defaultModel = model
 }
 
 func (r *Registry) DefaultModel() string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	if r.defaultModel != "" {
 		return r.defaultModel
 	}
@@ -70,6 +83,8 @@ func (r *Registry) DefaultModel() string {
 }
 
 func (r *Registry) ListModels() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	var models []string
 	for _, p := range r.providers {
 		models = append(models, p.Models()...)
@@ -78,6 +93,9 @@ func (r *Registry) ListModels() []string {
 }
 
 func (r *Registry) Reload(ollamaURL, openaiKey, anthropicKey string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	if ollamaURL != "" {
 		if p, ok := r.providers["ollama"]; ok {
 			if op, ok := p.(*OllamaProvider); ok {
@@ -89,8 +107,12 @@ func (r *Registry) Reload(ollamaURL, openaiKey, anthropicKey string) {
 	}
 	if openaiKey != "" {
 		r.providers["openai"] = NewOpenAIProvider(openaiKey, "")
+	} else {
+		delete(r.providers, "openai")
 	}
 	if anthropicKey != "" {
 		r.providers["anthropic"] = NewAnthropicProvider(anthropicKey)
+	} else {
+		delete(r.providers, "anthropic")
 	}
 }

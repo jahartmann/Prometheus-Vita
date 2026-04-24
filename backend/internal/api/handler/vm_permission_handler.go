@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"strconv"
 
 	apiPkg "github.com/antigravity/prometheus/internal/api/response"
@@ -39,6 +40,14 @@ func (h *VMPermissionHandler) List(c echo.Context) error {
 	targetType := c.QueryParam("target_type")
 	targetID := c.QueryParam("target_id")
 	nodeIDStr := c.QueryParam("node_id")
+	if targetType != "" || targetID != "" || nodeIDStr != "" {
+		if targetType == "" || targetID == "" || nodeIDStr == "" {
+			return apiPkg.BadRequest(c, "target_type, target_id, and node_id are required when filtering by target")
+		}
+		if !model.IsValidVMPermissionTarget(targetType) {
+			return apiPkg.BadRequest(c, "target_type must be 'vm', 'group', 'node', or 'environment'")
+		}
+	}
 
 	if targetType != "" && targetID != "" && nodeIDStr != "" {
 		nodeID, err := uuid.Parse(nodeIDStr)
@@ -74,8 +83,11 @@ func (h *VMPermissionHandler) Create(c echo.Context) error {
 	if perm.UserID == uuid.Nil || perm.TargetType == "" || perm.TargetID == "" || perm.NodeID == uuid.Nil {
 		return apiPkg.BadRequest(c, "user_id, target_type, target_id, and node_id are required")
 	}
-	if perm.TargetType != "vm" && perm.TargetType != "group" {
-		return apiPkg.BadRequest(c, "target_type must be 'vm' or 'group'")
+	if !model.IsValidVMPermissionTarget(perm.TargetType) {
+		return apiPkg.BadRequest(c, "target_type must be 'vm', 'group', 'node', or 'environment'")
+	}
+	if err := validateVMPermissionPayload(perm.TargetType, perm.TargetID, perm.NodeID, perm.Permissions); err != nil {
+		return apiPkg.BadRequest(c, err.Error())
 	}
 
 	if createdBy, ok := c.Get(middleware.ContextKeyUserID).(uuid.UUID); ok {
@@ -111,23 +123,16 @@ func (h *VMPermissionHandler) Upsert(c echo.Context) error {
 		return apiPkg.BadRequest(c, "invalid node_id")
 	}
 
-	if req.TargetType != "vm" && req.TargetType != "group" {
-		return apiPkg.BadRequest(c, "target_type must be 'vm' or 'group'")
+	if !model.IsValidVMPermissionTarget(req.TargetType) {
+		return apiPkg.BadRequest(c, "target_type must be 'vm', 'group', 'node', or 'environment'")
 	}
 
 	if req.TargetID == "" {
 		return apiPkg.BadRequest(c, "target_id is required")
 	}
 
-	// Validate permissions
-	validPerms := make(map[string]bool)
-	for _, p := range model.AllVMPermissions {
-		validPerms[p] = true
-	}
-	for _, p := range req.Permissions {
-		if !validPerms[p] {
-			return apiPkg.BadRequest(c, "invalid permission: "+p)
-		}
+	if err := validateVMPermissionPayload(req.TargetType, req.TargetID, nodeID, req.Permissions); err != nil {
+		return apiPkg.BadRequest(c, err.Error())
 	}
 
 	createdBy, _ := c.Get(middleware.ContextKeyUserID).(uuid.UUID)
@@ -164,6 +169,9 @@ func (h *VMPermissionHandler) Update(c echo.Context) error {
 	}
 	if err := c.Bind(&req); err != nil {
 		return apiPkg.BadRequest(c, "invalid request body")
+	}
+	if err := validateVMPermissionPayload(existing.TargetType, existing.TargetID, existing.NodeID, req.Permissions); err != nil {
+		return apiPkg.BadRequest(c, err.Error())
 	}
 
 	existing.Permissions = req.Permissions
@@ -213,4 +221,25 @@ func (h *VMPermissionHandler) GetEffective(c echo.Context) error {
 
 func (h *VMPermissionHandler) ListAllPermissions(c echo.Context) error {
 	return apiPkg.Success(c, model.AllVMPermissions)
+}
+
+func validateVMPermissionPayload(targetType, targetID string, nodeID uuid.UUID, permissions []string) error {
+	if len(permissions) == 0 {
+		return fmt.Errorf("permissions is required")
+	}
+	if targetID == "" {
+		return fmt.Errorf("target_id is required")
+	}
+	if nodeID == uuid.Nil {
+		return fmt.Errorf("node_id is required")
+	}
+	if targetType == model.VMPermissionTargetNode && targetID != nodeID.String() {
+		return fmt.Errorf("node target_id must match node_id")
+	}
+	for _, permission := range permissions {
+		if !model.IsValidVMPermission(permission) {
+			return fmt.Errorf("invalid permission: %s", permission)
+		}
+	}
+	return nil
 }

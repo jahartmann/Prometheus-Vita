@@ -73,6 +73,26 @@ api.interceptors.response.use(
 
 export default api;
 
+export type QueryFilterParams = {
+  limit?: number;
+  offset?: number;
+  source?: string;
+  status?: string;
+  severity?: string;
+  category?: string;
+  type?: string;
+  method?: string;
+  node_id?: string;
+  user_id?: string;
+  from?: string;
+  to?: string;
+  q?: string;
+};
+
+export const systemApi = {
+  health: () => axios.get("/health").then((r) => r.data),
+};
+
 /**
  * Safely extract an array from an API response, handling both
  * interceptor-unwrapped and raw envelope responses.
@@ -118,11 +138,11 @@ export const vmApi = {
 
 // Backup API
 export const backupApi = {
-  listAll: () => api.get("/backups"),
+  listAll: (params?: QueryFilterParams) => api.get("/backups", { params }),
   createBackup: (nodeId: string, data?: { backup_type?: string; notes?: string }) =>
     api.post(`/nodes/${nodeId}/backup`, data || {}),
-  listBackups: (nodeId: string) =>
-    api.get(`/nodes/${nodeId}/backups`),
+  listBackups: (nodeId: string, params?: QueryFilterParams) =>
+    api.get(`/nodes/${nodeId}/backups`, { params }),
   getBackup: (backupId: string) =>
     api.get(`/backups/${backupId}`),
   getBackupFiles: (backupId: string) =>
@@ -404,12 +424,12 @@ export const migrationApi = {
     cleanup_source?: boolean;
     cleanup_target?: boolean;
   }) => api.post("/migrations", data),
-  list: () => api.get("/migrations"),
+  list: (params?: QueryFilterParams) => api.get("/migrations", { params }),
   get: (id: string) => api.get(`/migrations/${id}`),
   cancel: (id: string) => api.post(`/migrations/${id}/cancel`),
   getLogs: (id: string) => api.get(`/migrations/${id}/logs`),
   delete: (id: string) => api.delete(`/migrations/${id}`),
-  listByNode: (nodeId: string) => api.get(`/nodes/${nodeId}/migrations`),
+  listByNode: (nodeId: string, params?: QueryFilterParams) => api.get(`/nodes/${nodeId}/migrations`, { params }),
 };
 
 // User API
@@ -418,18 +438,29 @@ export const userApi = {
   getById: (id: string) => api.get(`/users/${id}`),
   create: (data: { username: string; email?: string; password: string; role: string }) =>
     api.post("/users", data),
+  listInvitations: () => api.get("/users/invitations"),
+  createInvitation: (data: { username: string; email?: string; role: string; expires_in_hours?: number }) =>
+    api.post("/users/invitations", data),
+  deleteInvitation: (id: string) => api.delete(`/users/invitations/${id}`),
+  acceptInvitation: (data: { token: string; password: string }) =>
+    api.post("/auth/invitations/accept", data),
   update: (id: string, data: { username?: string; email?: string; role?: string; is_active?: boolean; autonomy_level?: number }) =>
     api.put(`/users/${id}`, data),
   delete: (id: string) => api.delete(`/users/${id}`),
   changePassword: (id: string, data: { current_password?: string; new_password: string }) =>
     api.post(`/users/${id}/password`, data),
+  listSessions: (id: string) => api.get(`/users/${id}/sessions`),
+  revokeSession: (id: string, sessionId: string) =>
+    api.post(`/users/${id}/sessions/${sessionId}/revoke`),
+  revokeAllAccess: (id: string) => api.post(`/users/${id}/revoke-access`),
+  listApiTokens: (id: string) => api.get(`/users/${id}/api-tokens`),
 };
 
 // Anomaly API
 export const anomalyApi = {
-  listUnresolved: () => api.get("/anomalies").then((r) => toArray(r.data)),
-  listByNode: (nodeId: string) =>
-    api.get(`/nodes/${nodeId}/anomalies`).then((r) => toArray(r.data)),
+  listUnresolved: (params?: QueryFilterParams) => api.get("/anomalies", { params }).then((r) => toArray(r.data)),
+  listByNode: (nodeId: string, params?: QueryFilterParams) =>
+    api.get(`/nodes/${nodeId}/anomalies`, { params }).then((r) => toArray(r.data)),
   resolve: (id: string) => api.post(`/anomalies/${id}/resolve`),
 };
 
@@ -517,10 +548,13 @@ export const gatewayApi = {
     api.post("/gateway/tokens", data),
   revokeToken: (id: string) => api.post(`/gateway/tokens/${id}/revoke`),
   deleteToken: (id: string) => api.delete(`/gateway/tokens/${id}`),
-  listAuditLog: (limit?: number, offset?: number) => {
+  listAuditLog: (limit?: number, offset?: number, extra?: QueryFilterParams) => {
     const params = new URLSearchParams();
     if (limit !== undefined) params.set("limit", String(limit));
     if (offset !== undefined) params.set("offset", String(offset));
+    Object.entries(extra ?? {}).forEach(([key, value]) => {
+      if (value !== undefined && value !== "") params.set(key, String(value));
+    });
     return api.get("/gateway/audit", { params });
   },
 };
@@ -528,8 +562,16 @@ export const gatewayApi = {
 // Agent Config API
 export const agentConfigApi = {
   get: () => api.get("/agent/config").then((r) => r.data),
-  update: (data: Record<string, string>) => api.put("/agent/config", data),
-  getModels: (url?: string) => api.get("/agent/models", { params: url ? { url } : undefined }),
+  update: (data: Record<string, string>) => api.put("/agent/config", data).then((r) => r.data),
+  getModels: (url?: string) =>
+    api.get("/agent/models", { params: url ? { url } : undefined }).then((r) => r.data),
+  getTools: () => api.get("/agent/tools").then((r) => r.data),
+  rotateSecret: (provider: "openai" | "anthropic", key: string) =>
+    api.post(`/agent/secrets/${provider}/rotate`, { key }).then((r) => r.data),
+  deleteSecret: (provider: "openai" | "anthropic") =>
+    api.delete(`/agent/secrets/${provider}`).then((r) => r.data),
+  testOllamaConnection: (url: string) =>
+    api.get("/agent/models", { params: { url } }).then((r) => r.data),
 };
 
 // ISO/Template API
@@ -590,13 +632,13 @@ export const reflexApi = {
 
 // Security API
 export const securityApi = {
-  getEvents: () => api.get("/security/events").then((r) => toArray(r.data)),
-  getRecent: (limit = 50) => api.get(`/security/events/recent?limit=${limit}`).then((r) => toArray(r.data)),
+  getEvents: (params?: QueryFilterParams) => api.get("/security/events", { params }).then((r) => toArray(r.data)),
+  getRecent: (limit = 50, params?: QueryFilterParams) => api.get("/security/events/recent", { params: { ...params, limit } }).then((r) => toArray(r.data)),
   getStats: () => api.get("/security/events/stats").then((r) => r.data),
-  getByNode: (nodeId: string) => api.get(`/nodes/${nodeId}/security/events`).then((r) => toArray(r.data)),
+  getByNode: (nodeId: string, params?: QueryFilterParams) => api.get(`/nodes/${nodeId}/security/events`, { params }).then((r) => toArray(r.data)),
   acknowledge: (id: string) => api.post(`/security/events/${id}/acknowledge`),
   getMode: () => api.get("/security/mode").then((r) => r.data),
-  setMode: (mode: string) => api.put("/security/mode", { mode }),
+  setMode: (mode: string) => api.put("/security/mode", { mode }).then((r) => r.data),
 };
 
 // Cluster API
@@ -643,6 +685,13 @@ export const vmPermissionApi = {
   getEffective: (userId: string, nodeId: string, vmid: number) =>
     api.get("/vm-permissions/effective", { params: { user_id: userId, node_id: nodeId, vmid } }),
   listAllPermissions: () => api.get("/vm-permissions/all"),
+};
+
+// Permission Catalog API
+export const permissionApi = {
+  getCatalog: () => api.get("/permissions/catalog").then((r) => r.data),
+  updateRole: (role: string, permissions: string[]) =>
+    api.put(`/permissions/roles/${role}`, { permissions }).then((r) => r.data),
 };
 
 // VM Group API
@@ -731,7 +780,7 @@ export const passwordPolicyApi = {
 
 // Log API
 export const logAnalysisApi = {
-  getAnomalies: (nodeId: string, params?: { limit?: number; offset?: number }) =>
+  getAnomalies: (nodeId: string, params?: QueryFilterParams) =>
     api.get(`/nodes/${nodeId}/log-anomalies`, { params }),
   getAnomaly: (id: string) =>
     api.get(`/log-anomalies/${id}`),
@@ -739,7 +788,7 @@ export const logAnalysisApi = {
     api.post(`/log-anomalies/${id}/acknowledge`),
   analyze: (data: { node_ids: string[]; time_from: string; time_to: string; context?: string }) =>
     api.post("/logs/analyze", data),
-  getAnalyses: (params?: { limit?: number; offset?: number; node_ids?: string }) =>
+  getAnalyses: (params?: QueryFilterParams & { node_ids?: string; schedule_id?: string }) =>
     api.get("/logs/analyses", { params }),
   exportLogs: (params: Record<string, string>) =>
     api.get("/logs/export", { params, responseType: "blob" as const }),
@@ -761,4 +810,18 @@ export const logAnalysisApi = {
     api.put(`/logs/report-schedules/${id}`, data),
   deleteReportSchedule: (id: string) =>
     api.delete(`/logs/report-schedules/${id}`),
+};
+
+// Operations aggregation API (Phase 6)
+export const operationsApi = {
+  listTasks: (params?: { limit?: number; source?: string; status?: string; severity?: string; node_id?: string; from?: string; to?: string; q?: string }) =>
+    api.get("/tasks", { params }).then((r) => toArray(r.data)),
+  getTimeline: (params?: { limit?: number; source?: string; severity?: string; node_id?: string; from?: string; to?: string; q?: string }) =>
+    api.get("/timeline", { params }).then((r) => toArray(r.data)),
+  analyzeRCA: (data: { prompt?: string; node_id?: string; use_llm?: boolean; model?: string; limit?: number }) =>
+    api.post("/rca/analyze", data).then((r) => r.data),
+  getKnowledgeGraph: () =>
+    api.get("/knowledge-graph").then((r) => r.data),
+  generateReport: (data: { prompt?: string; domain?: string; severity?: string; query?: string; use_llm?: boolean; model?: string }) =>
+    api.post("/reports/generate", data).then((r) => r.data),
 };

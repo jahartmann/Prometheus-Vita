@@ -34,6 +34,7 @@ import (
 	"github.com/antigravity/prometheus/internal/service/monitor"
 	nodeService "github.com/antigravity/prometheus/internal/service/node"
 	"github.com/antigravity/prometheus/internal/service/notification"
+	operationsService "github.com/antigravity/prometheus/internal/service/operations"
 	"github.com/antigravity/prometheus/internal/service/prediction"
 	"github.com/antigravity/prometheus/internal/service/recovery"
 	"github.com/antigravity/prometheus/internal/service/reflex"
@@ -150,6 +151,8 @@ func main() {
 	apiTokenRepo := repository.NewAPITokenRepository(dbPool)
 	auditRepo := repository.NewAuditRepository(dbPool)
 	policyRepo := repository.NewPasswordPolicyRepository(dbPool)
+	rolePermissionRepo := repository.NewRolePermissionRepository(dbPool)
+	userInvitationRepo := repository.NewUserInvitationRepository(dbPool)
 
 	// Phase 8 Repositories
 	securityEventRepo := repository.NewSecurityEventRepository(dbPool)
@@ -202,7 +205,7 @@ func main() {
 
 	// User Service
 	pwValidator := userService.NewPasswordValidator(policyRepo)
-	userSvc := userService.NewService(userRepo, pwValidator)
+	userSvc := userService.NewService(userRepo, pwValidator).WithAccessRepositories(tokenRepo, apiTokenRepo, userInvitationRepo)
 
 	// Notification Service
 	notifSvc := notification.NewService(channelRepo, historyRepo, encryptor)
@@ -318,6 +321,27 @@ func main() {
 	snapshotPolicySvc := vmService.NewSnapshotPolicyService(snapshotPolicyRepo, nodeRepo, clientFactory)
 	scheduledActionSvc := vmService.NewScheduledActionService(scheduledActionRepo)
 	vmDependencySvc := vmService.NewDependencyService(vmDependencyRepo, nodeRepo, clientFactory)
+	operationsSvc := operationsService.NewService(
+		nodeRepo,
+		backupRepo,
+		migrationRepo,
+		auditRepo,
+		securityEventRepo,
+		anomalyRepo,
+		predictionRepo,
+		alertIncidentRepo,
+		approvalRepo,
+		historyRepo,
+		scheduleRepo,
+		logReportScheduleRepo,
+		snapshotPolicyRepo,
+		vmDependencyRepo,
+		scheduledActionRepo,
+		networkDeviceRepo,
+		networkPortRepo,
+		nodeSvc,
+		llmRegistry,
+	)
 
 	// Chat Repositories
 	chatConvRepo := repository.NewChatConversationRepository(dbPool)
@@ -358,7 +382,7 @@ func main() {
 	agentToolRegistry.Register(agent.NewVMNetworkInfoTool(nodeSvc))
 
 	// Agent Service
-	agentSvc := agent.NewService(llmRegistry, agentToolRegistry, chatConvRepo, chatMsgRepo, toolCallRepo, approvalRepo, userRepo, agentConfigRepo)
+	agentSvc := agent.NewService(llmRegistry, agentToolRegistry, chatConvRepo, chatMsgRepo, toolCallRepo, approvalRepo, userRepo, rolePermissionRepo, agentConfigRepo)
 
 	// Telegram Bot Service (conditional)
 	var telegramBotSvc *telegramService.BotService
@@ -417,6 +441,8 @@ func main() {
 	sched.AddJob(netFullScanJob)
 	logRetentionJob := scheduler.NewLogRetentionJob(logAnomalyRepo, logAnalysisRepo, networkScanRepo, networkAnomalyRepo, 24*time.Hour)
 	sched.AddJob(logRetentionJob)
+	logReportJob := scheduler.NewLogReportScheduleJob(logReportScheduleRepo, logReporter, 60*time.Second)
+	sched.AddJob(logReportJob)
 
 	if telegramBotEnabled && telegramBotSvc != nil {
 		pollInterval := time.Duration(cfg.Telegram.PollInterval) * time.Second
@@ -471,14 +497,16 @@ func main() {
 		Topology:       handler.NewTopologyHandler(topologySvc),
 		Brain:          handler.NewBrainHandler(brainSvc),
 		Reflex:         handler.NewReflexHandler(reflexSvc),
-		AgentConfig:    handler.NewAgentConfigHandler(agentConfigRepo, llmRegistry, ollamaProvider),
+		AgentConfig:    handler.NewAgentConfigHandler(agentConfigRepo, llmRegistry, ollamaProvider, encryptor),
 		SyncCenter:     handler.NewSyncCenterHandler(nodeSvc, nodeRepo, tagRepo),
 		Security:       handler.NewSecurityHandler(securityEventRepo, analysisSvc),
 		PasswordPolicy: handler.NewPasswordPolicyHandler(policyRepo),
+		Permission:     handler.NewPermissionHandler(rolePermissionRepo),
 		VMCockpit:      handler.NewVMCockpitHandler(nodeSvc, vmPermSvc, jwtSvc, cfg.CORS.AllowOrigins, proxmoxTLS),
 		VMPermission:   handler.NewVMPermissionHandler(vmPermSvc),
 		VMGroup:        handler.NewVMGroupHandler(vmGroupSvc),
 		VMHealth:       handler.NewVMHealthHandler(vmHealthSvc, vmRightsizingSvc, vmAnomalySvc, snapshotPolicySvc, scheduledActionSvc, vmDependencySvc),
+		Operations:     handler.NewOperationsHandler(operationsSvc),
 
 		// Log & Network Analysis
 		LogAnalysis:       handler.NewLogAnalysisHandler(logReporter, logAnomalyRepo, logAnalysisRepo),
@@ -494,7 +522,7 @@ func main() {
 	}
 
 	// Setup routes
-	api.SetupRouter(e, cfg, jwtSvc, handlers, gatewaySvc, redisClient, auditRepo, userRepo)
+	api.SetupRouter(e, cfg, jwtSvc, handlers, gatewaySvc, redisClient, auditRepo, userRepo, rolePermissionRepo)
 
 	// Start server
 	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)

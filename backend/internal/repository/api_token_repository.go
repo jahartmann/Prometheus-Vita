@@ -18,6 +18,7 @@ type APITokenRepository interface {
 	ListByUser(ctx context.Context, userID uuid.UUID) ([]model.APIToken, error)
 	Update(ctx context.Context, token *model.APIToken) error
 	Delete(ctx context.Context, id uuid.UUID) error
+	RevokeAllForUser(ctx context.Context, userID uuid.UUID) error
 	UpdateLastUsed(ctx context.Context, id uuid.UUID) error
 }
 
@@ -111,6 +112,18 @@ func (r *pgAPITokenRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	_, err := r.db.Exec(ctx, "DELETE FROM api_tokens WHERE id=$1", id)
 	if err != nil {
 		return fmt.Errorf("delete api token: %w", err)
+	}
+	return nil
+}
+
+func (r *pgAPITokenRepository) RevokeAllForUser(ctx context.Context, userID uuid.UUID) error {
+	_, err := r.db.Exec(ctx,
+		`UPDATE api_tokens SET is_active=false, updated_at=NOW()
+		 WHERE user_id=$1 AND is_active=true`,
+		userID,
+	)
+	if err != nil {
+		return fmt.Errorf("revoke api tokens for user: %w", err)
 	}
 	return nil
 }

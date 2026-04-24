@@ -42,6 +42,28 @@ func (r *ToolRegistry) List() []Tool {
 	return tools
 }
 
+func (r *ToolRegistry) SecurityCatalog() []ToolCatalogEntry {
+	entries := make([]ToolCatalogEntry, 0, len(r.tools))
+	for _, t := range r.tools {
+		entries = append(entries, ToolCatalogEntry{
+			Name:          t.Name(),
+			Description:   t.Description(),
+			ReadOnly:      t.ReadOnly(),
+			Security:      securityForTool(t),
+			SupportsDryRun: toolSupportsDryRun(t),
+		})
+	}
+	return entries
+}
+
+type ToolCatalogEntry struct {
+	Name          string       `json:"name"`
+	Description   string       `json:"description"`
+	ReadOnly      bool         `json:"read_only"`
+	Security      ToolSecurity `json:"security"`
+	SupportsDryRun bool        `json:"supports_dry_run"`
+}
+
 func (r *ToolRegistry) ToDefinitions() []llm.ToolDefinition {
 	defs := make([]llm.ToolDefinition, 0, len(r.tools))
 	for _, t := range r.tools {
