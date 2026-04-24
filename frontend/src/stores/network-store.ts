@@ -48,7 +48,7 @@ interface NetworkState {
   anomalies: NetworkAnomaly[];
   baselines: ScanBaseline[];
   activeTab: "ports" | "devices" | "anomalies" | "services" | "history";
-  scanStatus: { lastQuick?: string; lastFull?: string; isScanning: boolean };
+  scanStatus: { lastQuick?: string; lastFull?: string; isScanning: boolean; scanningNodeId?: string };
 
   setActiveTab: (tab: NetworkState["activeTab"]) => void;
   fetchScans: (nodeId: string) => Promise<void>;
@@ -83,11 +83,25 @@ export const useNetworkStore = create<NetworkState>()((set) => ({
       const scans = Array.isArray(res.data) ? res.data : [];
       const lastQuick = scans.find((s: NetworkScan) => s.scan_type === "quick")?.started_at;
       const lastFull = scans.find((s: NetworkScan) => s.scan_type === "full")?.started_at;
-      set({ scans, scanStatus: { lastQuick, lastFull, isScanning: false } });
+      set((state) => ({
+        scans,
+        scanStatus: {
+          lastQuick,
+          lastFull,
+          isScanning: state.scanStatus.scanningNodeId === nodeId ? false : state.scanStatus.isScanning,
+          scanningNodeId: state.scanStatus.scanningNodeId === nodeId ? undefined : state.scanStatus.scanningNodeId,
+        },
+      }));
     } catch (e) {
       console.error('Failed to fetch scans:', e);
       if (requestSeq === scansRequestSeq) {
-        set({ scans: [], scanStatus: { isScanning: false } });
+        set((state) => ({
+          scans: [],
+          scanStatus: {
+            isScanning: state.scanStatus.scanningNodeId === nodeId ? false : state.scanStatus.isScanning,
+            scanningNodeId: state.scanStatus.scanningNodeId === nodeId ? undefined : state.scanStatus.scanningNodeId,
+          },
+        }));
       }
     }
   },
@@ -135,11 +149,17 @@ export const useNetworkStore = create<NetworkState>()((set) => ({
   },
 
   triggerScan: async (nodeId, scanType) => {
-    set((state) => ({ scanStatus: { ...state.scanStatus, isScanning: true } }));
+    set((state) => ({ scanStatus: { ...state.scanStatus, isScanning: true, scanningNodeId: nodeId } }));
     try {
       await networkApi.triggerScan(nodeId, { scan_type: scanType });
     } catch (e) {
       console.error('Failed to trigger scan:', e);
+      set((state) => {
+        if (state.scanStatus.scanningNodeId !== nodeId) return {};
+        return {
+          scanStatus: { ...state.scanStatus, isScanning: false, scanningNodeId: undefined },
+        };
+      });
     }
     // Status will update via polling
   },

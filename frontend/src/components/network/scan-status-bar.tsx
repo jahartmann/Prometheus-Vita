@@ -27,7 +27,7 @@ export function ScanStatusBar({ nodeId }: ScanStatusBarProps) {
     : [];
   const lastQuick = nodeScans.find((scan) => scan.scan_type === "quick")?.started_at;
   const lastFull = nodeScans.find((scan) => scan.scan_type === "full")?.started_at;
-  const { isScanning } = scanStatus;
+  const isScanning = scanStatus.isScanning && scanStatus.scanningNodeId === nodeId;
 
   return (
     <div className="flex flex-wrap items-center gap-4 rounded-lg border border-zinc-800 bg-zinc-900/60 px-4 py-3">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNetworkStore } from "@/stores/network-store";
 import { networkApi } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
@@ -72,6 +72,14 @@ export function ScanTimeline({ nodeId }: ScanTimelineProps) {
   const [diff, setDiff] = useState<DiffChange[] | null>(null);
   const [diffLoading, setDiffLoading] = useState(false);
   const [diffError, setDiffError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setScanA("");
+    setScanB("");
+    setDiff(null);
+    setDiffError(null);
+    setDiffLoading(false);
+  }, [nodeId]);
 
   // Chart data: port count per scan
   const chartData = useMemo(() => {
