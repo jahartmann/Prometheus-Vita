@@ -89,6 +89,8 @@ export function VMServiceAnalysis({ nodeId }: VMServiceAnalysisProps) {
       .getVMs(nodeId)
       .then(async (res) => {
         const vms = toArray<VM>(res.data).slice(0, 12);
+        if (cancelled) return;
+
         const vmRows = await Promise.all(
           vms.map(async (vm) => {
             const [summaryResult, portsResult] = await Promise.allSettled([
@@ -183,7 +185,7 @@ export function VMServiceAnalysis({ nodeId }: VMServiceAnalysisProps) {
             Keine VM-Daten für diesen Node.
           </div>
         ) : (
-          <Table>
+          <Table aria-label="VM-Service-Analyse mit Traffic, Bandbreite und Port-Risiken">
             <TableHeader>
               <TableRow className="border-zinc-800">
                 <TableHead>VM</TableHead>

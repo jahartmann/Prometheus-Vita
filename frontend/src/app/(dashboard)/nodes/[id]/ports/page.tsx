@@ -49,6 +49,13 @@ export default function NodePortsPage() {
   const node = nodes.find((n) => n.id === nodeId);
 
   const unacknowledgedCount = anomalies.filter((a) => !a.is_acknowledged).length;
+  const nodePageActiveTab = activeTab === "services" ? "ports" : activeTab;
+
+  useEffect(() => {
+    if (activeTab === "services") {
+      setActiveTab("ports");
+    }
+  }, [activeTab, setActiveTab]);
 
   if (!node) {
     return (
@@ -98,7 +105,7 @@ export default function NodePortsPage() {
       )}
 
       {/* Main tabs */}
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
+      <Tabs value={nodePageActiveTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
         <TabsList className="bg-zinc-900 border border-zinc-800">
           <TabsTrigger value="ports" className="text-sm">
             Ports
