@@ -15,6 +15,7 @@ import { useNodeStore } from "@/stores/node-store";
 import { useNetworkStore } from "@/stores/network-store";
 import { useNetworkScan } from "@/hooks/use-network-scan";
 import { ScanStatusBar } from "@/components/network/scan-status-bar";
+import { NetworkSecurityOverview } from "@/components/network/network-security-overview";
 import { PortTable } from "@/components/network/port-table";
 import { DeviceTable } from "@/components/network/device-table";
 import { NetworkAnomalyList } from "@/components/network/anomaly-list";
@@ -98,6 +99,7 @@ export default function ClusterNetworkPage() {
         <>
           {/* Scan status */}
           <ScanStatusBar nodeId={selectedNodeId} />
+          <NetworkSecurityOverview nodeId={selectedNodeId} />
 
           {/* Anomaly banner */}
           {unacknowledgedCount > 0 && (
