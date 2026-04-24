@@ -42,12 +42,31 @@ const RISK_CLASSES: Record<PortRisk, string> = {
   info: "text-zinc-400 border-zinc-600 bg-zinc-800/50",
 };
 
+const PORT_RISK_CLASSES: Record<PortRisk, string> = {
+  high: "text-red-400",
+  medium: "text-yellow-400",
+  low: "text-green-400",
+  info: "text-zinc-500",
+};
+
 const RISK_SORT_ORDER: Record<PortRisk, number> = {
   high: 0,
   medium: 1,
   low: 2,
   info: 3,
 };
+
+function endpointText(port: NormalizedPortEntry): string {
+  const local = port.localAddr ? `${port.localAddr}:${port.port}` : "";
+  const peer = port.peerAddr
+    ? `${port.peerAddr}${port.peerPort ? `:${port.peerPort}` : ""}`
+    : "";
+
+  if (local && peer) return `${local} -> ${peer}`;
+  if (local) return local;
+  if (peer) return peer;
+  return "-";
+}
 
 interface PortGroupProps {
   label: string;
@@ -63,16 +82,22 @@ function PortGroup({ label, ports, filter, sortKey, sortDir }: PortGroupProps) {
   const filtered = useMemo(() => {
     const q = filter.toLowerCase();
     return ports
-      .filter((p) =>
-        !q ||
-        String(p.port).includes(q) ||
-        (p.service ?? "").toLowerCase().includes(q) ||
-        (p.protocol ?? "").toLowerCase().includes(q) ||
-        (p.state ?? "").toLowerCase().includes(q) ||
-        (p.process ?? "").toLowerCase().includes(q) ||
-        p.risk.toLowerCase().includes(q) ||
-        p.riskReason.toLowerCase().includes(q)
-      )
+      .filter((p) => {
+        const peerPort = p.peerPort ? String(p.peerPort) : "";
+        return (
+          !q ||
+          String(p.port).includes(q) ||
+          (p.service ?? "").toLowerCase().includes(q) ||
+          (p.protocol ?? "").toLowerCase().includes(q) ||
+          (p.state ?? "").toLowerCase().includes(q) ||
+          (p.process ?? "").toLowerCase().includes(q) ||
+          (p.localAddr ?? "").toLowerCase().includes(q) ||
+          (p.peerAddr ?? "").toLowerCase().includes(q) ||
+          peerPort.includes(q) ||
+          p.risk.toLowerCase().includes(q) ||
+          p.riskReason.toLowerCase().includes(q)
+        );
+      })
       .sort((a, b) => {
         let cmp = 0;
         if (sortKey === "port") cmp = a.port - b.port;
@@ -101,7 +126,7 @@ function PortGroup({ label, ports, filter, sortKey, sortDir }: PortGroupProps) {
                 return (
                   <TableRow key={p.id || `${p.port}-${p.protocol}-${i}`} className="border-zinc-800/50">
                     <TableCell className="font-mono font-bold text-sm w-24">
-                      <span className={p.risk === "high" ? "text-red-400" : "text-green-400"}>
+                      <span className={PORT_RISK_CLASSES[p.risk]}>
                         {p.port}
                       </span>
                     </TableCell>
@@ -125,6 +150,7 @@ function PortGroup({ label, ports, filter, sortKey, sortDir }: PortGroupProps) {
                     <TableCell className="text-sm text-zinc-300">{p.service ?? "-"}</TableCell>
                     <TableCell className="text-xs text-zinc-500">{p.version ?? "-"}</TableCell>
                     <TableCell className="text-xs text-zinc-500">{p.process ?? "-"}</TableCell>
+                    <TableCell className="text-xs text-zinc-500 font-mono">{endpointText(p)}</TableCell>
                     <TableCell className="w-28">
                       <Badge variant="outline" className={`text-xs ${RISK_CLASSES[p.risk]}`} title={p.riskReason}>
                         {RISK_LABELS[p.risk]}
@@ -188,7 +214,7 @@ export function PortTable({ nodeId: _nodeId }: PortTableProps) {
       {/* Filter + Sort controls */}
       <div className="flex items-center gap-3">
         <Input
-          placeholder="Port, Service, Prozess filtern..."
+          placeholder="Port, Service, Prozess, Endpunkt filtern..."
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
           className="max-w-xs bg-zinc-900 border-zinc-700 text-sm h-8"
@@ -211,13 +237,14 @@ export function PortTable({ nodeId: _nodeId }: PortTableProps) {
       </div>
 
       {/* Table header labels (visual only) */}
-      <div className="hidden md:grid grid-cols-[96px_80px_96px_1fr_1fr_1fr_112px] gap-0 px-4 text-[10px] uppercase tracking-wide text-zinc-600">
+      <div className="hidden md:grid grid-cols-[96px_80px_96px_1fr_1fr_1fr_1.25fr_112px] gap-0 px-4 text-[10px] uppercase tracking-wide text-zinc-600">
         <span>Port</span>
         <span>Proto</span>
         <span>State</span>
         <span>Service</span>
         <span>Version</span>
         <span>Prozess</span>
+        <span>Endpunkt</span>
         <span>Risiko</span>
       </div>
 
