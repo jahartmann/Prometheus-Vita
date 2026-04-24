@@ -28,10 +28,16 @@ export function ServiceRiskBadge({ risk, reason }: ServiceRiskBadgeProps) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Badge variant={item.variant} className="gap-1 [&_svg]:size-3">
-          <Icon />
-          {item.label}
-        </Badge>
+        <span
+          tabIndex={0}
+          aria-label={`${item.label}: ${reason}`}
+          className="inline-flex rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        >
+          <Badge variant={item.variant} className="gap-1 [&_svg]:size-3">
+            <Icon aria-hidden="true" />
+            {item.label}
+          </Badge>
+        </span>
       </TooltipTrigger>
       <TooltipContent side="top">
         <p>{reason}</p>
