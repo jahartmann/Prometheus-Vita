@@ -63,6 +63,7 @@ interface NetworkState {
 let scansRequestSeq = 0;
 let devicesRequestSeq = 0;
 let anomaliesRequestSeq = 0;
+let baselinesRequestSeq = 0;
 
 export const useNetworkStore = create<NetworkState>()((set) => ({
   scans: [],
@@ -120,12 +121,16 @@ export const useNetworkStore = create<NetworkState>()((set) => ({
   },
 
   fetchBaselines: async (nodeId) => {
+    const requestSeq = ++baselinesRequestSeq;
     try {
       const res = await networkApi.getBaselines(nodeId);
+      if (requestSeq !== baselinesRequestSeq) return;
       set({ baselines: Array.isArray(res.data) ? res.data : [] });
     } catch (e) {
       console.error('Failed to fetch baselines:', e);
-      set({ baselines: [] });
+      if (requestSeq === baselinesRequestSeq) {
+        set({ baselines: [] });
+      }
     }
   },
 

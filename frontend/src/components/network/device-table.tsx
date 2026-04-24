@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { useNetworkStore } from "@/stores/network-store";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -176,9 +176,8 @@ export function DeviceTable({ nodeId }: DeviceTableProps) {
                 const portCount = portCounts[device.ip] ?? 0;
 
                 return (
-                  <>
+                  <Fragment key={device.id}>
                     <TableRow
-                      key={device.id}
                       className={`border-zinc-800/50 cursor-pointer hover:bg-zinc-800/30 transition-colors ${
                         disappeared ? "opacity-50" : ""
                       }`}
@@ -248,7 +247,7 @@ export function DeviceTable({ nodeId }: DeviceTableProps) {
                         </TableCell>
                       </TableRow>
                     )}
-                  </>
+                  </Fragment>
                 );
               })
             )}

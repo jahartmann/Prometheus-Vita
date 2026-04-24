@@ -48,7 +48,9 @@ export default function NodePortsPage() {
 
   const node = nodes.find((n) => n.id === nodeId);
 
-  const unacknowledgedCount = anomalies.filter((a) => !a.is_acknowledged).length;
+  const unacknowledgedCount = anomalies.filter(
+    (a) => a.node_id === nodeId && !a.is_acknowledged
+  ).length;
   const nodePageActiveTab = activeTab === "services" ? "ports" : activeTab;
 
   useEffect(() => {

@@ -16,7 +16,9 @@ interface BaselineManagerProps {
 
 export function BaselineManager({ nodeId }: BaselineManagerProps) {
   const rawBaselines = useNetworkStore((s) => s.baselines);
-  const baselines = Array.isArray(rawBaselines) ? rawBaselines : [];
+  const baselines = Array.isArray(rawBaselines)
+    ? rawBaselines.filter((baseline) => baseline.node_id === nodeId)
+    : [];
   const fetchBaselines = useNetworkStore((s) => s.fetchBaselines);
   const activateBaseline = useNetworkStore((s) => s.activateBaseline);
 

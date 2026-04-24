@@ -18,8 +18,16 @@ function relativeTime(isoStr: string): string {
 }
 
 export function ScanStatusBar({ nodeId }: ScanStatusBarProps) {
-  const { scanStatus, triggerScan } = useNetworkStore();
-  const { lastQuick, lastFull, isScanning } = scanStatus;
+  const scans = useNetworkStore((s) => s.scans);
+  const scanStatus = useNetworkStore((s) => s.scanStatus);
+  const triggerScan = useNetworkStore((s) => s.triggerScan);
+
+  const nodeScans = Array.isArray(scans)
+    ? scans.filter((scan) => scan.node_id === nodeId)
+    : [];
+  const lastQuick = nodeScans.find((scan) => scan.scan_type === "quick")?.started_at;
+  const lastFull = nodeScans.find((scan) => scan.scan_type === "full")?.started_at;
+  const { isScanning } = scanStatus;
 
   return (
     <div className="flex flex-wrap items-center gap-4 rounded-lg border border-zinc-800 bg-zinc-900/60 px-4 py-3">
