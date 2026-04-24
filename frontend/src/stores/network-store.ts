@@ -60,6 +60,10 @@ interface NetworkState {
   activateBaseline: (id: string) => Promise<void>;
 }
 
+let scansRequestSeq = 0;
+let devicesRequestSeq = 0;
+let anomaliesRequestSeq = 0;
+
 export const useNetworkStore = create<NetworkState>()((set) => ({
   scans: [],
   devices: [],
@@ -71,35 +75,47 @@ export const useNetworkStore = create<NetworkState>()((set) => ({
   setActiveTab: (tab) => set({ activeTab: tab }),
 
   fetchScans: async (nodeId) => {
+    const requestSeq = ++scansRequestSeq;
     try {
       const res = await networkApi.getScans(nodeId, { limit: 50 });
+      if (requestSeq !== scansRequestSeq) return;
       const scans = Array.isArray(res.data) ? res.data : [];
       const lastQuick = scans.find((s: NetworkScan) => s.scan_type === "quick")?.started_at;
       const lastFull = scans.find((s: NetworkScan) => s.scan_type === "full")?.started_at;
       set({ scans, scanStatus: { lastQuick, lastFull, isScanning: false } });
     } catch (e) {
       console.error('Failed to fetch scans:', e);
-      set({ scans: [], scanStatus: { isScanning: false } });
+      if (requestSeq === scansRequestSeq) {
+        set({ scans: [], scanStatus: { isScanning: false } });
+      }
     }
   },
 
   fetchDevices: async (nodeId) => {
+    const requestSeq = ++devicesRequestSeq;
     try {
       const res = await networkApi.getDevices(nodeId);
+      if (requestSeq !== devicesRequestSeq) return;
       set({ devices: Array.isArray(res.data) ? res.data : [] });
     } catch (e) {
       console.error('Failed to fetch devices:', e);
-      set({ devices: [] });
+      if (requestSeq === devicesRequestSeq) {
+        set({ devices: [] });
+      }
     }
   },
 
   fetchAnomalies: async (nodeId) => {
+    const requestSeq = ++anomaliesRequestSeq;
     try {
       const res = await networkApi.getAnomalies(nodeId, { limit: 100 });
+      if (requestSeq !== anomaliesRequestSeq) return;
       set({ anomalies: Array.isArray(res.data) ? res.data : [] });
     } catch (e) {
       console.error('Failed to fetch network anomalies:', e);
-      set({ anomalies: [] });
+      if (requestSeq === anomaliesRequestSeq) {
+        set({ anomalies: [] });
+      }
     }
   },
 

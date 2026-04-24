@@ -19,6 +19,8 @@ interface DeviceTableProps {
   nodeId: string;
 }
 
+const LOCALHOST_IP = "127.0.0.1";
+
 function isNew(firstSeen: string): boolean {
   return Date.now() - new Date(firstSeen).getTime() < 24 * 60 * 60 * 1000;
 }
@@ -32,46 +34,85 @@ function formatDate(iso: string): string {
   });
 }
 
-export function DeviceTable({ nodeId: _nodeId }: DeviceTableProps) {
+function asObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+}
+
+function asPortList(value: unknown): Array<Record<string, unknown>> {
+  return Array.isArray(value)
+    ? value.filter((item): item is Record<string, unknown> => !!item && typeof item === "object")
+    : [];
+}
+
+function hostIp(host: Record<string, unknown>): string {
+  return String(host.ip ?? host.address ?? "");
+}
+
+function findNmapHost(results: Record<string, unknown>, ip: string): Record<string, unknown> | undefined {
+  const hosts = Array.isArray(results.nmap_results) ? results.nmap_results : [];
+  return hosts.find((host) => {
+    const h = asObject(host);
+    return h.ip === ip || h.address === ip;
+  }) as Record<string, unknown> | undefined;
+}
+
+function getDevicePorts(results: unknown, ip: string): Array<Record<string, unknown>> {
+  const obj = asObject(results);
+  const nmapHost = findNmapHost(obj, ip);
+  if (nmapHost) return asPortList(nmapHost.ports);
+  if (ip === LOCALHOST_IP) return asPortList(obj.ports);
+  return [];
+}
+
+function getPresenceEvidence(results: unknown): { canDeterminePresence: boolean; ips: Set<string> } {
+  const obj = asObject(results);
+  const ips = new Set<string>();
+
+  if (Array.isArray(obj.nmap_results)) {
+    for (const host of obj.nmap_results) {
+      const ip = hostIp(asObject(host));
+      if (ip) ips.add(ip);
+    }
+    return { canDeterminePresence: true, ips };
+  }
+
+  if (Array.isArray(obj.ports)) {
+    ips.add(LOCALHOST_IP);
+    return { canDeterminePresence: true, ips };
+  }
+
+  return { canDeterminePresence: false, ips };
+}
+
+export function DeviceTable({ nodeId }: DeviceTableProps) {
   const rawDevices = useNetworkStore((s) => s.devices);
   const rawScans = useNetworkStore((s) => s.scans);
-  const devices = Array.isArray(rawDevices) ? rawDevices : [];
-  const scans = Array.isArray(rawScans) ? rawScans : [];
+  const devices = Array.isArray(rawDevices)
+    ? rawDevices.filter((device) => device.node_id === nodeId)
+    : [];
+  const scans = Array.isArray(rawScans)
+    ? rawScans.filter((scan) => scan.node_id === nodeId)
+    : [];
 
   const [filter, setFilter] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  const latestScanTime = scans[0]?.completed_at ?? scans[0]?.started_at;
+  const latestScan = scans[0];
+  const latestScanTime = latestScan?.completed_at ?? latestScan?.started_at;
 
-  // Build set of IPs seen in latest scan
-  const latestScanIPs = useMemo<Set<string>>(() => {
-    if (!scans[0]?.results_json) return new Set();
-    const obj = scans[0].results_json as Record<string, unknown>;
-    const ips = new Set<string>();
-    if (Array.isArray(obj.nmap_results)) {
-      for (const host of obj.nmap_results) {
-        const h = host as Record<string, unknown>;
-        if (h.ip) ips.add(String(h.ip));
-        if (h.address) ips.add(String(h.address));
-      }
-    }
-    return ips;
-  }, [scans]);
+  const latestPresence = useMemo(
+    () => getPresenceEvidence(latestScan?.results_json),
+    [latestScan]
+  );
 
   // Extract port counts per device from latest scan
   const portCounts = useMemo<Record<string, number>>(() => {
-    const obj = scans[0]?.results_json as Record<string, unknown> | undefined;
-    if (!obj) return {};
     const counts: Record<string, number> = {};
-    if (Array.isArray(obj.nmap_results)) {
-      for (const host of obj.nmap_results) {
-        const h = host as Record<string, unknown>;
-        const ip = String(h.ip ?? h.address ?? "");
-        if (ip && Array.isArray(h.ports)) counts[ip] = h.ports.length;
-      }
+    for (const device of devices) {
+      counts[device.ip] = getDevicePorts(latestScan?.results_json, device.ip).length;
     }
     return counts;
-  }, [scans]);
+  }, [devices, latestScan]);
 
   const filtered = useMemo(() => {
     const q = filter.toLowerCase();
@@ -127,8 +168,8 @@ export function DeviceTable({ nodeId: _nodeId }: DeviceTableProps) {
               </TableRow>
             ) : (
               filtered.map((device) => {
-                const disappeared = latestScanTime
-                  ? new Date(device.last_seen) < new Date(latestScanTime) && !latestScanIPs.has(device.ip)
+                const disappeared = latestPresence.canDeterminePresence && latestScanTime
+                  ? new Date(device.last_seen) < new Date(latestScanTime) && !latestPresence.ips.has(device.ip)
                   : false;
                 const newDevice = isNew(device.first_seen);
                 const expanded = expandedId === device.id;
@@ -228,13 +269,9 @@ function DevicePortExpand({
   const obj = scans[0]?.results_json as Record<string, unknown> | undefined;
   if (!obj) return <p className="text-xs text-zinc-600">Keine Scandaten vorhanden.</p>;
 
-  const hosts = Array.isArray(obj.nmap_results) ? obj.nmap_results : [];
-  const host = hosts.find((h) => {
-    const hh = h as Record<string, unknown>;
-    return hh.ip === ip || hh.address === ip;
-  }) as Record<string, unknown> | undefined;
+  const ports = getDevicePorts(obj, ip);
 
-  if (!host || !Array.isArray(host.ports) || host.ports.length === 0) {
+  if (ports.length === 0) {
     return <p className="text-xs text-zinc-600">Keine offenen Ports gefunden.</p>;
   }
 
@@ -242,7 +279,7 @@ function DevicePortExpand({
     <div className="space-y-1">
       <p className="text-xs font-medium text-zinc-400 mb-2">Offene Ports von {ip}</p>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-        {(host.ports as Array<Record<string, unknown>>).map((p, i) => (
+        {ports.map((p, i) => (
           <div key={i} className="flex items-center gap-2 text-xs bg-zinc-800/60 rounded px-2 py-1.5">
             <span className="font-mono font-bold text-green-400">{String(p.port ?? p.portid ?? "?")}</span>
             <span className="text-zinc-500">{String(p.protocol ?? "tcp").toUpperCase()}</span>

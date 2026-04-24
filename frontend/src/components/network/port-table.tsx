@@ -44,7 +44,7 @@ const RISK_SORT_ORDER: Record<PortRisk, number> = {
 };
 
 function endpointText(port: NormalizedPortEntry): string {
-  const local = port.localAddr ? `${port.localAddr}:${port.port}` : "";
+  const local = withPort(port.localAddr, port.port);
   const peer = port.peerAddr
     ? `${port.peerAddr}${port.peerPort ? `:${port.peerPort}` : ""}`
     : "";
@@ -53,6 +53,12 @@ function endpointText(port: NormalizedPortEntry): string {
   if (local) return local;
   if (peer) return peer;
   return "-";
+}
+
+function withPort(address: string | undefined, port: number | undefined): string {
+  if (!address) return "";
+  if (!port) return address;
+  return address.endsWith(`:${port}`) ? address : `${address}:${port}`;
 }
 
 interface PortGroupProps {
@@ -156,9 +162,11 @@ interface PortTableProps {
   nodeId: string;
 }
 
-export function PortTable({ nodeId: _nodeId }: PortTableProps) {
+export function PortTable({ nodeId }: PortTableProps) {
   const rawScans = useNetworkStore((s) => s.scans);
-  const scans = Array.isArray(rawScans) ? rawScans : [];
+  const scans = Array.isArray(rawScans)
+    ? rawScans.filter((scan) => scan.node_id === nodeId)
+    : [];
   const [filter, setFilter] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("port");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
