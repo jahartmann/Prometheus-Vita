@@ -31,7 +31,7 @@ export function KpiCard({ title, value, subtitle, icon: Icon, color = "neutral" 
           <Icon className="h-5 w-5" />
         </div>
         <div className="min-w-0">
-          <p className="text-xs font-medium text-muted-foreground">{title}</p>
+          <p className="truncate text-xs font-medium text-muted-foreground">{title}</p>
           <p className="truncate text-2xl font-semibold tracking-normal">{value}</p>
           {subtitle && <p className="truncate text-xs text-muted-foreground">{subtitle}</p>}
         </div>
