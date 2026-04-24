@@ -49,7 +49,8 @@ export default function ClusterNetworkPage() {
   // Poll for scan data
   useNetworkScan({ nodeId: selectedNodeId, enabled: !!selectedNodeId });
 
-  const unacknowledgedCount = anomalies.filter((a) => !a.is_acknowledged).length;
+  const selectedNodeAnomalies = anomalies.filter((a) => a.node_id === selectedNodeId);
+  const unacknowledgedCount = selectedNodeAnomalies.filter((a) => !a.is_acknowledged).length;
   const selectedNode = nodes.find((n) => n.id === selectedNodeId);
 
   return (
