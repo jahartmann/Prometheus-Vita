@@ -63,7 +63,9 @@ function MetricTile({ icon: Icon, label, value, detail, tone = "default" }: Metr
 }
 
 export function NetworkSecurityOverview({ nodeId }: NetworkSecurityOverviewProps) {
-  const { scans, devices, anomalies } = useNetworkStore();
+  const scans = useNetworkStore((state) => state.scans);
+  const devices = useNetworkStore((state) => state.devices);
+  const anomalies = useNetworkStore((state) => state.anomalies);
   const [summary, setSummary] = useState<NetworkSummary | null>(null);
 
   useEffect(() => {
@@ -73,6 +75,7 @@ export function NetworkSecurityOverview({ nodeId }: NetworkSecurityOverviewProps
     }
 
     let cancelled = false;
+    setSummary(null);
 
     metricsApi
       .getNodeNetworkSummary(nodeId, "24h")
@@ -91,14 +94,26 @@ export function NetworkSecurityOverview({ nodeId }: NetworkSecurityOverviewProps
     };
   }, [nodeId]);
 
+  const nodeScans = useMemo(
+    () => scans.filter((scan) => scan.node_id === nodeId),
+    [scans, nodeId]
+  );
+  const nodeDevices = useMemo(
+    () => devices.filter((device) => device.node_id === nodeId),
+    [devices, nodeId]
+  );
+  const nodeAnomalies = useMemo(
+    () => anomalies.filter((anomaly) => anomaly.node_id === nodeId),
+    [anomalies, nodeId]
+  );
   const scanSummary = useMemo(
-    () => normalizeNetworkScanResults(scans[0]?.results_json),
-    [scans]
+    () => normalizeNetworkScanResults(nodeScans[0]?.results_json),
+    [nodeScans]
   );
 
-  const lastQuickScan = useMemo(() => latestScanTimestamp(scans, "quick"), [scans]);
-  const lastFullScan = useMemo(() => latestScanTimestamp(scans, "full"), [scans]);
-  const unacknowledgedAnomalies = anomalies.filter((anomaly) => !anomaly.is_acknowledged).length;
+  const lastQuickScan = useMemo(() => latestScanTimestamp(nodeScans, "quick"), [nodeScans]);
+  const lastFullScan = useMemo(() => latestScanTimestamp(nodeScans, "full"), [nodeScans]);
+  const unacknowledgedAnomalies = nodeAnomalies.filter((anomaly) => !anomaly.is_acknowledged).length;
   const riskTone =
     scanSummary.highRiskCount > 0 ? "danger" : scanSummary.mediumRiskCount > 0 ? "warning" : "ok";
   const trafficRate = summary
@@ -140,7 +155,7 @@ export function NetworkSecurityOverview({ nodeId }: NetworkSecurityOverviewProps
           <MetricTile
             icon={Network}
             label="Geräte"
-            value={`${devices.length}`}
+            value={`${nodeDevices.length}`}
             detail="Erkannt im Netzwerk"
           />
           <MetricTile
