@@ -19,95 +19,39 @@ import {
 } from "@/components/ui/collapsible";
 import { ChevronDown, ChevronRight, ArrowUpDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  normalizeNetworkScanResults,
+  type NormalizedPortEntry,
+  type PortRisk,
+} from "@/lib/network-scan-normalizer";
 
-interface PortEntry {
-  port: number;
-  protocol: string;
-  state: string;
-  service?: string;
-  version?: string;
-  process?: string;
-  source?: string;
-}
-
-type SortKey = "port" | "protocol" | "state" | "service";
+type SortKey = "port" | "protocol" | "state" | "service" | "risk";
 type SortDir = "asc" | "desc";
 
-const WELL_KNOWN: Record<number, string> = {
-  22: "ssh", 80: "http", 443: "https", 3306: "mysql",
-  5432: "postgres", 6379: "redis", 8080: "http-alt",
-  8443: "https-alt", 27017: "mongodb",
+const RISK_LABELS: Record<PortRisk, string> = {
+  high: "Hoch",
+  medium: "Mittel",
+  low: "Niedrig",
+  info: "Info",
 };
 
-function getPortSeverity(entry: PortEntry): "green" | "yellow" | "red" {
-  if (entry.state !== "open") return "green";
-  const known = WELL_KNOWN[entry.port] || entry.service;
-  if (!known) return "yellow";
-  return "green";
-}
+const RISK_CLASSES: Record<PortRisk, string> = {
+  high: "text-red-400 border-red-400/30 bg-red-500/10",
+  medium: "text-yellow-400 border-yellow-400/30 bg-yellow-500/10",
+  low: "text-green-400 border-green-400/30 bg-green-500/10",
+  info: "text-zinc-400 border-zinc-600 bg-zinc-800/50",
+};
 
-function parseResultsJson(results: unknown): PortEntry[] {
-  if (!results || typeof results !== "object") return [];
-  const obj = results as Record<string, unknown>;
-
-  const ports: PortEntry[] = [];
-
-  // Node-level ports (from /proc/net or ss)
-  if (Array.isArray(obj.ports)) {
-    for (const p of obj.ports) {
-      ports.push({
-        port: Number(p.port ?? p.local_port ?? 0),
-        protocol: String(p.protocol ?? p.proto ?? "tcp"),
-        state: String(p.state ?? "open"),
-        service: p.service as string | undefined,
-        version: p.version as string | undefined,
-        process: p.process as string | undefined,
-        source: "Node",
-      });
-    }
-  }
-
-  // Nmap scan results
-  if (Array.isArray(obj.nmap_results)) {
-    for (const host of obj.nmap_results) {
-      const h = host as Record<string, unknown>;
-      const hostPorts = Array.isArray(h.ports) ? h.ports : [];
-      for (const p of hostPorts) {
-        const pe = p as Record<string, unknown>;
-        ports.push({
-          port: Number(pe.port ?? pe.portid ?? 0),
-          protocol: String(pe.protocol ?? "tcp"),
-          state: String(pe.state ?? "open"),
-          service: pe.service as string | undefined,
-          version: pe.version as string | undefined,
-          process: undefined,
-          source: String(h.ip ?? h.address ?? "External"),
-        });
-      }
-    }
-  }
-
-  // VM ports
-  if (Array.isArray(obj.vm_ports)) {
-    for (const p of obj.vm_ports) {
-      ports.push({
-        port: Number(p.port ?? 0),
-        protocol: String(p.protocol ?? "tcp"),
-        state: String(p.state ?? "open"),
-        service: p.service as string | undefined,
-        version: p.version as string | undefined,
-        process: p.process as string | undefined,
-        source: `VM ${p.vmid ?? ""}`,
-      });
-    }
-  }
-
-  return ports;
-}
+const RISK_SORT_ORDER: Record<PortRisk, number> = {
+  high: 0,
+  medium: 1,
+  low: 2,
+  info: 3,
+};
 
 interface PortGroupProps {
   label: string;
-  ports: PortEntry[];
+  ports: NormalizedPortEntry[];
   filter: string;
   sortKey: SortKey;
   sortDir: SortDir;
@@ -125,7 +69,9 @@ function PortGroup({ label, ports, filter, sortKey, sortDir }: PortGroupProps) {
         (p.service ?? "").toLowerCase().includes(q) ||
         (p.protocol ?? "").toLowerCase().includes(q) ||
         (p.state ?? "").toLowerCase().includes(q) ||
-        (p.process ?? "").toLowerCase().includes(q)
+        (p.process ?? "").toLowerCase().includes(q) ||
+        p.risk.toLowerCase().includes(q) ||
+        p.riskReason.toLowerCase().includes(q)
       )
       .sort((a, b) => {
         let cmp = 0;
@@ -133,6 +79,7 @@ function PortGroup({ label, ports, filter, sortKey, sortDir }: PortGroupProps) {
         else if (sortKey === "protocol") cmp = a.protocol.localeCompare(b.protocol);
         else if (sortKey === "state") cmp = a.state.localeCompare(b.state);
         else if (sortKey === "service") cmp = (a.service ?? "").localeCompare(b.service ?? "");
+        else if (sortKey === "risk") cmp = RISK_SORT_ORDER[a.risk] - RISK_SORT_ORDER[b.risk];
         return sortDir === "asc" ? cmp : -cmp;
       });
   }, [ports, filter, sortKey, sortDir]);
@@ -151,15 +98,10 @@ function PortGroup({ label, ports, filter, sortKey, sortDir }: PortGroupProps) {
           <Table>
             <TableBody>
               {filtered.map((p, i) => {
-                const sev = getPortSeverity(p);
                 return (
-                  <TableRow key={`${p.port}-${p.protocol}-${i}`} className="border-zinc-800/50">
+                  <TableRow key={p.id || `${p.port}-${p.protocol}-${i}`} className="border-zinc-800/50">
                     <TableCell className="font-mono font-bold text-sm w-24">
-                      <span className={
-                        sev === "red" ? "text-red-400" :
-                        sev === "yellow" ? "text-yellow-400" :
-                        "text-green-400"
-                      }>
+                      <span className={p.risk === "high" ? "text-red-400" : "text-green-400"}>
                         {p.port}
                       </span>
                     </TableCell>
@@ -183,6 +125,11 @@ function PortGroup({ label, ports, filter, sortKey, sortDir }: PortGroupProps) {
                     <TableCell className="text-sm text-zinc-300">{p.service ?? "-"}</TableCell>
                     <TableCell className="text-xs text-zinc-500">{p.version ?? "-"}</TableCell>
                     <TableCell className="text-xs text-zinc-500">{p.process ?? "-"}</TableCell>
+                    <TableCell className="w-28">
+                      <Badge variant="outline" className={`text-xs ${RISK_CLASSES[p.risk]}`} title={p.riskReason}>
+                        {RISK_LABELS[p.risk]}
+                      </Badge>
+                    </TableCell>
                   </TableRow>
                 );
               })}
@@ -206,15 +153,16 @@ export function PortTable({ nodeId: _nodeId }: PortTableProps) {
   const [sortDir, setSortDir] = useState<SortDir>("asc");
 
   const latestScan = scans[0];
-  const allPorts = useMemo(
-    () => parseResultsJson(latestScan?.results_json),
+  const normalized = useMemo(
+    () => normalizeNetworkScanResults(latestScan?.results_json),
     [latestScan]
   );
+  const allPorts = normalized.ports;
 
   const groups = useMemo(() => {
-    const map = new Map<string, PortEntry[]>();
+    const map = new Map<string, NormalizedPortEntry[]>();
     for (const p of allPorts) {
-      const key = p.source ?? "Node";
+      const key = p.source;
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(p);
     }
@@ -247,7 +195,7 @@ export function PortTable({ nodeId: _nodeId }: PortTableProps) {
         />
         <div className="flex items-center gap-1 ml-auto text-xs text-zinc-500">
           <span>Sortierung:</span>
-          {(["port", "protocol", "state", "service"] as SortKey[]).map((k) => (
+          {(["port", "protocol", "state", "service", "risk"] as SortKey[]).map((k) => (
             <Button
               key={k}
               variant="ghost"
@@ -263,13 +211,14 @@ export function PortTable({ nodeId: _nodeId }: PortTableProps) {
       </div>
 
       {/* Table header labels (visual only) */}
-      <div className="hidden md:grid grid-cols-[96px_80px_96px_1fr_1fr_1fr] gap-0 px-4 text-[10px] uppercase tracking-wide text-zinc-600">
+      <div className="hidden md:grid grid-cols-[96px_80px_96px_1fr_1fr_1fr_112px] gap-0 px-4 text-[10px] uppercase tracking-wide text-zinc-600">
         <span>Port</span>
         <span>Proto</span>
         <span>State</span>
         <span>Service</span>
         <span>Version</span>
         <span>Prozess</span>
+        <span>Risiko</span>
       </div>
 
       {/* Grouped sections */}
