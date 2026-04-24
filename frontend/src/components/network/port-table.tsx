@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useNetworkStore } from "@/stores/network-store";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { ServiceRiskBadge } from "@/components/network/service-risk-badge";
 import {
   Table,
   TableBody,
@@ -27,20 +28,6 @@ import {
 
 type SortKey = "port" | "protocol" | "state" | "service" | "risk";
 type SortDir = "asc" | "desc";
-
-const RISK_LABELS: Record<PortRisk, string> = {
-  high: "Hoch",
-  medium: "Mittel",
-  low: "Niedrig",
-  info: "Info",
-};
-
-const RISK_CLASSES: Record<PortRisk, string> = {
-  high: "text-red-400 border-red-400/30 bg-red-500/10",
-  medium: "text-yellow-400 border-yellow-400/30 bg-yellow-500/10",
-  low: "text-green-400 border-green-400/30 bg-green-500/10",
-  info: "text-zinc-400 border-zinc-600 bg-zinc-800/50",
-};
 
 const PORT_RISK_CLASSES: Record<PortRisk, string> = {
   high: "text-red-400",
@@ -152,9 +139,7 @@ function PortGroup({ label, ports, filter, sortKey, sortDir }: PortGroupProps) {
                     <TableCell className="text-xs text-zinc-500">{p.process ?? "-"}</TableCell>
                     <TableCell className="text-xs text-zinc-500 font-mono">{endpointText(p)}</TableCell>
                     <TableCell className="w-28">
-                      <Badge variant="outline" className={`text-xs ${RISK_CLASSES[p.risk]}`} title={p.riskReason}>
-                        {RISK_LABELS[p.risk]}
-                      </Badge>
+                      <ServiceRiskBadge risk={p.risk} reason={p.riskReason} />
                     </TableCell>
                   </TableRow>
                 );
