@@ -94,8 +94,11 @@ export default function ClusterNetworkPage() {
       )}
 
       {!selectedNodeId ? (
-        <div className="flex items-center justify-center py-16 text-zinc-600">
-          <p className="text-sm">Kein Node ausgewählt.</p>
+        <div className="rounded-lg border border-dashed p-10 text-center">
+          <p className="text-sm font-medium">Kein Node ausgewählt</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Wähle eine Node aus, um Ports, Geräte, Anomalien und Bandbreite zu prüfen.
+          </p>
         </div>
       ) : (
         <>

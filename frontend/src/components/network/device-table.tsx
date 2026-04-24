@@ -88,7 +88,7 @@ export function DeviceTable({ nodeId: _nodeId }: DeviceTableProps) {
       <div className="flex flex-col items-center justify-center py-16 text-zinc-500">
         <Wifi className="h-8 w-8 mb-3 opacity-30" />
         <p className="text-sm">Keine Geräte erkannt.</p>
-        <p className="text-xs mt-1">Führe einen Full Scan durch, um Netzwerkgeräte zu entdecken.</p>
+        <p className="text-xs mt-1">Führe einen Full Scan aus, um Netzwerkgeräte und Dienstversionen zu entdecken.</p>
       </div>
     );
   }
