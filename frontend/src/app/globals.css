@@ -59,7 +59,7 @@
 .dark {
   --background: oklch(0.141 0.005 286);
   --foreground: oklch(0.985 0 0);
-  --card: oklch(0.21 0.006 286);
+  --card: oklch(0.19 0.012 286);
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.21 0.006 286);
   --popover-foreground: oklch(0.985 0 0);
@@ -73,10 +73,10 @@
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.577 0.245 27);
   --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.274 0.006 286);
+  --border: oklch(0.31 0.018 286);
   --input: oklch(0.274 0.006 286);
   --ring: oklch(0.552 0.016 286);
-  --sidebar: oklch(0.141 0.005 286);
+  --sidebar: oklch(0.125 0.012 286);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-muted: oklch(0.705 0.015 286);
 }
@@ -92,13 +92,13 @@
 
 @layer utilities {
   .card-hover {
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
   }
   .card-hover:hover {
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px oklch(0 0 0 / 0.06);
+    box-shadow: 0 8px 22px oklch(0 0 0 / 0.08);
   }
   .dark .card-hover:hover {
-    box-shadow: 0 4px 12px oklch(0 0 0 / 0.3);
+    box-shadow: 0 8px 22px oklch(0 0 0 / 0.35);
   }
 }
