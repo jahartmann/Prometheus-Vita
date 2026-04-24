@@ -47,7 +47,7 @@ interface NetworkState {
   devices: NetworkDevice[];
   anomalies: NetworkAnomaly[];
   baselines: ScanBaseline[];
-  activeTab: "ports" | "devices" | "anomalies" | "history";
+  activeTab: "ports" | "devices" | "anomalies" | "services" | "history";
   scanStatus: { lastQuick?: string; lastFull?: string; isScanning: boolean };
 
   setActiveTab: (tab: NetworkState["activeTab"]) => void;

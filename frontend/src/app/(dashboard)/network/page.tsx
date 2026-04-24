@@ -21,6 +21,7 @@ import { DeviceTable } from "@/components/network/device-table";
 import { NetworkAnomalyList } from "@/components/network/anomaly-list";
 import { ScanTimeline } from "@/components/network/scan-timeline";
 import { BaselineManager } from "@/components/network/baseline-manager";
+import { VMServiceAnalysis } from "@/components/network/vm-service-analysis";
 
 export default function ClusterNetworkPage() {
   const { nodes, fetchNodes } = useNodeStore();
@@ -134,6 +135,7 @@ export default function ClusterNetworkPage() {
                   </Badge>
                 )}
               </TabsTrigger>
+              <TabsTrigger value="services" className="text-sm">VM-/Service-Analyse</TabsTrigger>
               <TabsTrigger value="history" className="text-sm">Scan-Historie</TabsTrigger>
             </TabsList>
 
@@ -147,6 +149,10 @@ export default function ClusterNetworkPage() {
 
             <TabsContent value="anomalies" className="mt-4">
               <NetworkAnomalyList nodeId={selectedNodeId} />
+            </TabsContent>
+
+            <TabsContent value="services" className="mt-4">
+              <VMServiceAnalysis nodeId={selectedNodeId} />
             </TabsContent>
 
             <TabsContent value="history" className="mt-4">
