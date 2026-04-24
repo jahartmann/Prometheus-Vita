@@ -29,7 +29,6 @@ import {
   GitBranch,
   Tag,
   AlertTriangle,
-  Lightbulb,
   Search,
   Moon,
   Sun,
@@ -38,13 +37,11 @@ import {
   HeartPulse,
   Link2,
   Bot,
-  ClipboardList,
   KeyRound,
   Users,
   RadioTower,
   UserCog,
   ListChecks,
-  History,
   SearchCheck,
   NetworkIcon,
   FileBarChart,
@@ -84,13 +81,9 @@ const sections: NavSection[] = [
     defaultOpen: true,
     items: [
       { label: "Dashboard", href: "/", icon: LayoutDashboard },
-      { label: "Task-Center", href: "/task-center", icon: ListChecks, matchPrefix: "/task-center" },
       { label: "Monitoring", href: "/monitoring", icon: BarChart3, matchPrefix: "/monitoring" },
       { label: "Alerts", href: "/alerts", icon: AlertTriangle, matchPrefix: "/alerts" },
-      { label: "Briefing", href: "/briefing", icon: ClipboardList, matchPrefix: "/briefing" },
-      { label: "Flight Recorder", href: "/flight-recorder", icon: History, matchPrefix: "/flight-recorder" },
-      { label: "Root Cause", href: "/root-cause", icon: SearchCheck, matchPrefix: "/root-cause" },
-      { label: "Reports", href: "/reports", icon: FileBarChart, matchPrefix: "/reports" },
+      { label: "Task-Center", href: "/task-center", icon: ListChecks, matchPrefix: "/task-center" },
       { label: "Logs", href: "/logs", icon: FileText, matchPrefix: "/logs" },
     ],
   },
@@ -101,7 +94,6 @@ const sections: NavSection[] = [
     includeNodes: true,
     items: [
       { label: "Cluster", href: "/cluster", icon: RadioTower, matchPrefix: "/cluster" },
-      { label: "Netzwerk", href: "/network", icon: Network, matchPrefix: "/network" },
       { label: "Speicher", href: "/storage", icon: HardDrive, matchPrefix: "/storage" },
       { label: "Backups", href: "/backups", icon: Archive, matchPrefix: "/backups" },
       { label: "Migration", href: "/migrations", icon: ArrowRightLeft, matchPrefix: "/migrations" },
@@ -114,8 +106,9 @@ const sections: NavSection[] = [
     icon: ShieldCheck,
     items: [
       { label: "Sicherheit", href: "/security", icon: ShieldCheck, matchPrefix: "/security" },
+      { label: "Netzwerk-Security", href: "/network", icon: Network, matchPrefix: "/network" },
+      { label: "Root Cause", href: "/root-cause", icon: SearchCheck, matchPrefix: "/root-cause" },
       { label: "Drift-Erkennung", href: "/drift", icon: GitCompare, matchPrefix: "/drift" },
-      { label: "Empfehlungen", href: "/recommendations", icon: Lightbulb, matchPrefix: "/recommendations" },
       { label: "VM-Gesundheit", href: "/health", icon: HeartPulse, matchPrefix: "/health" },
       { label: "KI-Chat", href: "/chat", icon: Bot, matchPrefix: "/chat" },
     ],
@@ -125,9 +118,10 @@ const sections: NavSection[] = [
     icon: Zap,
     items: [
       { label: "Topologie", href: "/topology", icon: GitBranch, matchPrefix: "/topology" },
-      { label: "Knowledge Graph", href: "/knowledge-graph", icon: NetworkIcon, matchPrefix: "/knowledge-graph" },
-      { label: "Abhängigkeiten", href: "/dependencies", icon: Link2, matchPrefix: "/dependencies" },
       { label: "Reflex-Regeln", href: "/reflex", icon: Zap, matchPrefix: "/reflex" },
+      { label: "Abhängigkeiten", href: "/dependencies", icon: Link2, matchPrefix: "/dependencies" },
+      { label: "Knowledge Graph", href: "/knowledge-graph", icon: NetworkIcon, matchPrefix: "/knowledge-graph" },
+      { label: "Reports", href: "/reports", icon: FileBarChart, matchPrefix: "/reports" },
       { label: "Tags", href: "/tags", icon: Tag, matchPrefix: "/tags" },
     ],
   },
@@ -241,9 +235,9 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
         key={item.href}
         href={item.href}
         className={cn(
-          "flex items-center gap-3 rounded-md px-2.5 py-1.5 text-sm transition-colors",
+          "flex items-center gap-2 rounded-md px-2.5 py-1.5 text-sm transition-colors",
           active
-            ? "bg-primary/10 text-primary font-semibold"
+            ? "bg-primary text-primary-foreground font-semibold shadow-sm"
             : "text-sidebar-muted hover:bg-accent hover:text-foreground"
         )}
       >
