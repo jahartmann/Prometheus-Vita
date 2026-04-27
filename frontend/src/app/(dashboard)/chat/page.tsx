@@ -84,7 +84,7 @@ export default function ChatPage() {
       {/* Sidebar */}
       <div
         className={cn(
-          "flex flex-col border-r bg-card transition-all duration-200",
+          "hidden flex-col border-r bg-card transition-all duration-200 md:flex",
           sidebarOpen
             ? "w-64 md:w-72 lg:w-80"
             : "w-0 overflow-hidden"

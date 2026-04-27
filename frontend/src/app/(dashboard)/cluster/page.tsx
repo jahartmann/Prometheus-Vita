@@ -21,12 +21,13 @@ import {
   HardDrive,
   CheckCircle2,
   XCircle,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { clusterApi } from "@/lib/api";
+import { clusterApi, getApiErrorMessage } from "@/lib/api";
 import { formatBytes, formatBandwidth } from "@/lib/utils";
 
 interface NodeStatusData {
@@ -89,18 +90,33 @@ export default function ClusterDashboardPage() {
   const [history, setHistory] = useState<HistoryPoint[]>([]);
   const [period, setPeriod] = useState("24h");
   const [loading, setLoading] = useState(true);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
 
   useEffect(() => {
     setLoading(true);
     Promise.all([
-      clusterApi.getSummary().then((r) => setSummary(r.data)).catch(() => null),
+      clusterApi
+        .getSummary()
+        .then((r) => {
+          setSummary(r.data);
+          setSummaryError(null);
+        })
+        .catch((err: unknown) => {
+          setSummary(null);
+          setSummaryError(getApiErrorMessage(err, "Cluster-Zusammenfassung konnte nicht geladen werden"));
+        }),
       clusterApi
         .getHistory(period)
         .then((r) => {
           const data = Array.isArray(r.data) ? r.data : [];
           setHistory(data);
+          setHistoryError(null);
         })
-        .catch(() => setHistory([])),
+        .catch((err: unknown) => {
+          setHistory([]);
+          setHistoryError(getApiErrorMessage(err, "Cluster-Verlauf konnte nicht geladen werden"));
+        }),
     ]).finally(() => setLoading(false));
   }, [period]);
 
@@ -190,6 +206,19 @@ export default function ClusterDashboardPage() {
           ))}
         </div>
       </div>
+
+      {(summaryError || historyError) && (
+        <div className="rounded-lg border border-amber-300/60 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <div className="space-y-1">
+              <p className="font-medium">Cluster-Daten konnten nicht vollständig geladen werden</p>
+              {summaryError && <p>{summaryError}</p>}
+              {historyError && <p>{historyError}</p>}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* KPI Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -334,7 +363,11 @@ export default function ClusterDashboardPage() {
             <CardTitle className="text-base">Cluster-Verlauf</CardTitle>
           </CardHeader>
           <CardContent>
-            {chartData.length === 0 ? (
+            {historyError ? (
+              <div className="flex h-[350px] items-center justify-center px-6 text-center text-sm text-amber-700 dark:text-amber-300">
+                {historyError}
+              </div>
+            ) : chartData.length === 0 ? (
               <div className="flex h-[350px] items-center justify-center text-sm text-muted-foreground">
                 Keine Daten im gewählten Zeitraum.
               </div>

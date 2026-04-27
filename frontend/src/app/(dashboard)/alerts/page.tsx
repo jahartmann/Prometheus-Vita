@@ -30,9 +30,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { KpiCard } from "@/components/ui/kpi-card";
-import { escalationApi } from "@/lib/api";
+import { escalationApi, getApiErrorMessage } from "@/lib/api";
 import { useNodeStore } from "@/stores/node-store";
 import type { AlertIncident, IncidentStatus } from "@/types/api";
+import { toast } from "sonner";
 
 const severityConfig: Record<
   IncidentStatus,
@@ -61,17 +62,23 @@ const severityConfig: Record<
 export default function AlertsPage() {
   const [incidents, setIncidents] = useState<AlertIncident[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [actionId, setActionId] = useState<string | null>(null);
+  const [bulkActionRunning, setBulkActionRunning] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const { nodes, fetchNodes } = useNodeStore();
 
   const fetchIncidents = useCallback(async () => {
     setIsLoading(true);
+    setError(null);
     try {
       const resp = await escalationApi.listIncidents(100);
       const data = resp.data;
       setIncidents(Array.isArray(data) ? data : []);
-    } catch {
-      // Fehler
+    } catch (err: unknown) {
+      const message = getApiErrorMessage(err, "Alerts konnten nicht geladen werden");
+      setError(message);
+      setIncidents([]);
     } finally {
       setIsLoading(false);
     }
@@ -83,33 +90,56 @@ export default function AlertsPage() {
   }, [fetchIncidents, fetchNodes]);
 
   const handleAcknowledge = async (id: string) => {
+    setActionId(id);
+    setError(null);
     try {
       await escalationApi.acknowledgeIncident(id);
-      fetchIncidents();
-    } catch {
-      // Fehler
+      toast.success("Alarm bestätigt");
+      await fetchIncidents();
+    } catch (err: unknown) {
+      const message = getApiErrorMessage(err, "Alarm konnte nicht bestätigt werden");
+      setError(message);
+      toast.error(message);
+    } finally {
+      setActionId(null);
     }
   };
 
   const handleResolve = async (id: string) => {
+    setActionId(id);
+    setError(null);
     try {
       await escalationApi.resolveIncident(id);
-      fetchIncidents();
-    } catch {
-      // Fehler
+      toast.success("Alarm gelöst");
+      await fetchIncidents();
+    } catch (err: unknown) {
+      const message = getApiErrorMessage(err, "Alarm konnte nicht gelöst werden");
+      setError(message);
+      toast.error(message);
+    } finally {
+      setActionId(null);
     }
   };
 
   const handleAcknowledgeAll = async () => {
     const triggered = incidents.filter((i) => i.status === "triggered");
-    for (const inc of triggered) {
-      try {
-        await escalationApi.acknowledgeIncident(inc.id);
-      } catch {
-        // continue
-      }
+    if (triggered.length === 0) return;
+    setBulkActionRunning(true);
+    setError(null);
+    const results = await Promise.allSettled(
+      triggered.map((inc) => escalationApi.acknowledgeIncident(inc.id))
+    );
+    const failed = results.filter((result) => result.status === "rejected").length;
+    const partialFailureMessage =
+      failed > 0 ? `${failed} von ${triggered.length} Alarmen konnten nicht bestätigt werden` : null;
+    if (partialFailureMessage) {
+      toast.error(partialFailureMessage);
+    } else {
+      toast.success(`${triggered.length} Alarme bestätigt`);
     }
-    fetchIncidents();
+    await fetchIncidents();
+    if (partialFailureMessage) setError(partialFailureMessage);
+    setBulkActionRunning(false);
   };
 
   const filtered =
@@ -132,7 +162,12 @@ export default function AlertsPage() {
         </div>
         <div className="flex gap-2">
           {triggeredCount > 0 && (
-            <Button variant="outline" size="sm" onClick={handleAcknowledgeAll}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleAcknowledgeAll}
+              disabled={bulkActionRunning || isLoading}
+            >
               <CheckCircle2 className="mr-2 h-4 w-4" />
               Alle bestätigen ({triggeredCount})
             </Button>
@@ -150,6 +185,16 @@ export default function AlertsPage() {
           </Button>
         </div>
       </div>
+
+      {error && (
+        <div className="flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+          <div>
+            <p className="font-medium text-destructive">Alert-Daten nicht aktuell</p>
+            <p className="text-muted-foreground">{error}</p>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard
@@ -263,6 +308,7 @@ export default function AlertsPage() {
                               variant="outline"
                               size="sm"
                               onClick={() => handleAcknowledge(incident.id)}
+                              disabled={actionId === incident.id || bulkActionRunning}
                             >
                               Bestätigen
                             </Button>
@@ -273,6 +319,7 @@ export default function AlertsPage() {
                               variant="outline"
                               size="sm"
                               onClick={() => handleResolve(incident.id)}
+                              disabled={actionId === incident.id || bulkActionRunning}
                             >
                               Lösen
                             </Button>

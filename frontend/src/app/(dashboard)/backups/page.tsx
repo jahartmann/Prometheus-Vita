@@ -44,7 +44,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { KpiCard } from "@/components/ui/kpi-card";
 import { useNodeStore } from "@/stores/node-store";
-import { backupApi, scheduleApi, toArray } from "@/lib/api";
+import { backupApi, scheduleApi, toArray, getApiErrorMessage } from "@/lib/api";
 import { formatBytes } from "@/lib/utils";
 import type { ConfigBackup, BackupSchedule } from "@/types/api";
 import { BackupDetailDialog } from "@/components/backup/backup-detail-dialog";
@@ -85,6 +85,7 @@ export default function BackupsPage() {
   const [backups, setBackups] = useState<ConfigBackup[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [selectedBackup, setSelectedBackup] = useState<ConfigBackup | null>(null);
   const [restoreBackupId, setRestoreBackupId] = useState<string | null>(null);
   const [vzdumpOpen, setVzdumpOpen] = useState(false);
@@ -98,6 +99,7 @@ export default function BackupsPage() {
   // Schedules state
   const [allSchedules, setAllSchedules] = useState<(BackupSchedule & { _nodeId: string })[]>([]);
   const [schedulesLoading, setSchedulesLoading] = useState(false);
+  const [scheduleLoadErrors, setScheduleLoadErrors] = useState<Record<string, string>>({});
   const [scheduleNodeId, setScheduleNodeId] = useState("");
   const [isCreatingSchedule, setIsCreatingSchedule] = useState(false);
   const [activeTab, setActiveTab] = useState("backups");
@@ -108,14 +110,15 @@ export default function BackupsPage() {
 
   const loadBackups = async () => {
     setIsLoading(true);
+    setActionError(null);
     try {
       const response = await backupApi.listAll();
       const data = toArray<ConfigBackup>(response.data);
       setBackups(data);
       setLoadError(null);
-    } catch (e) {
+    } catch (e: unknown) {
       console.error('Failed to load backups:', e);
-      const message = e instanceof Error ? e.message : "Fehler beim Laden der Backups";
+      const message = getApiErrorMessage(e, "Fehler beim Laden der Backups");
       setLoadError(message);
       setBackups([]);
     } finally {
@@ -138,21 +141,26 @@ export default function BackupsPage() {
   const loadAllSchedules = async () => {
     if (nodes.length === 0) return;
     setSchedulesLoading(true);
+    setScheduleLoadErrors({});
     try {
+      const nextErrors: Record<string, string> = {};
       const results = await Promise.all(
         nodes.map(async (n) => {
           try {
             const res = await scheduleApi.listSchedules(n.id);
             return toArray<BackupSchedule>(res.data).map((s) => ({ ...s, _nodeId: n.id }));
-          } catch (e) {
+          } catch (e: unknown) {
             console.error(`Failed to load schedules for node ${n.id}:`, e);
+            nextErrors[n.name || n.id] = getApiErrorMessage(e, "Zeitpläne konnten nicht geladen werden");
             return [];
           }
         })
       );
       setAllSchedules(results.flat());
-    } catch (e) {
+      setScheduleLoadErrors(nextErrors);
+    } catch (e: unknown) {
       console.error('Failed to load schedules:', e);
+      setScheduleLoadErrors({ Allgemein: getApiErrorMessage(e, "Zeitpläne konnten nicht geladen werden") });
       setAllSchedules([]);
     } finally {
       setSchedulesLoading(false);
@@ -184,8 +192,12 @@ export default function BackupsPage() {
       a.download = `backup-${backupId}.tar.gz`;
       a.click();
       window.URL.revokeObjectURL(url);
-    } catch (e) {
+      setActionError(null);
+    } catch (e: unknown) {
       console.error('Failed to download backup:', e);
+      const message = getApiErrorMessage(e, "Backup konnte nicht heruntergeladen werden");
+      setActionError(message);
+      toast.error(message);
     }
   };
 
@@ -194,9 +206,13 @@ export default function BackupsPage() {
       await backupApi.deleteBackup(backupId);
       setBackups((prev) => prev.filter((b) => b.id !== backupId));
       setDeleteConfirm(null);
+      setActionError(null);
       toast.success("Backup gelöscht");
-    } catch (e) {
+    } catch (e: unknown) {
       console.error('Failed to delete backup:', e);
+      const message = getApiErrorMessage(e, "Backup konnte nicht gelöscht werden");
+      setActionError(message);
+      toast.error(message);
     }
   };
 
@@ -214,9 +230,13 @@ export default function BackupsPage() {
       setCreateNotes("");
       setCreateNodeId("");
       setActiveTab("backups");
+      setActionError(null);
       loadBackups();
-    } catch (e) {
+    } catch (e: unknown) {
       console.error('Failed to create backup:', e);
+      const message = getApiErrorMessage(e, "Backup konnte nicht erstellt werden");
+      setActionError(message);
+      toast.error(message);
     }
     setIsCreating(false);
   };
@@ -231,9 +251,13 @@ export default function BackupsPage() {
         retention_count: retentionDays,
       });
       toast.success("Backup-Zeitplan erstellt");
+      setActionError(null);
       loadAllSchedules();
-    } catch (e) {
+    } catch (e: unknown) {
       console.error('Failed to create schedule:', e);
+      const message = getApiErrorMessage(e, "Backup-Zeitplan konnte nicht erstellt werden");
+      setActionError(message);
+      toast.error(message);
     }
     setIsCreatingSchedule(false);
   };
@@ -242,9 +266,13 @@ export default function BackupsPage() {
     try {
       await scheduleApi.deleteSchedule(id);
       toast.success("Zeitplan gelöscht");
+      setActionError(null);
       loadAllSchedules();
-    } catch (e) {
+    } catch (e: unknown) {
       console.error('Failed to delete schedule:', e);
+      const message = getApiErrorMessage(e, "Zeitplan konnte nicht gelöscht werden");
+      setActionError(message);
+      toast.error(message);
     }
   };
 
@@ -252,9 +280,13 @@ export default function BackupsPage() {
     try {
       await scheduleApi.updateSchedule(schedule.id, { is_active: !schedule.is_active });
       toast.success(schedule.is_active ? "Zeitplan pausiert" : "Zeitplan aktiviert");
+      setActionError(null);
       loadAllSchedules();
-    } catch (e) {
+    } catch (e: unknown) {
       console.error('Failed to toggle schedule:', e);
+      const message = getApiErrorMessage(e, "Zeitplan konnte nicht geändert werden");
+      setActionError(message);
+      toast.error(message);
     }
   };
 
@@ -290,6 +322,16 @@ export default function BackupsPage() {
           </Button>
         </div>
       </div>
+
+      {actionError && (
+        <div className="flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+          <div>
+            <p className="font-medium text-destructive">Backup-Aktion fehlgeschlagen</p>
+            <p className="text-muted-foreground">{actionError}</p>
+          </div>
+        </div>
+      )}
 
       {/* KPI Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -513,6 +555,21 @@ export default function BackupsPage() {
 
         {/* Schedules Tab */}
         <TabsContent value="schedules" className="space-y-4">
+          {Object.keys(scheduleLoadErrors).length > 0 && (
+            <div className="rounded-lg border border-amber-300/60 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                <div className="space-y-1">
+                  <p className="font-medium">Zeitpläne konnten nicht vollständig geladen werden</p>
+                  {Object.entries(scheduleLoadErrors).map(([nodeName, message]) => (
+                    <p key={nodeName}>
+                      <span className="font-medium">{nodeName}:</span> {message}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
           {schedulesLoading ? (
             <div className="space-y-3">
               {Array.from({ length: 2 }).map((_, i) => (

@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { KpiCard } from "@/components/ui/kpi-card";
-import { vmHealthApi, toArray } from "@/lib/api";
+import { vmHealthApi, toArray, getApiErrorMessage } from "@/lib/api";
 import { useNodeStore } from "@/stores/node-store";
 import type { VMHealthScore } from "@/types/api";
 
@@ -48,26 +48,36 @@ function getStatusBadge(status: string) {
 export default function HealthPage() {
   const [allScores, setAllScores] = useState<VMHealthScore[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [loadErrors, setLoadErrors] = useState<Record<string, string>>({});
   const { nodes, fetchNodes } = useNodeStore();
 
   const fetchAllHealth = useCallback(async () => {
     setIsLoading(true);
+    setError(null);
+    setLoadErrors({});
     try {
       const scores: VMHealthScore[] = [];
+      const nextErrors: Record<string, string> = {};
       for (const node of nodes) {
         try {
           const res = await vmHealthApi.getAllHealth(node.id);
           const nodeScores = toArray<VMHealthScore>(res.data);
           scores.push(...nodeScores);
-        } catch {
-          // skip offline nodes
+        } catch (err: unknown) {
+          nextErrors[node.name || node.id] = getApiErrorMessage(
+            err,
+            "Gesundheitsdaten konnten nicht geladen werden"
+          );
         }
       }
       // Sort by score ascending (worst first)
       scores.sort((a, b) => a.score - b.score);
       setAllScores(scores);
-    } catch {
-      // ignore
+      setLoadErrors(nextErrors);
+    } catch (err: unknown) {
+      setAllScores([]);
+      setError(getApiErrorMessage(err, "VM-Gesundheit konnte nicht geladen werden"));
     } finally {
       setIsLoading(false);
     }
@@ -112,6 +122,23 @@ export default function HealthPage() {
         </Button>
       </div>
 
+      {(error || Object.keys(loadErrors).length > 0) && (
+        <div className="rounded-lg border border-amber-300/60 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <div className="space-y-1">
+              <p className="font-medium">Gesundheitsdaten nicht vollständig</p>
+              {error && <p>{error}</p>}
+              {Object.entries(loadErrors).map(([nodeName, message]) => (
+                <p key={nodeName}>
+                  <span className="font-medium">{nodeName}:</span> {message}
+                </p>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard
@@ -149,6 +176,12 @@ export default function HealthPage() {
         <Card>
           <CardContent className="py-12 text-center text-muted-foreground">
             Gesundheitsbewertungen werden berechnet...
+          </CardContent>
+        </Card>
+      ) : allScores.length === 0 && (error || Object.keys(loadErrors).length > 0) ? (
+        <Card>
+          <CardContent className="py-12 text-center text-muted-foreground">
+            Keine aktuellen Gesundheitsdaten verfügbar. Details stehen im Fehlerhinweis oben.
           </CardContent>
         </Card>
       ) : allScores.length === 0 ? (
