@@ -7,6 +7,7 @@ backend/tmp/
 backend/bin/
 frontend/.next/
 frontend/out/
+frontend/.npm-cache/
 .worktrees/
 .superpowers/
 
