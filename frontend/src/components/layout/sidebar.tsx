@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
@@ -11,16 +11,9 @@ import {
   Flame,
   ChevronDown,
   ChevronRight,
-  Monitor,
   Network,
   HardDrive,
-  FolderArchive,
-  BarChart3,
-  FileText,
-  Plus,
-  Bell,
   Archive,
-  Shield,
   ShieldCheck,
   Disc,
   ArrowRightLeft,
@@ -33,7 +26,6 @@ import {
   Moon,
   Sun,
   LogOut,
-  ChevronUp,
   HeartPulse,
   Link2,
   Bot,
@@ -43,15 +35,31 @@ import {
   UserCog,
   ListChecks,
   SearchCheck,
-  NetworkIcon,
   FileBarChart,
+  FileText,
+  Plus,
+  Sparkles,
+  Bell,
+  Shield,
+  Activity,
+  Workflow,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useNodeStore } from "@/stores/node-store";
 import { useAuthStore } from "@/stores/auth-store";
 import { OnboardNodeDialog } from "@/components/nodes/onboard-node-dialog";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The sidebar's organizing principle:
+// Four sections, each one answering a different question the operator asks.
+//   1. Übersicht  → "Was ist gerade los?"
+//   2. Infrastruktur → "Was läuft auf welcher Node?"
+//   3. Intelligenz  → "Wer denkt für mich mit / Was sind Auffälligkeiten?"
+//   4. Verwaltung  → "Was ist konfiguriert / wer hat Zugriff?"
+// Settings stays as its own collapsed section at the bottom because it's both
+// rarely-used AND nested deeply.
+// ─────────────────────────────────────────────────────────────────────────────
 
 interface NavItem {
   label: string;
@@ -59,79 +67,72 @@ interface NavItem {
   icon: React.ComponentType<{ className?: string }>;
   matchPrefix?: string;
   excludePrefix?: string[];
+  keywords?: string;
 }
 
 interface NavSection {
   label: string;
-  icon: React.ComponentType<{ className?: string }>;
   defaultOpen?: boolean;
   includeNodes?: boolean;
   items: NavItem[];
 }
 
-const topNavItems: NavItem[] = [
-  { label: "Suche", href: "/search", icon: Search, matchPrefix: "/search" },
-  { label: "Benachrichtigungen", href: "/settings/notifications", icon: Bell, matchPrefix: "/settings/notifications" },
-];
-
 const sections: NavSection[] = [
   {
-    label: "Cockpit/Operations",
-    icon: LayoutDashboard,
+    label: "Übersicht",
     defaultOpen: true,
     items: [
-      { label: "Dashboard", href: "/", icon: LayoutDashboard },
-      { label: "Monitoring", href: "/monitoring", icon: BarChart3, matchPrefix: "/monitoring" },
+      { label: "Dashboard", href: "/", icon: LayoutDashboard, keywords: "lagezentrum start home" },
+      { label: "Monitoring", href: "/monitoring", icon: Activity, matchPrefix: "/monitoring", keywords: "metriken graphs" },
+      { label: "Task-Center", href: "/task-center", icon: ListChecks, matchPrefix: "/task-center", keywords: "aufgaben todo timeline" },
       { label: "Alerts", href: "/alerts", icon: AlertTriangle, matchPrefix: "/alerts" },
-      { label: "Task-Center", href: "/task-center", icon: ListChecks, matchPrefix: "/task-center" },
-      { label: "Logs", href: "/logs", icon: FileText, matchPrefix: "/logs" },
     ],
   },
   {
     label: "Infrastruktur",
-    icon: Server,
     defaultOpen: true,
     includeNodes: true,
     items: [
       { label: "Cluster", href: "/cluster", icon: RadioTower, matchPrefix: "/cluster" },
       { label: "Speicher", href: "/storage", icon: HardDrive, matchPrefix: "/storage" },
       { label: "Backups", href: "/backups", icon: Archive, matchPrefix: "/backups" },
-      { label: "Migration", href: "/migrations", icon: ArrowRightLeft, matchPrefix: "/migrations" },
-      { label: "Disaster Recovery", href: "/disaster-recovery", icon: Shield, matchPrefix: "/disaster-recovery" },
+      { label: "Migrationen", href: "/migrations", icon: ArrowRightLeft, matchPrefix: "/migrations" },
+      { label: "Disaster Recovery", href: "/disaster-recovery", icon: Shield, matchPrefix: "/disaster-recovery", keywords: "dr runbook" },
       { label: "ISOs & Vorlagen", href: "/isos", icon: Disc, matchPrefix: "/isos" },
+      { label: "Topologie", href: "/topology", icon: Workflow, matchPrefix: "/topology" },
     ],
   },
   {
-    label: "Sicherheit & KI",
-    icon: ShieldCheck,
+    label: "Intelligenz",
+    defaultOpen: false,
     items: [
-      { label: "Sicherheit", href: "/security", icon: ShieldCheck, matchPrefix: "/security" },
-      { label: "Netzwerk-Security", href: "/network", icon: Network, matchPrefix: "/network" },
-      { label: "Root Cause", href: "/root-cause", icon: SearchCheck, matchPrefix: "/root-cause" },
-      { label: "Drift-Erkennung", href: "/drift", icon: GitCompare, matchPrefix: "/drift" },
-      { label: "VM-Gesundheit", href: "/health", icon: HeartPulse, matchPrefix: "/health" },
       { label: "KI-Chat", href: "/chat", icon: Bot, matchPrefix: "/chat" },
+      { label: "Sicherheit", href: "/security", icon: ShieldCheck, matchPrefix: "/security" },
+      { label: "Netzwerk-Analyse", href: "/network", icon: Network, matchPrefix: "/network", keywords: "ports scan bandbreite" },
+      { label: "VM-Gesundheit", href: "/health", icon: HeartPulse, matchPrefix: "/health" },
+      { label: "Drift-Erkennung", href: "/drift", icon: GitCompare, matchPrefix: "/drift" },
+      { label: "Root Cause", href: "/root-cause", icon: SearchCheck, matchPrefix: "/root-cause" },
+      { label: "Reflex-Regeln", href: "/reflex", icon: Zap, matchPrefix: "/reflex" },
+      { label: "Knowledge Graph", href: "/knowledge-graph", icon: GitBranch, matchPrefix: "/knowledge-graph", keywords: "wissensbasis brain" },
     ],
   },
   {
-    label: "System/Automatisierung",
-    icon: Zap,
+    label: "Verwaltung",
+    defaultOpen: false,
     items: [
-      { label: "Topologie", href: "/topology", icon: GitBranch, matchPrefix: "/topology" },
-      { label: "Reflex-Regeln", href: "/reflex", icon: Zap, matchPrefix: "/reflex" },
-      { label: "Abhängigkeiten", href: "/dependencies", icon: Link2, matchPrefix: "/dependencies" },
-      { label: "Knowledge Graph", href: "/knowledge-graph", icon: NetworkIcon, matchPrefix: "/knowledge-graph" },
+      { label: "Logs", href: "/logs", icon: FileText, matchPrefix: "/logs" },
       { label: "Reports", href: "/reports", icon: FileBarChart, matchPrefix: "/reports" },
+      { label: "Abhängigkeiten", href: "/dependencies", icon: Link2, matchPrefix: "/dependencies" },
       { label: "Tags", href: "/tags", icon: Tag, matchPrefix: "/tags" },
     ],
   },
   {
     label: "Einstellungen",
-    icon: Settings,
+    defaultOpen: false,
     items: [
       { label: "Übersicht", href: "/settings", icon: Settings },
       { label: "Nodes", href: "/settings/nodes", icon: Server, matchPrefix: "/settings/nodes" },
-      { label: "Agent", href: "/settings/agent", icon: Bot, matchPrefix: "/settings/agent" },
+      { label: "Agent & KI", href: "/settings/agent", icon: Sparkles, matchPrefix: "/settings/agent" },
       { label: "Benutzer", href: "/settings/users", icon: Users, matchPrefix: "/settings/users" },
       { label: "Rollen & Rechte", href: "/settings/roles", icon: UserCog, matchPrefix: "/settings/roles" },
       { label: "API-Tokens", href: "/settings/api-tokens", icon: KeyRound, matchPrefix: "/settings/api-tokens" },
@@ -141,23 +142,19 @@ const sections: NavSection[] = [
   },
 ];
 
-const nodeSubItems = [
-  { label: "Übersicht", path: "", icon: LayoutDashboard },
-  { label: "VMs & Container", path: "vms", icon: Monitor },
-  { label: "Monitoring", path: "monitoring", icon: BarChart3 },
-  { label: "Netzwerk", path: "network", icon: Network },
-  { label: "Storage", path: "storage", icon: HardDrive },
-  { label: "Backups", path: "backups", icon: FolderArchive },
-  { label: "ISOs & Vorlagen", path: "iso-templates", icon: Disc },
-];
-
-function matchesNavItem(pathname: string, item: NavItem) {
+function matchesNavItem(pathname: string, item: NavItem): boolean {
   if (item.matchPrefix) {
-    if (item.excludePrefix?.some((prefix) => pathname.startsWith(prefix))) return false;
+    if (item.excludePrefix?.some((p) => pathname.startsWith(p))) return false;
     return pathname.startsWith(item.matchPrefix);
   }
-
   return pathname === item.href;
+}
+
+function fuzzyMatch(query: string, item: NavItem): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  const haystack = `${item.label} ${item.keywords ?? ""} ${item.href}`.toLowerCase();
+  return haystack.includes(q);
 }
 
 interface SidebarProps {
@@ -171,10 +168,9 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
   const { theme, setTheme } = useTheme();
   const { nodes, fetchNodes } = useNodeStore();
   const { user, logout } = useAuthStore();
-  const [serversOpen, setServersOpen] = useState(pathname.startsWith("/nodes"));
-  const [openNodes, setOpenNodes] = useState<Record<string, boolean>>({});
   const [onboardOpen, setOnboardOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [search, setSearch] = useState("");
   const [openSections, setOpenSections] = useState<Record<string, boolean>>(() =>
     sections.reduce<Record<string, boolean>>((acc, section) => {
       acc[section.label] =
@@ -184,6 +180,8 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
       return acc;
     }, {})
   );
+  const [serversOpen, setServersOpen] = useState(pathname.startsWith("/nodes"));
+  const [openNodes, setOpenNodes] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     const token = useAuthStore.getState().accessToken;
@@ -202,23 +200,37 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
         setOpenNodes((prev) => ({ ...prev, [activeNodeId]: true }));
       }
     }
-
     const activeSection = sections.find(
-      (section) =>
-        (section.includeNodes && pathname.startsWith("/nodes")) ||
-        section.items.some((item) => matchesNavItem(pathname, item))
+      (s) =>
+        (s.includeNodes && pathname.startsWith("/nodes")) ||
+        s.items.some((item) => matchesNavItem(pathname, item))
     );
     if (activeSection) {
       setOpenSections((prev) => ({ ...prev, [activeSection.label]: true }));
     }
   }, [pathname]);
 
-  const isActive = (href: string, matchPrefix?: string, excludePrefix?: string[]) =>
-    matchesNavItem(pathname, { label: "", href, icon: LayoutDashboard, matchPrefix, excludePrefix });
+  const filteredSections = useMemo(() => {
+    if (!search.trim()) return sections;
+    return sections
+      .map((section) => ({
+        ...section,
+        items: section.items.filter((item) => fuzzyMatch(search, item)),
+      }))
+      .filter((section) => section.items.length > 0 || (section.includeNodes && search.trim() === ""));
+  }, [search]);
 
-  const isSectionActive = (section: NavSection) =>
-    (section.includeNodes && pathname.startsWith("/nodes")) ||
-    section.items.some((item) => matchesNavItem(pathname, item));
+  // While searching, force-open every section that has results.
+  useEffect(() => {
+    if (!search.trim()) return;
+    setOpenSections((prev) => {
+      const next = { ...prev };
+      for (const section of filteredSections) {
+        next[section.label] = true;
+      }
+      return next;
+    });
+  }, [search, filteredSections]);
 
   const handleLogout = () => {
     logout();
@@ -227,179 +239,241 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
 
   const initials = user?.username ? user.username.slice(0, 2).toUpperCase() : "??";
 
+  // ────────────── Render helpers ──────────────
+
   const renderNavLink = (item: NavItem) => {
-    const active = isActive(item.href, item.matchPrefix, item.excludePrefix);
+    const active = matchesNavItem(pathname, item);
     const Icon = item.icon;
     return (
       <Link
         key={item.href}
         href={item.href}
         className={cn(
-          "flex items-center gap-2 rounded-md px-2.5 py-1.5 text-sm transition-colors",
+          "group relative flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] transition-colors",
           active
-            ? "bg-primary text-primary-foreground font-semibold shadow-sm"
-            : "text-sidebar-muted hover:bg-accent hover:text-foreground"
+            ? "bg-accent font-medium text-foreground"
+            : "text-sidebar-muted hover:bg-accent/60 hover:text-foreground"
         )}
+        onClick={() => onMobileClose?.()}
       >
-        <Icon className="h-4 w-4 shrink-0" />
-        <span>{item.label}</span>
+        {active && (
+          <span
+            aria-hidden
+            className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-r-full bg-primary"
+          />
+        )}
+        <Icon
+          className={cn(
+            "h-4 w-4 shrink-0 transition-colors",
+            active ? "text-foreground" : "text-sidebar-muted group-hover:text-foreground"
+          )}
+        />
+        <span className="truncate">{item.label}</span>
       </Link>
     );
   };
 
   const renderNodeTree = () => (
-    <Collapsible open={serversOpen} onOpenChange={setServersOpen}>
-      <CollapsibleTrigger
+    <div className="space-y-0.5">
+      <button
+        type="button"
+        onClick={() => setServersOpen((v) => !v)}
         className={cn(
-          "flex w-full items-center gap-3 rounded-md px-2.5 py-1.5 text-sm transition-colors",
+          "flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] transition-colors",
           pathname.startsWith("/nodes")
-            ? "bg-primary/10 text-primary font-semibold"
-            : "text-sidebar-muted hover:bg-accent hover:text-foreground"
+            ? "bg-accent font-medium text-foreground"
+            : "text-sidebar-muted hover:bg-accent/60 hover:text-foreground"
         )}
       >
         <Server className="h-4 w-4 shrink-0" />
-        <span className="flex-1 text-left">Server</span>
+        <span className="flex-1 truncate text-left">Server</span>
+        <span className="text-[10px] tabular-nums text-sidebar-muted">{nodes.length}</span>
         {serversOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-      </CollapsibleTrigger>
-      <CollapsibleContent className="ml-3 flex flex-col gap-0.5 border-l border-border pl-2">
-        {nodes.map((node) => (
-          <Collapsible
-            key={node.id}
-            open={openNodes[node.id] ?? false}
-            onOpenChange={() => setOpenNodes((prev) => ({ ...prev, [node.id]: !prev[node.id] }))}
-          >
-            <CollapsibleTrigger
-              className={cn(
-                "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
-                pathname.startsWith(`/nodes/${node.id}`)
-                  ? "bg-primary/10 text-primary font-medium"
-                  : "text-sidebar-muted hover:bg-accent hover:text-foreground"
-              )}
-            >
-              <span className={cn("h-2 w-2 shrink-0 rounded-full", node.is_online ? "bg-green-500" : "bg-red-500")} />
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="flex-1 truncate text-left">{node.name}</span>
-                </TooltipTrigger>
-                <TooltipContent side="right">
-                  <p>{node.name}</p>
-                  <p className="text-xs text-muted-foreground">{node.hostname}</p>
-                </TooltipContent>
-              </Tooltip>
-              {openNodes[node.id] ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-            </CollapsibleTrigger>
-            <CollapsibleContent className="ml-3 flex flex-col gap-0.5 border-l border-border pl-2">
-              {nodeSubItems.map((sub) => {
-                const SubIcon = sub.icon;
-                const subHref = sub.path ? `/nodes/${node.id}/${sub.path}` : `/nodes/${node.id}`;
-                const subActive = pathname === subHref;
-                return (
-                  <Link
-                    key={sub.path || "overview"}
-                    href={subHref}
+      </button>
+      {serversOpen && (
+        <div className="ml-3.5 flex flex-col gap-0.5 border-l border-border/60 pl-2">
+          {nodes.map((node) => {
+            const open = openNodes[node.id] ?? false;
+            const onPath = pathname.startsWith(`/nodes/${node.id}`);
+            return (
+              <div key={node.id}>
+                <button
+                  type="button"
+                  onClick={() => setOpenNodes((p) => ({ ...p, [node.id]: !p[node.id] }))}
+                  className={cn(
+                    "flex w-full items-center gap-2 rounded-md px-2 py-1 text-[12.5px] transition-colors",
+                    onPath
+                      ? "bg-primary/10 text-primary"
+                      : "text-sidebar-muted hover:bg-accent/60 hover:text-foreground"
+                  )}
+                >
+                  <span
                     className={cn(
-                      "flex items-center gap-2 rounded-md px-2 py-1 text-xs transition-colors",
-                      subActive
-                        ? "bg-primary/10 text-primary font-medium"
-                        : "text-sidebar-muted hover:bg-accent hover:text-foreground"
+                      "h-1.5 w-1.5 shrink-0 rounded-full",
+                      node.is_online ? "bg-emerald-500" : "bg-zinc-500"
                     )}
-                  >
-                    <SubIcon className="h-3.5 w-3.5 shrink-0" />
-                    <span>{sub.label}</span>
-                  </Link>
-                );
-              })}
-            </CollapsibleContent>
-          </Collapsible>
-        ))}
-        <button
-          onClick={() => setOnboardOpen(true)}
-          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-sidebar-muted transition-colors hover:bg-accent hover:text-foreground"
-        >
-          <Plus className="h-3.5 w-3.5 shrink-0" />
-          <span>Server hinzufügen</span>
-        </button>
-      </CollapsibleContent>
-    </Collapsible>
+                  />
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="flex-1 truncate text-left">{node.name}</span>
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                      <p className="font-medium">{node.name}</p>
+                      <p className="text-[11px] text-muted-foreground">{node.hostname}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                  {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                </button>
+                {open && (
+                  <div className="mb-1 ml-3 flex flex-col gap-0.5 border-l border-border/60 pl-2">
+                    {[
+                      { label: "Übersicht", path: "" },
+                      { label: "VMs & Container", path: "vms" },
+                      { label: "Monitoring", path: "monitoring" },
+                      { label: "Netzwerk", path: "network" },
+                      { label: "Storage", path: "storage" },
+                      { label: "Backups", path: "backups" },
+                      { label: "ISOs & Vorlagen", path: "iso-templates" },
+                    ].map((sub) => {
+                      const subHref = sub.path ? `/nodes/${node.id}/${sub.path}` : `/nodes/${node.id}`;
+                      const subActive = pathname === subHref;
+                      return (
+                        <Link
+                          key={sub.path || "overview"}
+                          href={subHref}
+                          className={cn(
+                            "rounded-md px-2 py-0.5 text-[11.5px] transition-colors",
+                            subActive
+                              ? "bg-primary/10 text-primary"
+                              : "text-sidebar-muted hover:bg-accent/60 hover:text-foreground"
+                          )}
+                        >
+                          {sub.label}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          <button
+            type="button"
+            onClick={() => setOnboardOpen(true)}
+            className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-[12.5px] text-sidebar-muted transition-colors hover:bg-accent/60 hover:text-foreground"
+          >
+            <Plus className="h-3 w-3 shrink-0" />
+            <span>Server hinzufügen</span>
+          </button>
+        </div>
+      )}
+    </div>
   );
 
   const renderSection = (section: NavSection) => {
-    const Icon = section.icon;
     const open = openSections[section.label] ?? false;
-    const active = isSectionActive(section);
-
     return (
-      <Collapsible
-        key={section.label}
-        open={open}
-        onOpenChange={(nextOpen) => setOpenSections((prev) => ({ ...prev, [section.label]: nextOpen }))}
-      >
-        <CollapsibleTrigger
-          className={cn(
-            "mt-2 flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-xs font-semibold uppercase tracking-wide transition-colors",
-            active
-              ? "bg-accent text-foreground"
-              : "text-sidebar-muted hover:bg-accent hover:text-foreground"
-          )}
+      <div key={section.label} className="mb-1">
+        <button
+          type="button"
+          onClick={() => setOpenSections((prev) => ({ ...prev, [section.label]: !open }))}
+          className="flex w-full items-center gap-1.5 px-2.5 py-1 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-sidebar-muted/70 transition-colors hover:text-foreground"
         >
-          <Icon className="h-3.5 w-3.5 shrink-0" />
-          <span className="flex-1 truncate text-left">{section.label}</span>
-          {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-        </CollapsibleTrigger>
-        <CollapsibleContent className="mt-1 flex flex-col gap-0.5">
-          {section.includeNodes && renderNodeTree()}
-          {section.items.map(renderNavLink)}
-        </CollapsibleContent>
-      </Collapsible>
+          <span className="flex-1 text-left">{section.label}</span>
+          <ChevronDown
+            className={cn(
+              "h-3 w-3 transition-transform",
+              open ? "rotate-0" : "-rotate-90"
+            )}
+          />
+        </button>
+        {open && (
+          <div className="mt-0.5 space-y-0.5">
+            {section.includeNodes && renderNodeTree()}
+            {section.items.map(renderNavLink)}
+          </div>
+        )}
+      </div>
     );
   };
 
+  // ────────────── Layout ──────────────
+
   const sidebarContent = (
-    <aside className="flex h-screen w-60 flex-col bg-sidebar border-r border-border" role="navigation" aria-label="Hauptnavigation">
-      {/* Logo */}
-      <div className="flex h-14 items-center gap-2 px-4">
-        <div className="flex h-7 w-7 items-center justify-center rounded-md bg-zinc-900 dark:bg-white">
-          <Flame className="h-4 w-4 text-white dark:text-zinc-900" />
+    <aside
+      className="flex h-screen w-64 flex-col border-r border-border bg-sidebar"
+      role="navigation"
+      aria-label="Hauptnavigation"
+    >
+      {/* Brand */}
+      <div className="flex h-14 items-center gap-2.5 border-b border-border px-4">
+        <div className="flex h-8 w-8 items-center justify-center rounded-md bg-gradient-to-br from-orange-500 to-rose-500 shadow-sm">
+          <Flame className="h-4 w-4 text-white" />
         </div>
-        <span className="text-sm font-semibold">Prometheus</span>
+        <div className="leading-tight">
+          <div className="text-sm font-semibold tracking-tight">Prometheus</div>
+          <div className="text-[10px] text-sidebar-muted">Operations</div>
+        </div>
       </div>
 
-      {/* Top Nav */}
-      <nav className="flex flex-col gap-0.5 px-3">
-        {topNavItems.map(renderNavLink)}
-      </nav>
+      {/* Search */}
+      <div className="border-b border-border px-3 py-2.5">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-sidebar-muted" />
+          <input
+            type="text"
+            placeholder="Suchen…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="h-8 w-full rounded-md border border-border bg-background pl-8 pr-2.5 text-[13px] outline-none transition-colors focus:border-ring placeholder:text-sidebar-muted/70"
+          />
+        </div>
+      </div>
 
-      <div className="mx-3 my-2 border-t border-border" />
-
-      {/* Main Nav + Sections */}
-      <nav className="flex-1 overflow-y-auto px-3">
-        {sections.map(renderSection)}
+      {/* Sections */}
+      <nav className="flex-1 overflow-y-auto px-2 py-2.5">
+        {filteredSections.map(renderSection)}
+        {filteredSections.length === 0 && (
+          <p className="px-3 py-6 text-center text-[12px] text-sidebar-muted">
+            Keine Treffer für „{search}".
+          </p>
+        )}
       </nav>
 
       {/* User Area */}
-      <div className="border-t border-border p-3">
+      <div className="border-t border-border p-2">
         <button
+          type="button"
           onClick={() => setUserMenuOpen(!userMenuOpen)}
-          className="flex w-full items-center gap-3 rounded-md px-2 py-2 text-sm transition-colors hover:bg-accent"
+          className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-accent/60"
         >
-          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-zinc-200 text-xs font-medium text-zinc-700 dark:bg-zinc-700 dark:text-zinc-200">
+          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-zinc-200 text-[10px] font-semibold text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200">
             {initials}
           </div>
-          <span className="flex-1 text-left font-medium text-sm">{user?.username ?? "User"}</span>
-          <ChevronUp className={cn("h-3.5 w-3.5 text-sidebar-muted transition-transform", !userMenuOpen && "rotate-180")} />
+          <span className="flex-1 truncate text-left text-[13px] font-medium">
+            {user?.username ?? "User"}
+          </span>
+          <ChevronDown
+            className={cn(
+              "h-3.5 w-3.5 text-sidebar-muted transition-transform",
+              userMenuOpen ? "rotate-180" : ""
+            )}
+          />
         </button>
         {userMenuOpen && (
           <div className="mt-1 flex flex-col gap-0.5">
             <button
+              type="button"
               onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-              className="flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-sm text-sidebar-muted transition-colors hover:bg-accent hover:text-foreground"
+              className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-[13px] text-sidebar-muted transition-colors hover:bg-accent/60 hover:text-foreground"
             >
               {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
               <span>{theme === "dark" ? "Light Mode" : "Dark Mode"}</span>
             </button>
             <button
+              type="button"
               onClick={handleLogout}
-              className="flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-sm text-sidebar-muted transition-colors hover:bg-accent hover:text-foreground"
+              className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-[13px] text-sidebar-muted transition-colors hover:bg-accent/60 hover:text-foreground"
             >
               <LogOut className="h-4 w-4" />
               <span>Abmelden</span>
@@ -412,23 +486,19 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
 
   return (
     <>
-      {/* Mobile drawer */}
       <div className="md:hidden">
         {mobileOpen && (
           <>
-            <div className="fixed inset-0 z-40 bg-black/50" onClick={onMobileClose} aria-hidden="true" />
-            <div className="fixed inset-y-0 left-0 z-50 w-60">
-              {sidebarContent}
-            </div>
+            <div
+              className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
+              onClick={onMobileClose}
+              aria-hidden="true"
+            />
+            <div className="fixed inset-y-0 left-0 z-50 w-64 shadow-2xl">{sidebarContent}</div>
           </>
         )}
       </div>
-
-      {/* Desktop sidebar */}
-      <div className="hidden md:block">
-        {sidebarContent}
-      </div>
-
+      <div className="hidden md:block">{sidebarContent}</div>
       <OnboardNodeDialog open={onboardOpen} onOpenChange={setOnboardOpen} />
     </>
   );

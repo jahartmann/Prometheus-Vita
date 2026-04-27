@@ -57,28 +57,31 @@
 }
 
 .dark {
-  --background: oklch(0.141 0.005 286);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.19 0.012 286);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.21 0.006 286);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.985 0 0);
-  --primary-foreground: oklch(0.141 0.005 286);
-  --secondary: oklch(0.274 0.006 286);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.274 0.006 286);
-  --muted-foreground: oklch(0.705 0.015 286);
-  --accent: oklch(0.274 0.006 286);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.577 0.245 27);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.31 0.018 286);
-  --input: oklch(0.274 0.006 286);
-  --ring: oklch(0.552 0.016 286);
-  --sidebar: oklch(0.125 0.012 286);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-muted: oklch(0.705 0.015 286);
+  /* Slightly deeper, more graphite-feeling background. The previous theme was
+     a uniform zinc — this version pushes the canvas darker than the cards so
+     elevation is felt without heavier shadows. */
+  --background: oklch(0.13 0.008 270);
+  --foreground: oklch(0.97 0.005 270);
+  --card: oklch(0.175 0.012 270);
+  --card-foreground: oklch(0.97 0.005 270);
+  --popover: oklch(0.2 0.012 270);
+  --popover-foreground: oklch(0.97 0.005 270);
+  --primary: oklch(0.97 0.005 270);
+  --primary-foreground: oklch(0.16 0.012 270);
+  --secondary: oklch(0.245 0.012 270);
+  --secondary-foreground: oklch(0.97 0.005 270);
+  --muted: oklch(0.235 0.012 270);
+  --muted-foreground: oklch(0.68 0.015 270);
+  --accent: oklch(0.245 0.012 270);
+  --accent-foreground: oklch(0.97 0.005 270);
+  --destructive: oklch(0.6 0.245 27);
+  --destructive-foreground: oklch(0.99 0 0);
+  --border: oklch(0.27 0.014 270);
+  --input: oklch(0.245 0.012 270);
+  --ring: oklch(0.6 0.04 270);
+  --sidebar: oklch(0.115 0.01 270);
+  --sidebar-foreground: oklch(0.97 0.005 270);
+  --sidebar-muted: oklch(0.62 0.018 270);
 }
 
 @layer base {
@@ -86,39 +89,121 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "cv11", "ss01", "ss03";
+  }
+  /* Tabular figures for any element rendering numeric data — KPI cards,
+     metric labels, log line numbers. Looks much cleaner than proportional. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+  /* Custom thin scrollbar — modern, doesn't hijack OS look. */
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: oklch(0.5 0.01 270 / 0.3);
+    border-radius: 4px;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: oklch(0.5 0.01 270 / 0.5);
   }
 }
 
 @layer utilities {
+  /* Surface system — three elevations for cards. Use surface-panel for
+     standard content cards, surface-panel-strong for dashboard headers /
+     hero sections, surface-panel-subtle for nested chips and rows. */
   .surface-panel {
-    @apply rounded-lg border bg-card text-card-foreground shadow-sm;
-    box-shadow: 0 1px 2px oklch(0 0 0 / 0.04), 0 12px 28px oklch(0 0 0 / 0.05);
+    @apply rounded-lg border bg-card text-card-foreground;
+    box-shadow:
+      0 1px 0 0 oklch(0 0 0 / 0.02),
+      0 1px 3px oklch(0 0 0 / 0.04);
+  }
+  .dark .surface-panel {
+    box-shadow:
+      0 1px 0 0 oklch(1 0 0 / 0.04),
+      0 1px 2px oklch(0 0 0 / 0.4);
   }
   .surface-panel-strong {
-    @apply rounded-lg border bg-card text-card-foreground;
-    box-shadow: 0 18px 44px oklch(0 0 0 / 0.08);
+    @apply rounded-xl border bg-card text-card-foreground;
+    box-shadow:
+      0 1px 0 0 oklch(0 0 0 / 0.03),
+      0 8px 24px oklch(0 0 0 / 0.06);
   }
+  .dark .surface-panel-strong {
+    box-shadow:
+      0 1px 0 0 oklch(1 0 0 / 0.05),
+      0 12px 32px oklch(0 0 0 / 0.5);
+  }
+  .surface-panel-subtle {
+    @apply rounded-md border bg-muted/40 text-card-foreground;
+  }
+
+  /* Status accents for severity-coded sections. */
   .status-accent-ok {
-    @apply border-l-4 border-l-emerald-500;
+    @apply border-l-2 border-l-emerald-500;
   }
   .status-accent-warning {
-    @apply border-l-4 border-l-amber-500;
+    @apply border-l-2 border-l-amber-500;
   }
   .status-accent-critical {
-    @apply border-l-4 border-l-red-500;
+    @apply border-l-2 border-l-red-500;
   }
   .status-accent-info {
-    @apply border-l-4 border-l-sky-500;
+    @apply border-l-2 border-l-sky-500;
   }
+
+  /* Hover lift — micro-interaction for clickable cards. */
   .card-hover {
-    transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+    transition: transform 0.18s cubic-bezier(0.2, 0, 0, 1),
+      box-shadow 0.18s cubic-bezier(0.2, 0, 0, 1),
+      border-color 0.18s cubic-bezier(0.2, 0, 0, 1);
   }
   .card-hover:hover {
     transform: translateY(-1px);
-    box-shadow: 0 14px 32px oklch(0 0 0 / 0.08);
+    border-color: oklch(0.55 0.01 270 / 0.4);
+    box-shadow: 0 8px 24px oklch(0 0 0 / 0.08);
   }
   .dark .card-hover:hover {
-    box-shadow: 0 8px 22px oklch(0 0 0 / 0.35);
+    box-shadow: 0 8px 24px oklch(0 0 0 / 0.45);
+  }
+
+  /* Subtle attention-grabbing glow for the agent's "I'm thinking" indicator
+     and similar live-status chips. */
+  .glow-pulse {
+    position: relative;
+  }
+  .glow-pulse::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    box-shadow: 0 0 0 0 currentColor;
+    opacity: 0.4;
+    animation: glow-pulse 2s ease-out infinite;
+  }
+  @keyframes glow-pulse {
+    0% {
+      box-shadow: 0 0 0 0 currentColor;
+      opacity: 0.4;
+    }
+    70% {
+      box-shadow: 0 0 0 8px transparent;
+      opacity: 0;
+    }
+    100% {
+      box-shadow: 0 0 0 0 transparent;
+      opacity: 0;
+    }
+  }
+
+  /* Eyebrow — small uppercase label above page titles. */
+  .eyebrow {
+    @apply text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground;
   }
 }
