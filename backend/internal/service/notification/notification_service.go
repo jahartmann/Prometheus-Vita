@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"time"
 
@@ -175,11 +176,16 @@ func (s *Service) UpdateChannel(ctx context.Context, id uuid.UUID, req model.Upd
 		ch.IsActive = *req.IsActive
 	}
 	if req.Config != nil {
-		encrypted, err := s.encryptConfig(*req.Config)
+		config := *req.Config
+		if ch.Type == model.ChannelTypeEmail {
+			config = s.preserveEmailPassword(ch.Config, config)
+		}
+		encrypted, err := s.encryptConfig(config)
 		if err != nil {
 			return nil, fmt.Errorf("encrypt config: %w", err)
 		}
 		ch.Config = encrypted
+		req.Config = &config
 	}
 
 	if err := s.channelRepo.Update(ctx, ch); err != nil {
@@ -196,6 +202,42 @@ func (s *Service) UpdateChannel(ctx context.Context, id uuid.UUID, req model.Upd
 		}
 	}
 	return ch, nil
+}
+
+func (s *Service) preserveEmailPassword(storedConfig, incomingConfig json.RawMessage) json.RawMessage {
+	var incoming map[string]interface{}
+	if err := json.Unmarshal(incomingConfig, &incoming); err != nil {
+		return incomingConfig
+	}
+
+	if val, ok := incoming["smtp_password"]; ok {
+		strVal, isString := val.(string)
+		if isString && strings.TrimSpace(strVal) != "" && !strings.HasPrefix(strVal, "****") {
+			return incomingConfig
+		}
+	}
+
+	decrypted, err := s.decryptConfig(storedConfig)
+	if err != nil {
+		return incomingConfig
+	}
+
+	var stored map[string]interface{}
+	if err := json.Unmarshal(decrypted, &stored); err != nil {
+		return incomingConfig
+	}
+
+	existingPassword, ok := stored["smtp_password"].(string)
+	if !ok || existingPassword == "" {
+		return incomingConfig
+	}
+
+	incoming["smtp_password"] = existingPassword
+	merged, err := json.Marshal(incoming)
+	if err != nil {
+		return incomingConfig
+	}
+	return merged
 }
 
 // DeleteChannel deletes a channel by ID.
