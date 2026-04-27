@@ -64,6 +64,7 @@ export default function ClusterNetworkPage() {
   const unacknowledgedCount = selectedNodeAnomalies.filter((a) => !a.is_acknowledged).length;
   const selectedNode = nodes.find((n) => n.id === selectedNodeId);
   const toolPreflight = selectedNodeId ? toolPreflightByNode[selectedNodeId] : undefined;
+  const scopedError = (scope: string) => errorsByScope[`${selectedNodeId}:${scope}`];
   const nmapCheck = toolPreflight?.tools.find((tool) => tool.name === "nmap");
   const fullScanAvailable = !toolPreflight || !!nmapCheck?.available;
   const fullScanUnavailableReason = fullScanAvailable ? undefined : "nmap fehlt auf der ausgewählten Node";
@@ -153,7 +154,7 @@ export default function ClusterNetworkPage() {
               tone={toolTone}
               status={toolStatus}
               details={toolDetails}
-              error={errorsByScope.tools}
+              error={scopedError("tools")}
             />
           </div>
           <NetworkSecurityOverview nodeId={selectedNodeId} />
@@ -199,10 +200,12 @@ export default function ClusterNetworkPage() {
             </TabsContent>
 
             <TabsContent value="devices" className="mt-4">
+              <NetworkSectionError message={scopedError("devices")} />
               <DeviceTable nodeId={selectedNodeId} />
             </TabsContent>
 
             <TabsContent value="anomalies" className="mt-4">
+              <NetworkSectionError message={scopedError("anomalies")} />
               <NetworkAnomalyList nodeId={selectedNodeId} />
             </TabsContent>
 
@@ -224,6 +227,7 @@ export default function ClusterNetworkPage() {
                 className={`h-4 w-4 ml-auto text-zinc-500 transition-transform ${baselineOpen ? "rotate-180" : ""}`}
               />
             </CollapsibleTrigger>
+            <NetworkSectionError message={scopedError("baselines")} className="mt-2" />
             <CollapsibleContent className="mt-2 rounded-lg border border-zinc-800 bg-zinc-900/40 p-4">
               <BaselineManager nodeId={selectedNodeId} />
             </CollapsibleContent>
@@ -231,5 +235,21 @@ export default function ClusterNetworkPage() {
         </>
       )}
     </div>
+  );
+}
+
+function NetworkSectionError({
+  message,
+  className = "mb-3",
+}: {
+  message?: string;
+  className?: string;
+}) {
+  if (!message) return null;
+
+  return (
+    <p className={`rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/25 dark:text-red-300 ${className}`}>
+      {message}
+    </p>
   );
 }

@@ -36,7 +36,10 @@ export function ScanStatusBar({
   const lastFull = nodeScans.find((scan) => scan.scan_type === "full")?.started_at;
   const isScanning = scanStatus.isScanning && scanStatus.scanningNodeId === nodeId;
   const fullScanDisabled = isScanning || !fullScanAvailable;
-  const scanError = errorsByScope.trigger ?? errorsByScope.scans;
+  const scanErrors = [
+    errorsByScope[`${nodeId}:trigger`],
+    errorsByScope[`${nodeId}:scans`],
+  ].filter((message): message is string => Boolean(message));
 
   return (
     <div className="flex flex-wrap items-center gap-4 rounded-lg border border-zinc-800 bg-zinc-900/60 px-4 py-3">
@@ -117,11 +120,14 @@ export function ScanStatusBar({
       {!fullScanAvailable && fullScanUnavailableReason && (
         <p className="basis-full text-xs text-muted-foreground">{fullScanUnavailableReason}</p>
       )}
-      {scanError && (
-        <p className="basis-full rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/25 dark:text-red-300">
-          {scanError}
+      {scanErrors.map((message) => (
+        <p
+          key={message}
+          className="basis-full rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/25 dark:text-red-300"
+        >
+          {message}
         </p>
-      )}
+      ))}
     </div>
   );
 }

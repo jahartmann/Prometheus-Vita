@@ -64,6 +64,10 @@ interface NetworkState {
   activateBaseline: (id: string) => Promise<void>;
 }
 
+type ErrorScope = "scans" | "devices" | "anomalies" | "baselines" | "trigger" | "tools";
+
+const errorKey = (nodeId: string, scope: ErrorScope) => `${nodeId}:${scope}`;
+
 let scansRequestSeq = 0;
 let devicesRequestSeq = 0;
 let anomaliesRequestSeq = 0;
@@ -92,7 +96,7 @@ export const useNetworkStore = create<NetworkState>()((set) => ({
       const lastFull = scans.find((s: NetworkScan) => s.scan_type === "full")?.started_at;
       set((state) => ({
         scans,
-        errorsByScope: { ...state.errorsByScope, scans: undefined },
+        errorsByScope: { ...state.errorsByScope, [errorKey(nodeId, "scans")]: undefined },
         scanStatus: {
           lastQuick,
           lastFull,
@@ -101,13 +105,13 @@ export const useNetworkStore = create<NetworkState>()((set) => ({
         },
       }));
     } catch (e) {
-      console.error('Failed to fetch scans:', e);
+      console.error("Failed to fetch scans:", e);
       if (requestSeq === scansRequestSeq) {
         set((state) => ({
           scans: [],
           errorsByScope: {
             ...state.errorsByScope,
-            scans: getApiErrorMessage(e, "Scans konnten nicht geladen werden"),
+            [errorKey(nodeId, "scans")]: getApiErrorMessage(e, "Scans konnten nicht geladen werden"),
           },
           scanStatus: {
             isScanning: state.scanStatus.scanningNodeId === nodeId ? false : state.scanStatus.isScanning,
@@ -125,16 +129,16 @@ export const useNetworkStore = create<NetworkState>()((set) => ({
       if (requestSeq !== devicesRequestSeq) return;
       set((state) => ({
         devices: Array.isArray(res.data) ? res.data : [],
-        errorsByScope: { ...state.errorsByScope, devices: undefined },
+        errorsByScope: { ...state.errorsByScope, [errorKey(nodeId, "devices")]: undefined },
       }));
     } catch (e) {
-      console.error('Failed to fetch devices:', e);
+      console.error("Failed to fetch devices:", e);
       if (requestSeq === devicesRequestSeq) {
         set((state) => ({
           devices: [],
           errorsByScope: {
             ...state.errorsByScope,
-            devices: getApiErrorMessage(e, "Netzwerk-Geräte konnten nicht geladen werden"),
+            [errorKey(nodeId, "devices")]: getApiErrorMessage(e, "Netzwerk-Geraete konnten nicht geladen werden"),
           },
         }));
       }
@@ -148,16 +152,16 @@ export const useNetworkStore = create<NetworkState>()((set) => ({
       if (requestSeq !== anomaliesRequestSeq) return;
       set((state) => ({
         anomalies: Array.isArray(res.data) ? res.data : [],
-        errorsByScope: { ...state.errorsByScope, anomalies: undefined },
+        errorsByScope: { ...state.errorsByScope, [errorKey(nodeId, "anomalies")]: undefined },
       }));
     } catch (e) {
-      console.error('Failed to fetch network anomalies:', e);
+      console.error("Failed to fetch network anomalies:", e);
       if (requestSeq === anomaliesRequestSeq) {
         set((state) => ({
           anomalies: [],
           errorsByScope: {
             ...state.errorsByScope,
-            anomalies: getApiErrorMessage(e, "Netzwerk-Anomalien konnten nicht geladen werden"),
+            [errorKey(nodeId, "anomalies")]: getApiErrorMessage(e, "Netzwerk-Anomalien konnten nicht geladen werden"),
           },
         }));
       }
@@ -171,16 +175,16 @@ export const useNetworkStore = create<NetworkState>()((set) => ({
       if (requestSeq !== baselinesRequestSeq) return;
       set((state) => ({
         baselines: Array.isArray(res.data) ? res.data : [],
-        errorsByScope: { ...state.errorsByScope, baselines: undefined },
+        errorsByScope: { ...state.errorsByScope, [errorKey(nodeId, "baselines")]: undefined },
       }));
     } catch (e) {
-      console.error('Failed to fetch baselines:', e);
+      console.error("Failed to fetch baselines:", e);
       if (requestSeq === baselinesRequestSeq) {
         set((state) => ({
           baselines: [],
           errorsByScope: {
             ...state.errorsByScope,
-            baselines: getApiErrorMessage(e, "Scan-Baselines konnten nicht geladen werden"),
+            [errorKey(nodeId, "baselines")]: getApiErrorMessage(e, "Scan-Baselines konnten nicht geladen werden"),
           },
         }));
       }
@@ -198,19 +202,15 @@ export const useNetworkStore = create<NetworkState>()((set) => ({
           ...state.toolPreflightByNode,
           [nodeId]: preflight,
         },
-        errorsByScope: { ...state.errorsByScope, tools: undefined },
+        errorsByScope: { ...state.errorsByScope, [errorKey(nodeId, "tools")]: undefined },
       }));
     } catch (e) {
-      console.error('Failed to fetch tool preflight:', e);
+      console.error("Failed to fetch tool preflight:", e);
       if (requestSeq === toolsRequestSeq) {
         set((state) => ({
-          toolPreflightByNode: {
-            ...state.toolPreflightByNode,
-            [nodeId]: undefined,
-          },
           errorsByScope: {
             ...state.errorsByScope,
-            tools: getApiErrorMessage(e, "Tool-Preflight konnte nicht geladen werden"),
+            [errorKey(nodeId, "tools")]: getApiErrorMessage(e, "Tool-Preflight konnte nicht geladen werden"),
           },
         }));
       }
@@ -219,19 +219,19 @@ export const useNetworkStore = create<NetworkState>()((set) => ({
 
   triggerScan: async (nodeId, scanType) => {
     set((state) => ({
-      errorsByScope: { ...state.errorsByScope, trigger: undefined },
+      errorsByScope: { ...state.errorsByScope, [errorKey(nodeId, "trigger")]: undefined },
       scanStatus: { ...state.scanStatus, isScanning: true, scanningNodeId: nodeId },
     }));
     try {
       await networkApi.triggerScan(nodeId, { scan_type: scanType });
     } catch (e) {
-      console.error('Failed to trigger scan:', e);
+      console.error("Failed to trigger scan:", e);
       set((state) => {
         if (state.scanStatus.scanningNodeId !== nodeId) return {};
         return {
           errorsByScope: {
             ...state.errorsByScope,
-            trigger: getApiErrorMessage(e, "Scan konnte nicht gestartet werden"),
+            [errorKey(nodeId, "trigger")]: getApiErrorMessage(e, "Scan konnte nicht gestartet werden"),
           },
           scanStatus: { ...state.scanStatus, isScanning: false, scanningNodeId: undefined },
         };
@@ -249,13 +249,17 @@ export const useNetworkStore = create<NetworkState>()((set) => ({
         ),
       }));
     } catch (e) {
-      console.error('Failed to acknowledge network anomaly:', e);
-      set((state) => ({
-        errorsByScope: {
-          ...state.errorsByScope,
-          anomalies: getApiErrorMessage(e, "Netzwerk-Anomalie konnte nicht bestätigt werden"),
-        },
-      }));
+      console.error("Failed to acknowledge network anomaly:", e);
+      set((state) => {
+        const nodeId = state.anomalies.find((anomaly) => anomaly.id === id)?.node_id;
+        if (!nodeId) return {};
+        return {
+          errorsByScope: {
+            ...state.errorsByScope,
+            [errorKey(nodeId, "anomalies")]: getApiErrorMessage(e, "Netzwerk-Anomalie konnte nicht bestaetigt werden"),
+          },
+        };
+      });
     }
   },
 
@@ -269,13 +273,17 @@ export const useNetworkStore = create<NetworkState>()((set) => ({
         })),
       }));
     } catch (e) {
-      console.error('Failed to activate baseline:', e);
-      set((state) => ({
-        errorsByScope: {
-          ...state.errorsByScope,
-          baselines: getApiErrorMessage(e, "Scan-Baseline konnte nicht aktiviert werden"),
-        },
-      }));
+      console.error("Failed to activate baseline:", e);
+      set((state) => {
+        const nodeId = state.baselines.find((baseline) => baseline.id === id)?.node_id;
+        if (!nodeId) return {};
+        return {
+          errorsByScope: {
+            ...state.errorsByScope,
+            [errorKey(nodeId, "baselines")]: getApiErrorMessage(e, "Scan-Baseline konnte nicht aktiviert werden"),
+          },
+        };
+      });
     }
   },
 }));
