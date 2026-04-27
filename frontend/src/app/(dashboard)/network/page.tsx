@@ -1,16 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Network, ShieldAlert, BookMarked } from "lucide-react";
+import { BookMarked, ChevronDown, Network, ShieldAlert, Wrench } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { ChevronDown } from "lucide-react";
 import { useNodeStore } from "@/stores/node-store";
 import { useNetworkStore } from "@/stores/network-store";
 import { useNetworkScan } from "@/hooks/use-network-scan";
@@ -22,10 +20,19 @@ import { NetworkAnomalyList } from "@/components/network/anomaly-list";
 import { ScanTimeline } from "@/components/network/scan-timeline";
 import { BaselineManager } from "@/components/network/baseline-manager";
 import { VMServiceAnalysis } from "@/components/network/vm-service-analysis";
+import { FeatureStatusCard } from "@/components/ui/feature-status-card";
 
 export default function ClusterNetworkPage() {
   const { nodes, fetchNodes } = useNodeStore();
-  const { anomalies, fetchBaselines, activeTab, setActiveTab } = useNetworkStore();
+  const {
+    anomalies,
+    errorsByScope,
+    fetchBaselines,
+    fetchToolPreflight,
+    toolPreflightByNode,
+    activeTab,
+    setActiveTab,
+  } = useNetworkStore();
 
   const [selectedNodeId, setSelectedNodeId] = useState<string>("");
   const [baselineOpen, setBaselineOpen] = useState(false);
@@ -42,10 +49,13 @@ export default function ClusterNetworkPage() {
     }
   }, [nodes, selectedNodeId]);
 
-  // Load baselines when node changes
+  // Load node-specific readiness when node changes
   useEffect(() => {
-    if (selectedNodeId) fetchBaselines(selectedNodeId);
-  }, [selectedNodeId, fetchBaselines]);
+    if (selectedNodeId) {
+      fetchBaselines(selectedNodeId);
+      fetchToolPreflight(selectedNodeId);
+    }
+  }, [selectedNodeId, fetchBaselines, fetchToolPreflight]);
 
   // Poll for scan data
   useNetworkScan({ nodeId: selectedNodeId, enabled: !!selectedNodeId });
@@ -53,6 +63,33 @@ export default function ClusterNetworkPage() {
   const selectedNodeAnomalies = anomalies.filter((a) => a.node_id === selectedNodeId);
   const unacknowledgedCount = selectedNodeAnomalies.filter((a) => !a.is_acknowledged).length;
   const selectedNode = nodes.find((n) => n.id === selectedNodeId);
+  const toolPreflight = selectedNodeId ? toolPreflightByNode[selectedNodeId] : undefined;
+  const nmapCheck = toolPreflight?.tools.find((tool) => tool.name === "nmap");
+  const fullScanAvailable = !toolPreflight || !!nmapCheck?.available;
+  const fullScanUnavailableReason = fullScanAvailable ? undefined : "nmap fehlt auf der ausgewählten Node";
+  const toolStatus = toolPreflight
+    ? fullScanAvailable
+      ? "Full-Scan bereit"
+      : "nmap fehlt"
+    : "Preflight lädt";
+  const toolTone = toolPreflight ? (fullScanAvailable ? "ok" : "warning") : "muted";
+  const toolDetails = (
+    <div className="flex flex-wrap gap-2">
+      {toolPreflight?.tools.length ? (
+        toolPreflight.tools.map((tool) => (
+          <Badge
+            key={tool.name}
+            variant={tool.available ? "success" : "warning"}
+            title={tool.path ?? undefined}
+          >
+            {tool.name}
+          </Badge>
+        ))
+      ) : (
+        <span className="text-sm text-muted-foreground">Tool-Status wird geladen.</span>
+      )}
+    </div>
+  );
 
   return (
     <div className="space-y-5">
@@ -69,8 +106,8 @@ export default function ClusterNetworkPage() {
 
       {/* Node selector */}
       {nodes.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2">
-          <span className="text-xs text-zinc-500 mr-1">Node:</span>
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-card px-3 py-2">
+          <span className="text-xs text-muted-foreground mr-1">Node:</span>
           {nodes.map((node) => {
             const isActive = selectedNodeId === node.id;
             return (
@@ -79,8 +116,8 @@ export default function ClusterNetworkPage() {
                 onClick={() => setSelectedNodeId(node.id)}
                 className={`rounded px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer ${
                   isActive
-                    ? "bg-blue-600 text-blue-100"
-                    : "bg-zinc-800/50 text-zinc-500 hover:bg-zinc-700/50"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground hover:bg-accent hover:text-foreground"
                 }`}
               >
                 {node.name}
@@ -88,7 +125,7 @@ export default function ClusterNetworkPage() {
             );
           })}
           {selectedNode && (
-            <span className="ml-auto text-xs text-zinc-600 font-mono">{selectedNode.id}</span>
+            <span className="ml-auto text-xs text-muted-foreground font-mono">{selectedNode.id}</span>
           )}
         </div>
       )}
@@ -103,7 +140,22 @@ export default function ClusterNetworkPage() {
       ) : (
         <>
           {/* Scan status */}
-          <ScanStatusBar nodeId={selectedNodeId} />
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+            <ScanStatusBar
+              nodeId={selectedNodeId}
+              fullScanAvailable={fullScanAvailable}
+              fullScanUnavailableReason={fullScanUnavailableReason}
+            />
+            <FeatureStatusCard
+              title="Tool-Preflight"
+              description="Node-Werkzeuge für Netzwerk-Erkennung und Scan-Tiefe."
+              icon={Wrench}
+              tone={toolTone}
+              status={toolStatus}
+              details={toolDetails}
+              error={errorsByScope.tools}
+            />
+          </div>
           <NetworkSecurityOverview nodeId={selectedNodeId} />
 
           {/* Anomaly banner */}

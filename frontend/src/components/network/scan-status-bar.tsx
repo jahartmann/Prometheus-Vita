@@ -7,6 +7,8 @@ import { Loader2, Zap, Search } from "lucide-react";
 
 interface ScanStatusBarProps {
   nodeId: string;
+  fullScanAvailable?: boolean;
+  fullScanUnavailableReason?: string;
 }
 
 function relativeTime(isoStr: string): string {
@@ -17,9 +19,14 @@ function relativeTime(isoStr: string): string {
   return `vor ${Math.floor(diff / 86400)}d`;
 }
 
-export function ScanStatusBar({ nodeId }: ScanStatusBarProps) {
+export function ScanStatusBar({
+  nodeId,
+  fullScanAvailable = true,
+  fullScanUnavailableReason,
+}: ScanStatusBarProps) {
   const scans = useNetworkStore((s) => s.scans);
   const scanStatus = useNetworkStore((s) => s.scanStatus);
+  const errorsByScope = useNetworkStore((s) => s.errorsByScope);
   const triggerScan = useNetworkStore((s) => s.triggerScan);
 
   const nodeScans = Array.isArray(scans)
@@ -28,6 +35,8 @@ export function ScanStatusBar({ nodeId }: ScanStatusBarProps) {
   const lastQuick = nodeScans.find((scan) => scan.scan_type === "quick")?.started_at;
   const lastFull = nodeScans.find((scan) => scan.scan_type === "full")?.started_at;
   const isScanning = scanStatus.isScanning && scanStatus.scanningNodeId === nodeId;
+  const fullScanDisabled = isScanning || !fullScanAvailable;
+  const scanError = errorsByScope.trigger ?? errorsByScope.scans;
 
   return (
     <div className="flex flex-wrap items-center gap-4 rounded-lg border border-zinc-800 bg-zinc-900/60 px-4 py-3">
@@ -97,7 +106,7 @@ export function ScanStatusBar({ nodeId }: ScanStatusBarProps) {
         <Button
           variant="outline"
           size="sm"
-          disabled={isScanning}
+          disabled={fullScanDisabled}
           onClick={() => triggerScan(nodeId, "full")}
           className="gap-1.5"
         >
@@ -105,6 +114,14 @@ export function ScanStatusBar({ nodeId }: ScanStatusBarProps) {
           Full Scan
         </Button>
       </div>
+      {!fullScanAvailable && fullScanUnavailableReason && (
+        <p className="basis-full text-xs text-muted-foreground">{fullScanUnavailableReason}</p>
+      )}
+      {scanError && (
+        <p className="basis-full rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/25 dark:text-red-300">
+          {scanError}
+        </p>
+      )}
     </div>
   );
 }
