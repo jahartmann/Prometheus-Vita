@@ -46,17 +46,25 @@ export function SmtpConfigCard({ channels, onSaved }: SmtpConfigCardProps) {
     }
   }, [smtpChannel]);
 
-  const buildConfig = (): Record<string, unknown> => ({
-    smtp_host: smtpHost,
-    smtp_port: parseInt(smtpPort) || 587,
-    smtp_user: smtpUser,
-    smtp_password: smtpPassword,
-    from_address: fromAddress,
-    to_addresses: toAddresses.split(",").map((s) => s.trim()).filter(Boolean),
-    use_tls: useTls,
-  });
+  const buildConfig = (): Record<string, unknown> => {
+    const config: Record<string, unknown> = {
+      smtp_host: smtpHost,
+      smtp_port: parseInt(smtpPort) || 587,
+      smtp_user: smtpUser,
+      from_address: fromAddress,
+      to_addresses: toAddresses.split(",").map((s) => s.trim()).filter(Boolean),
+      use_tls: useTls,
+    };
+
+    if (!smtpChannel || smtpPassword.trim()) {
+      config.smtp_password = smtpPassword;
+    }
+
+    return config;
+  };
 
   const handleSave = async () => {
+    if (saving || testing) return;
     setSaving(true);
     setError(null);
     try {
@@ -81,7 +89,7 @@ export function SmtpConfigCard({ channels, onSaved }: SmtpConfigCardProps) {
   };
 
   const handleTest = async () => {
-    if (!smtpChannel) return;
+    if (!smtpChannel || saving || testing) return;
     setTesting(true);
     setTestResult(null);
     setError(null);
@@ -97,7 +105,7 @@ export function SmtpConfigCard({ channels, onSaved }: SmtpConfigCardProps) {
     }
   };
 
-  const isValid = smtpHost && smtpPort && fromAddress && toAddresses;
+  const isValid = smtpHost && smtpPort && fromAddress && toAddresses && (smtpChannel || smtpPassword.trim());
 
   return (
     <Card>
@@ -203,7 +211,7 @@ export function SmtpConfigCard({ channels, onSaved }: SmtpConfigCardProps) {
             <Button
               variant="outline"
               onClick={handleTest}
-              disabled={testing}
+              disabled={saving || testing}
             >
               {testing ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -213,7 +221,7 @@ export function SmtpConfigCard({ channels, onSaved }: SmtpConfigCardProps) {
               Verbindung testen
             </Button>
           )}
-          <Button onClick={handleSave} disabled={saving || !isValid}>
+          <Button onClick={handleSave} disabled={saving || testing || !isValid}>
             {saving ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
