@@ -12,7 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { gatewayApi, toArray } from "@/lib/api";
+import { gatewayApi, getApiErrorMessage, toArray } from "@/lib/api";
 import { toast } from "sonner";
 import type { APIToken } from "@/types/api";
 
@@ -24,14 +24,18 @@ interface TokenListProps {
 export function TokenList({ refreshKey }: TokenListProps) {
   const [tokens, setTokens] = useState<APIToken[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchTokens = async () => {
     setIsLoading(true);
     try {
       const resp = await gatewayApi.listTokens();
       setTokens(toArray<APIToken>(resp.data));
-    } catch {
-      // Fehler
+      setError(null);
+    } catch (err) {
+      const message = getApiErrorMessage(err, "API-Tokens konnten nicht geladen werden");
+      setError(message);
+      toast.error(message);
     } finally {
       setIsLoading(false);
     }
@@ -70,6 +74,12 @@ export function TokenList({ refreshKey }: TokenListProps) {
           Aktualisieren
         </Button>
       </div>
+
+      {error && (
+        <div className="mb-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {error}
+        </div>
+      )}
 
       <div className="overflow-x-auto">
       <Table>

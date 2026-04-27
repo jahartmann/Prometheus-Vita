@@ -157,9 +157,13 @@ export default function ISOsPage() {
           // continue
         }
       }
-      toast.success(
-        `${iso.name}: Sync an ${successCount}/${missingNodes.length} Nodes gestartet`
-      );
+      if (successCount === 0) {
+        toast.error(`${iso.name}: Sync konnte auf keiner Node gestartet werden`);
+      } else {
+        toast.success(
+          `${iso.name}: Sync an ${successCount}/${missingNodes.length} Nodes gestartet`
+        );
+      }
       setTimeout(fetchData, 5000);
     } catch {
       toast.error(`Sync von ${iso.name} fehlgeschlagen`);
@@ -185,17 +189,19 @@ export default function ISOsPage() {
       let successCount = 0;
       for (const nodeId of uploadTargetNodes) {
         try {
-          // Use the sync-content endpoint with a URL-based source
-          // The backend DownloadURL method supports this pattern
           await isoApi.syncContent(nodeId, {
-            source_node_id: nodeId, // self-reference for URL download
             volid: `local:iso/${filename}`,
             target_storage: uploadStorage || "local",
+            download_url: uploadUrl,
           });
           successCount++;
         } catch {
           // continue
         }
+      }
+      if (successCount === 0) {
+        toast.error("Upload konnte auf keiner Node gestartet werden");
+        return;
       }
       toast.success(
         `Upload an ${successCount}/${uploadTargetNodes.length} Nodes gestartet`

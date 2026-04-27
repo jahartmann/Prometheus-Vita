@@ -211,7 +211,7 @@ export function MigrationProgress({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => retryMigration(migration)}
+              onClick={() => { void retryMigration(migration).catch(() => undefined); }}
             >
               <RotateCw className="mr-1 h-3 w-3" />
               Wiederholen
@@ -221,7 +221,7 @@ export function MigrationProgress({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => cancelMigration(migration.id)}
+              onClick={() => { void cancelMigration(migration.id).catch(() => undefined); }}
             >
               <X className="mr-1 h-3 w-3" />
               Abbrechen

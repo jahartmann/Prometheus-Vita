@@ -276,7 +276,7 @@ export function MigrationHistory({ nodeId }: MigrationHistoryProps) {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => retryMigration(m)}
+                          onClick={() => { void retryMigration(m).catch(() => undefined); }}
                           title="Wiederholen"
                         >
                           <RotateCw className="h-3 w-3" />
@@ -286,7 +286,7 @@ export function MigrationHistory({ nodeId }: MigrationHistoryProps) {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => deleteMigration(m.id)}
+                          onClick={() => { void deleteMigration(m.id).catch(() => undefined); }}
                           title="Löschen"
                         >
                           <Trash2 className="h-3 w-3" />

@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 import { toast } from "sonner";
-import { migrationApi, toArray } from "@/lib/api";
+import { getApiErrorMessage, migrationApi, toArray } from "@/lib/api";
 import type { VMMigration } from "@/types/api";
 
 interface MigrationLogEntry {
@@ -82,39 +82,63 @@ export const useMigrationStore = create<MigrationState>()((set, get) => ({
   },
 
   startMigration: async (data) => {
-    const res = await migrationApi.start(data);
-    set((state) => ({
-      migrationLogs: { ...state.migrationLogs, [res.data.id]: [] },
-    }));
-    toast.success("Migration gestartet");
-    // Refresh the full list instead of optimistic update
-    get().fetchMigrations();
-    return res.data;
+    try {
+      const res = await migrationApi.start(data);
+      set((state) => ({
+        migrationLogs: { ...state.migrationLogs, [res.data.id]: [] },
+        error: null,
+      }));
+      toast.success("Migration gestartet");
+      // Refresh the full list instead of optimistic update
+      get().fetchMigrations();
+      return res.data;
+    } catch (err) {
+      const message = getApiErrorMessage(err, "Migration konnte nicht gestartet werden");
+      toast.error(message);
+      set({ error: message });
+      throw err;
+    }
   },
 
   cancelMigration: async (id: string) => {
-    await migrationApi.cancel(id);
-    set((state) => ({
-      migrations: state.migrations.map((m) =>
-        m.id === id ? { ...m, status: "cancelled" as const } : m
-      ),
-      activeMigrations: state.activeMigrations.filter((m) => m.id !== id),
-    }));
-    toast.success("Migration abgebrochen");
+    try {
+      await migrationApi.cancel(id);
+      set((state) => ({
+        migrations: state.migrations.map((m) =>
+          m.id === id ? { ...m, status: "cancelled" as const } : m
+        ),
+        activeMigrations: state.activeMigrations.filter((m) => m.id !== id),
+        error: null,
+      }));
+      toast.success("Migration abgebrochen");
+    } catch (err) {
+      const message = getApiErrorMessage(err, "Migration konnte nicht abgebrochen werden");
+      toast.error(message);
+      set({ error: message });
+      throw err;
+    }
   },
 
   deleteMigration: async (id: string) => {
-    await migrationApi.delete(id);
-    set((state) => {
-      const newLogs = { ...state.migrationLogs };
-      delete newLogs[id];
-      return {
-        migrations: state.migrations.filter((m) => m.id !== id),
-        activeMigrations: state.activeMigrations.filter((m) => m.id !== id),
-        migrationLogs: newLogs,
-      };
-    });
-    toast.success("Migration gelöscht");
+    try {
+      await migrationApi.delete(id);
+      set((state) => {
+        const newLogs = { ...state.migrationLogs };
+        delete newLogs[id];
+        return {
+          migrations: state.migrations.filter((m) => m.id !== id),
+          activeMigrations: state.activeMigrations.filter((m) => m.id !== id),
+          migrationLogs: newLogs,
+          error: null,
+        };
+      });
+      toast.success("Migration gelöscht");
+    } catch (err) {
+      const message = getApiErrorMessage(err, "Migration konnte nicht gelöscht werden");
+      toast.error(message);
+      set({ error: message });
+      throw err;
+    }
   },
 
   retryMigration: async (migration: VMMigration) => {
@@ -124,24 +148,32 @@ export const useMigrationStore = create<MigrationState>()((set, get) => ({
     } catch {
       // ignore if delete fails
     }
-    const res = await migrationApi.start({
-      source_node_id: migration.source_node_id,
-      target_node_id: migration.target_node_id,
-      vmid: migration.vmid,
-      target_storage: migration.target_storage,
-      mode: migration.mode,
-    });
-    set((state) => {
-      const newLogs = { ...state.migrationLogs };
-      delete newLogs[migration.id];
-      return {
-        migrations: [res.data, ...state.migrations.filter((m) => m.id !== migration.id)],
-        activeMigrations: [res.data, ...state.activeMigrations],
-        migrationLogs: { ...newLogs, [res.data.id]: [] },
-      };
-    });
-    toast.success("Migration wird wiederholt");
-    return res.data;
+    try {
+      const res = await migrationApi.start({
+        source_node_id: migration.source_node_id,
+        target_node_id: migration.target_node_id,
+        vmid: migration.vmid,
+        target_storage: migration.target_storage,
+        mode: migration.mode,
+      });
+      set((state) => {
+        const newLogs = { ...state.migrationLogs };
+        delete newLogs[migration.id];
+        return {
+          migrations: [res.data, ...state.migrations.filter((m) => m.id !== migration.id)],
+          activeMigrations: [res.data, ...state.activeMigrations],
+          migrationLogs: { ...newLogs, [res.data.id]: [] },
+          error: null,
+        };
+      });
+      toast.success("Migration wird wiederholt");
+      return res.data;
+    } catch (err) {
+      const message = getApiErrorMessage(err, "Migration konnte nicht wiederholt werden");
+      toast.error(message);
+      set({ error: message });
+      throw err;
+    }
   },
 
   updateMigrationProgress: (migration: VMMigration) => {
@@ -191,8 +223,15 @@ export const useMigrationStore = create<MigrationState>()((set, get) => ({
           })),
         },
       }));
-    } catch {
-      // silently fail - logs are optional
+    } catch (err) {
+      const message = getApiErrorMessage(err, "Migrationslogs konnten nicht geladen werden");
+      set((state) => ({
+        error: message,
+        migrationLogs: {
+          ...state.migrationLogs,
+          [migrationId]: [{ line: message, timestamp: "--" }],
+        },
+      }));
     }
   },
 }));

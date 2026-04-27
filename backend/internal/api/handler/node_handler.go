@@ -887,8 +887,8 @@ func (h *NodeHandler) SyncContent(c echo.Context) error {
 	if err := c.Bind(&req); err != nil {
 		return apiPkg.BadRequest(c, "invalid request body")
 	}
-	if req.SourceNodeID == "" || req.Volid == "" {
-		return apiPkg.BadRequest(c, "source_node_id and volid are required")
+	if req.Volid == "" || (req.SourceNodeID == "" && req.DownloadURL == "") {
+		return apiPkg.BadRequest(c, "volid and either source_node_id or download_url are required")
 	}
 
 	upid, err := h.service.SyncContent(c.Request().Context(), id, req)

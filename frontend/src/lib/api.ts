@@ -588,7 +588,7 @@ export const agentConfigApi = {
 export const isoApi = {
   listISOs: (nodeId: string) => api.get(`/nodes/${nodeId}/isos`),
   listTemplates: (nodeId: string) => api.get(`/nodes/${nodeId}/templates`),
-  syncContent: (nodeId: string, data: { source_node_id: string; volid: string; target_storage: string }) =>
+  syncContent: (nodeId: string, data: { source_node_id?: string; volid: string; target_storage: string; download_url?: string }) =>
     api.post(`/nodes/${nodeId}/sync-content`, data),
   listCluster: () => api.get("/isos"),
 };

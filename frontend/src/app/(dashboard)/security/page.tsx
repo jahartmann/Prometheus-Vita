@@ -216,7 +216,10 @@ export default function SecurityPage() {
               try {
                 await securityApi.setMode(m.value);
                 setAnalysisMode(m.value);
-              } catch { /* silent */ }
+                setError(null);
+              } catch {
+                setError("Analysemodus konnte nicht gespeichert werden");
+              }
             }}
             className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
               analysisMode === m.value
