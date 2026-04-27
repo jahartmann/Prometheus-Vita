@@ -394,8 +394,26 @@ func main() {
 			telegramLinkRepo,
 			telegramConvRepo,
 			agentConfigRepo,
+			approvalRepo,
 		)
 		slog.Info("telegram bot enabled")
+	}
+
+	// Proactive push pipeline — wires the Telegram bot (and any future
+	// transports) into the security/briefing services so the agent can
+	// notify linked admins on its own initiative. nil-safe: if no notifier
+	// is wired up, the push calls become no-ops.
+	var pushSvc *agent.PushService
+	if telegramBotSvc != nil {
+		pushSvc = agent.NewPushService(telegramBotSvc)
+		analysisSvc.SetPushNotifier(intelligencePushAdapter{pushSvc})
+		briefingSvc.SetPushNotifier(briefingPushAdapter{pushSvc})
+
+		// Interactive approval flow: when the agent creates a pending
+		// approval, the bot sends an inline-keyboard prompt to the
+		// requesting user. Tap → resolves the approval directly.
+		agentSvc.SetApprovalNotifier(telegramBotSvc)
+		slog.Info("agent push pipeline enabled")
 	}
 
 	// Scheduler
@@ -519,6 +537,7 @@ func main() {
 		NetworkDevice:     handler.NewNetworkDeviceHandler(networkDeviceRepo),
 		NetworkAnomaly:    handler.NewNetworkAnomalyHandler(networkAnomalyRepo),
 		ScanBaseline:      handler.NewScanBaselineHandler(scanBaselineRepo),
+		Bandwidth:         handler.NewBandwidthHandler(nodeSvc),
 	}
 
 	// Setup routes

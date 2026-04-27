@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Bot, CheckCircle2, KeyRound, RotateCcw, Save, Server, ShieldAlert, ShieldCheck, Trash2, Wifi, Wrench } from "lucide-react";
+import { Bot, Cpu, CheckCircle2, Download, HardDrive, KeyRound, MemoryStick, RotateCcw, Save, Sparkles, Server, ShieldAlert, ShieldCheck, Trash2, Wifi, Wrench, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { agentConfigApi, userApi } from "@/lib/api";
 import { useAuthStore } from "@/stores/auth-store";
@@ -55,6 +55,44 @@ interface OllamaModel {
   modified_at: string;
 }
 
+interface ModelRecommendation {
+  name: string;
+  tier: "minimal" | "light" | "standard" | "pro" | "enterprise" | string;
+  size_gb: number;
+  tool_calling: boolean;
+  reasoning?: boolean;
+  description: string;
+  best_for?: string[];
+  pulled: boolean;
+  recommended: boolean;
+  default: boolean;
+}
+
+interface SystemRecommendation {
+  system: {
+    os: string;
+    arch: string;
+    cpu_cores: number;
+    total_ram_gb: number;
+    gpus: Array<{ name: string; vram_gb: number; driver?: string; vendor?: string }>;
+    tier: string;
+    tier_label: string;
+    notes?: string[];
+  };
+  models: ModelRecommendation[];
+  default_model: string;
+  ollama_ready: boolean;
+  ollama_url: string;
+}
+
+const tierTone: Record<string, "outline" | "warning" | "degraded" | "success" | "secondary"> = {
+  minimal: "outline",
+  light: "secondary",
+  standard: "warning",
+  pro: "success",
+  enterprise: "success",
+};
+
 const providers: Array<{ value: Provider; label: string; detail: string }> = [
   { value: "ollama", label: "Ollama", detail: "Lokal oder privat" },
   { value: "openai", label: "OpenAI", detail: "GPT-Modelle" },
@@ -63,11 +101,15 @@ const providers: Array<{ value: Provider; label: string; detail: string }> = [
 
 const providerModels: Record<Provider, Array<{ value: string; label: string }>> = {
   ollama: [
-    { value: "llama3", label: "llama3" },
-    { value: "llama3:70b", label: "llama3:70b" },
-    { value: "mistral", label: "mistral" },
-    { value: "codellama", label: "codellama" },
-    { value: "gemma2", label: "gemma2" },
+    { value: "llama3.1:8b", label: "llama3.1:8b — empfohlener Mindeststandard" },
+    { value: "llama3.3:70b", label: "llama3.3:70b — Top-Tier" },
+    { value: "qwen2.5:14b", label: "qwen2.5:14b — Standard, sehr gut" },
+    { value: "qwen2.5:32b", label: "qwen2.5:32b — Pro" },
+    { value: "qwen2.5:72b", label: "qwen2.5:72b — Enterprise" },
+    { value: "qwen2.5-coder:32b", label: "qwen2.5-coder:32b — Coding-Fokus" },
+    { value: "mistral-small:24b", label: "mistral-small:24b" },
+    { value: "qwq:32b", label: "qwq:32b — Reasoning" },
+    { value: "llama3.2:3b", label: "llama3.2:3b — Minimal" },
   ],
   openai: [
     { value: "gpt-4o", label: "gpt-4o" },
@@ -101,7 +143,7 @@ const autonomyLabels: Record<number, { label: string; description: string; tone:
 export default function AgentSettingsPage() {
   const user = useAuthStore((s) => s.user);
   const [provider, setProvider] = useState<Provider>("ollama");
-  const [model, setModel] = useState("llama3");
+  const [model, setModel] = useState("llama3.1:8b");
   const [ollamaUrl, setOllamaUrl] = useState("http://localhost:11434");
   const [openaiKey, setOpenaiKey] = useState("");
   const [anthropicKey, setAnthropicKey] = useState("");
@@ -120,6 +162,8 @@ export default function AgentSettingsPage() {
   const [secretAction, setSecretAction] = useState<Provider | "">("");
   const [isDiscovering, setIsDiscovering] = useState(false);
   const [ollamaModels, setOllamaModels] = useState<OllamaModel[]>([]);
+  const [recommendation, setRecommendation] = useState<SystemRecommendation | null>(null);
+  const [pullingModel, setPullingModel] = useState<string>("");
 
   const snapshot = useMemo(
     () => JSON.stringify({
@@ -152,7 +196,7 @@ export default function AgentSettingsPage() {
 
   const applyConfig = useCallback((config: AgentConfig) => {
     const nextProvider = toProvider(config.llm_provider);
-    const nextModel = config.llm_model || "llama3";
+    const nextModel = config.llm_model || "llama3.1:8b";
     const nextOllamaUrl = config.ollama_url || "http://localhost:11434";
     setProvider(nextProvider);
     setModel(nextModel);
@@ -214,6 +258,41 @@ export default function AgentSettingsPage() {
   useEffect(() => {
     loadConfig();
   }, [loadConfig]);
+
+  const loadRecommendation = useCallback(async () => {
+    try {
+      const data = (await agentConfigApi.getRecommendations()) as SystemRecommendation;
+      setRecommendation(data);
+    } catch {
+      // Recommendations are optional — if the endpoint fails (e.g. on a non-Linux
+      // host), the rest of the page should still work.
+    }
+  }, []);
+
+  useEffect(() => {
+    loadRecommendation();
+  }, [loadRecommendation]);
+
+  const pullModelHandler = useCallback(async (modelName: string) => {
+    setPullingModel(modelName);
+    toast.message(`Lade ${modelName} — kann einige Minuten dauern…`);
+    try {
+      await agentConfigApi.pullModel(modelName);
+      toast.success(`${modelName} ist geladen`);
+      await loadRecommendation();
+      // Refresh the Ollama model list so the dropdown picks it up.
+      try {
+        const models = (await agentConfigApi.testOllamaConnection(ollamaUrl)) as OllamaModel[];
+        setOllamaModels(Array.isArray(models) ? models : []);
+      } catch {
+        // ignore — the user can hit "Test" manually.
+      }
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, `${modelName} konnte nicht geladen werden`));
+    } finally {
+      setPullingModel("");
+    }
+  }, [loadRecommendation, ollamaUrl]);
 
   const handleProviderChange = (value: Provider) => {
     setProvider(value);
@@ -355,6 +434,16 @@ export default function AgentSettingsPage() {
           </div>
         </div>
       </div>
+
+      {recommendation && provider === "ollama" && (
+        <RecommendationCard
+          data={recommendation}
+          activeModel={model}
+          onPick={(name) => setModel(name)}
+          onPull={pullModelHandler}
+          pullingModel={pullingModel}
+        />
+      )}
 
       <Card>
         <CardHeader>
@@ -670,6 +759,165 @@ function snapshotWithoutSecrets(
     approvalCritical,
     fullAutoLowRisk,
   });
+}
+
+function RecommendationCard({
+  data,
+  activeModel,
+  onPick,
+  onPull,
+  pullingModel,
+}: {
+  data: SystemRecommendation;
+  activeModel: string;
+  onPick: (name: string) => void;
+  onPull: (name: string) => void;
+  pullingModel: string;
+}) {
+  const tier = data.system.tier;
+  const tone = tierTone[tier] ?? "outline";
+  const ramFmt = data.system.total_ram_gb > 0 ? `${data.system.total_ram_gb.toFixed(1)} GB` : "n/v";
+
+  return (
+    <Card className="border-primary/30 bg-primary/5">
+      <CardHeader>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/15">
+              <Sparkles className="h-4 w-4 text-primary" />
+            </div>
+            <div>
+              <CardTitle className="text-base">Empfehlungen für deine Hardware</CardTitle>
+              <CardDescription>
+                Erkannte Maschine, kuratierte Modell-Liste und Auto-Pull über Ollama.
+              </CardDescription>
+            </div>
+          </div>
+          <Badge variant={tone}>{data.system.tier_label}</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <SpecChip icon={MemoryStick} label="RAM" value={ramFmt} />
+          <SpecChip icon={Cpu} label="CPU-Kerne" value={String(data.system.cpu_cores)} />
+          <SpecChip
+            icon={Zap}
+            label="GPUs"
+            value={
+              data.system.gpus.length > 0
+                ? data.system.gpus
+                    .map((g) => `${g.name.replace(/^NVIDIA /, "")} (${g.vram_gb.toFixed(0)} GB)`)
+                    .join(", ")
+                : "keine"
+            }
+          />
+          <SpecChip
+            icon={HardDrive}
+            label="Ollama"
+            value={data.ollama_ready ? "verbunden" : "nicht erreichbar"}
+            tone={data.ollama_ready ? "success" : "warning"}
+          />
+        </div>
+
+        {data.system.notes && data.system.notes.length > 0 && (
+          <div className="rounded-md border border-amber-300/40 bg-amber-300/10 px-3 py-2 text-xs text-amber-200">
+            {data.system.notes.map((n, i) => (
+              <div key={i}>• {n}</div>
+            ))}
+          </div>
+        )}
+
+        <div className="space-y-2">
+          {data.models.map((m) => {
+            const isActive = m.name === activeModel;
+            const isPulling = pullingModel === m.name;
+            return (
+              <div
+                key={m.name}
+                className={`flex flex-wrap items-center gap-3 rounded-md border bg-background/60 p-3 transition-colors ${
+                  isActive ? "border-primary" : "border-border"
+                }`}
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-mono text-sm font-medium">{m.name}</span>
+                    {m.recommended && <Badge variant="success">Empfohlen</Badge>}
+                    {m.pulled && <Badge variant="secondary">Installiert</Badge>}
+                    {!m.tool_calling && <Badge variant="warning">kein Tool-Calling</Badge>}
+                    {m.reasoning && <Badge variant="outline">Reasoning</Badge>}
+                    <Badge variant="outline" className="text-xs">
+                      {m.tier}
+                    </Badge>
+                    <span className="text-xs text-muted-foreground">
+                      ~{m.size_gb < 1 ? `${(m.size_gb * 1024).toFixed(0)} MB` : `${m.size_gb.toFixed(1)} GB`}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">{m.description}</p>
+                </div>
+                <div className="flex shrink-0 gap-2">
+                  {!m.pulled && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => onPull(m.name)}
+                      disabled={isPulling || !data.ollama_ready}
+                    >
+                      <Download className="h-4 w-4" />
+                      {isPulling ? "Lädt…" : "Pull"}
+                    </Button>
+                  )}
+                  <Button
+                    type="button"
+                    variant={isActive ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => onPick(m.name)}
+                    disabled={isActive}
+                  >
+                    {isActive ? "Aktiv" : "Auswählen"}
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <p className="text-xs text-muted-foreground">
+          Hinweis: Modelle ohne Tool-Calling können der Agent zwar antworten, aber keine Aktionen
+          ausführen. Wenn die KI „dumm" wirkt, liegt es meistens an einem zu kleinen Modell oder
+          einem ohne Tool-Calling.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function SpecChip({
+  icon: Icon,
+  label,
+  value,
+  tone = "default",
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: string;
+  tone?: "default" | "success" | "warning";
+}) {
+  const toneClass =
+    tone === "success"
+      ? "text-emerald-400"
+      : tone === "warning"
+      ? "text-amber-400"
+      : "text-foreground";
+  return (
+    <div className="flex items-start gap-2 rounded-md border bg-background/60 p-2.5">
+      <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+      <div className="min-w-0">
+        <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{label}</div>
+        <div className={`truncate text-sm font-medium ${toneClass}`}>{value}</div>
+      </div>
+    </div>
+  );
 }
 
 function getErrorMessage(error: unknown, fallback: string): string {

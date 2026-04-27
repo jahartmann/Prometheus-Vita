@@ -66,6 +66,7 @@ type Handlers struct {
 	NetworkDevice     *handler.NetworkDeviceHandler
 	NetworkAnomaly    *handler.NetworkAnomalyHandler
 	ScanBaseline      *handler.ScanBaselineHandler
+	Bandwidth         *handler.BandwidthHandler
 }
 
 func SetupRouter(e *echo.Echo, cfg *config.Config, jwtSvc *auth.JWTService, h Handlers, gatewaySvc *gateway.Service, redisClient *redis.Client, auditRepo repository.AuditRepository, userRepo repository.UserRepository, rolePermissionRepo repository.RolePermissionRepository) {
@@ -581,8 +582,11 @@ func SetupRouter(e *echo.Echo, cfg *config.Config, jwtSvc *auth.JWTService, h Ha
 		agentRoutes.POST("/secrets/:provider/rotate", h.AgentConfig.RotateSecret)
 		agentRoutes.DELETE("/secrets/:provider", h.AgentConfig.DeleteSecret)
 		agentRoutes.GET("/models", h.AgentConfig.GetModels)
+		agentRoutes.GET("/recommendations", h.AgentConfig.GetRecommendations)
+		agentRoutes.POST("/models/pull", h.AgentConfig.PullModel)
 		if h.Chat != nil {
 			agentRoutes.GET("/tools", h.Chat.ToolCatalog)
+			agentRoutes.GET("/activity", h.Chat.RecentActivity)
 		}
 	}
 
@@ -747,6 +751,10 @@ func SetupRouter(e *echo.Echo, cfg *config.Config, jwtSvc *auth.JWTService, h Ha
 	}
 
 	// Network routes
+	if h.Bandwidth != nil {
+		nodes.POST("/:id/bandwidth-test", h.Bandwidth.Run, middleware.RequirePermission(model.PermissionNodesWrite))
+	}
+
 	if h.NetworkScan != nil {
 		nodes.GET("/:id/network-scans", h.NetworkScan.ListByNode, middleware.RequirePermission(model.PermissionSecurityRead))
 		nodes.GET("/:id/network-devices", h.NetworkDevice.ListByNode, middleware.RequirePermission(model.PermissionSecurityRead))

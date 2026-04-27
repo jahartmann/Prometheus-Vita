@@ -27,6 +27,7 @@ type BotService struct {
 	linkRepo        repository.TelegramLinkRepository
 	convRepo        repository.TelegramConversationRepository
 	agentConfigRepo repository.AgentConfigRepository
+	approvalRepo    repository.ApprovalRepository
 	lastOffset int64
 	offsetMu   sync.Mutex
 	// pendingConfirmations tracks chatID -> pending action for autonomy level 1
@@ -46,6 +47,7 @@ func NewBotService(
 	linkRepo repository.TelegramLinkRepository,
 	convRepo repository.TelegramConversationRepository,
 	agentConfigRepo repository.AgentConfigRepository,
+	approvalRepo repository.ApprovalRepository,
 ) *BotService {
 	return &BotService{
 		botToken:             botToken,
@@ -53,6 +55,7 @@ func NewBotService(
 		linkRepo:             linkRepo,
 		convRepo:             convRepo,
 		agentConfigRepo:      agentConfigRepo,
+		approvalRepo:         approvalRepo,
 		pendingConfirmations: make(map[int64]*pendingAction),
 	}
 }
@@ -60,8 +63,9 @@ func NewBotService(
 // Telegram API types
 
 type Update struct {
-	UpdateID int64    `json:"update_id"`
-	Message  *Message `json:"message"`
+	UpdateID      int64          `json:"update_id"`
+	Message       *Message       `json:"message"`
+	CallbackQuery *CallbackQuery `json:"callback_query"`
 }
 
 type Message struct {
@@ -69,6 +73,16 @@ type Message struct {
 	Chat      Chat   `json:"chat"`
 	Text      string `json:"text"`
 	From      *User  `json:"from"`
+}
+
+// CallbackQuery is fired when the user taps an inline-keyboard button.
+// `Data` is the opaque payload we baked into the button; we use it to route
+// the action — e.g. "approve:<uuid>" or "deny:<uuid>" for the approval flow.
+type CallbackQuery struct {
+	ID      string   `json:"id"`
+	From    *User    `json:"from"`
+	Message *Message `json:"message"`
+	Data    string   `json:"data"`
 }
 
 type Chat struct {
@@ -84,6 +98,13 @@ type User struct {
 type getUpdatesResponse struct {
 	OK     bool     `json:"ok"`
 	Result []Update `json:"result"`
+}
+
+// InlineKeyboardButton is the JSON shape Telegram expects under reply_markup.
+type InlineKeyboardButton struct {
+	Text         string `json:"text"`
+	CallbackData string `json:"callback_data,omitempty"`
+	URL          string `json:"url,omitempty"`
 }
 
 type getMeResponse struct {
@@ -135,8 +156,12 @@ func (s *BotService) PollUpdates(ctx context.Context) error {
 	offset := s.lastOffset + 1
 	s.offsetMu.Unlock()
 
-	url := fmt.Sprintf("https://api.telegram.org/bot%s/getUpdates?offset=%d&timeout=1&limit=20",
-		s.botToken, offset)
+	// allowed_updates explicitly enables callback_query — without it Telegram
+	// silently drops inline-button taps. The literal is URL-escaped JSON.
+	url := fmt.Sprintf(
+		"https://api.telegram.org/bot%s/getUpdates?offset=%d&timeout=1&limit=20&allowed_updates=%%5B%%22message%%22%%2C%%22callback_query%%22%%5D",
+		s.botToken, offset,
+	)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -166,9 +191,124 @@ func (s *BotService) PollUpdates(ctx context.Context) error {
 		if update.Message != nil && update.Message.Text != "" {
 			s.processUpdate(ctx, update.Message)
 		}
+		if update.CallbackQuery != nil {
+			s.processCallback(ctx, update.CallbackQuery)
+		}
 	}
 
 	return nil
+}
+
+// processCallback routes inline-button taps. We use a colon-separated payload
+// like "approve:<uuid>" or "deny:<uuid>". Anything we don't recognize is
+// silently acked — better than throwing visible errors at the user.
+func (s *BotService) processCallback(ctx context.Context, cq *CallbackQuery) {
+	if cq == nil || cq.From == nil || cq.Message == nil {
+		return
+	}
+	chatID := cq.Message.Chat.ID
+	messageID := cq.Message.MessageID
+
+	link, err := s.linkRepo.GetByTelegramChatID(ctx, chatID)
+	if err != nil {
+		s.answerCallback(ctx, cq.ID, "Konto nicht verknüpft.", true)
+		return
+	}
+
+	parts := strings.SplitN(cq.Data, ":", 2)
+	action := parts[0]
+	var argument string
+	if len(parts) > 1 {
+		argument = parts[1]
+	}
+
+	switch action {
+	case "approve", "deny":
+		s.handleApprovalCallback(ctx, cq.ID, chatID, messageID, link.UserID, argument, action == "approve")
+	case "noop":
+		s.answerCallback(ctx, cq.ID, "", false)
+	default:
+		s.answerCallback(ctx, cq.ID, "Aktion unbekannt.", false)
+	}
+}
+
+func (s *BotService) handleApprovalCallback(
+	ctx context.Context,
+	callbackID string,
+	chatID int64,
+	messageID int64,
+	userID uuid.UUID,
+	approvalIDStr string,
+	approve bool,
+) {
+	if s.approvalRepo == nil {
+		s.answerCallback(ctx, callbackID, "Approval-System nicht verfügbar.", true)
+		return
+	}
+	approvalID, err := uuid.Parse(approvalIDStr)
+	if err != nil {
+		s.answerCallback(ctx, callbackID, "Ungültige Approval-ID.", true)
+		return
+	}
+
+	// Authorization: the user resolving the approval must be the user who
+	// requested the agent action. Otherwise we silently refuse.
+	approval, err := s.approvalRepo.GetByID(ctx, approvalID)
+	if err != nil {
+		s.answerCallback(ctx, callbackID, "Approval nicht gefunden.", true)
+		return
+	}
+	if approval.UserID != userID {
+		s.answerCallback(ctx, callbackID, "Diese Approval gehört einem anderen Konto.", true)
+		return
+	}
+	if approval.Status != model.ApprovalPending {
+		s.answerCallback(ctx, callbackID, "Approval wurde bereits entschieden.", false)
+		s.editMessageMarkup(ctx, chatID, messageID, nil) // strip buttons
+		return
+	}
+
+	status := model.ApprovalApproved
+	verb := "freigegeben"
+	if !approve {
+		status = model.ApprovalRejected
+		verb = "abgelehnt"
+	}
+	if err := s.approvalRepo.Resolve(ctx, approvalID, status, userID); err != nil {
+		s.answerCallback(ctx, callbackID, "Konnte nicht gespeichert werden: "+err.Error(), true)
+		return
+	}
+
+	s.answerCallback(ctx, callbackID, "Approval "+verb+".", false)
+	// Replace buttons with a static "decided" footer so the chat stays clean.
+	s.editMessageMarkup(ctx, chatID, messageID, [][]InlineKeyboardButton{
+		{{Text: "✓ " + verb, CallbackData: "noop"}},
+	})
+
+	// On approve: actually run the tool. The HTTP approval handler does the
+	// same — we mirror the flow so a Telegram-approved action behaves
+	// identically to a UI-approved one. Run in a goroutine because the tool
+	// can take seconds (SSH commands, backups) and we don't want to block
+	// the callback-loop response.
+	if approve && s.agentSvc != nil {
+		go func(approval *model.AgentPendingApproval) {
+			runCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+			defer cancel()
+			result, execErr := s.agentSvc.ExecuteApprovedTool(runCtx, userID, approval)
+			if execErr != nil {
+				s.sendMessage(runCtx, chatID, fmt.Sprintf("⚠️ Aktion `%s` fehlgeschlagen: %s",
+					escapeTelegramMarkdown(approval.ToolName),
+					escapeTelegramMarkdown(execErr.Error())))
+				return
+			}
+			preview := string(result)
+			if len(preview) > 400 {
+				preview = preview[:400] + "…"
+			}
+			s.sendMessage(runCtx, chatID, fmt.Sprintf("✅ `%s` ausgeführt.\n\n```\n%s\n```",
+				escapeTelegramMarkdown(approval.ToolName), preview))
+		}(approval)
+	}
 }
 
 func (s *BotService) processUpdate(ctx context.Context, msg *Message) {
@@ -393,6 +533,159 @@ func formatToolCallsForTelegram(toolCalls []model.AgentToolCall) string {
 	}
 
 	return sb.String()
+}
+
+// SendDirect is a public wrapper around sendMessage so that other services
+// (proactive push, briefing, intelligence) can deliver messages to a specific
+// chat without depending on the internal helper. Errors are logged but not
+// returned — pushes are best-effort.
+func (s *BotService) SendDirect(ctx context.Context, chatID int64, text string) {
+	s.sendMessage(ctx, chatID, text)
+}
+
+// SendApprovalRequest broadcasts an approval prompt with inline ✓/✗ buttons
+// to the user who owns the approval. Returns true if the message was sent.
+//
+// We target the specific user's chat (not all linked users) — approvals are
+// auth-scoped, so flooding every admin would be wrong.
+func (s *BotService) SendApprovalRequest(
+	ctx context.Context,
+	userID uuid.UUID,
+	approvalID uuid.UUID,
+	toolName string,
+	summary string,
+) bool {
+	if s == nil || s.linkRepo == nil {
+		return false
+	}
+	link, err := s.linkRepo.GetByUserID(ctx, userID)
+	if err != nil || link == nil || link.TelegramChatID == nil || !link.IsVerified {
+		return false
+	}
+	text := fmt.Sprintf("🛂 *Freigabe nötig*\nDer Agent möchte `%s` ausführen.", escapeTelegramMarkdown(toolName))
+	if summary != "" {
+		text += "\n\n" + escapeTelegramMarkdown(summary)
+	}
+	keyboard := [][]InlineKeyboardButton{
+		{
+			{Text: "✓ Erlauben", CallbackData: "approve:" + approvalID.String()},
+			{Text: "✗ Ablehnen", CallbackData: "deny:" + approvalID.String()},
+		},
+	}
+	return s.sendWithKeyboard(ctx, *link.TelegramChatID, text, keyboard)
+}
+
+// sendWithKeyboard sends a Markdown message with an inline keyboard. Falls
+// back to plain text if Markdown parsing fails, mirroring sendMessage's
+// retry path.
+func (s *BotService) sendWithKeyboard(
+	ctx context.Context,
+	chatID int64,
+	text string,
+	keyboard [][]InlineKeyboardButton,
+) bool {
+	payload := map[string]any{
+		"chat_id":    chatID,
+		"text":       text,
+		"parse_mode": "Markdown",
+	}
+	if len(keyboard) > 0 {
+		payload["reply_markup"] = map[string]any{
+			"inline_keyboard": keyboard,
+		}
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		slog.Error("marshal telegram keyboard payload", slog.Any("error", err))
+		return false
+	}
+	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", s.botToken)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(data))
+	if err != nil {
+		return false
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := telegramBotHTTPClient.Do(req)
+	if err != nil {
+		slog.Error("telegram sendWithKeyboard", slog.Any("error", err))
+		return false
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode == http.StatusOK
+}
+
+// answerCallback acks the callback_query so Telegram stops showing the
+// loading spinner on the button. `text` shows a small toast; pass empty
+// string to ack silently.
+func (s *BotService) answerCallback(ctx context.Context, callbackID string, text string, alert bool) {
+	payload := map[string]any{"callback_query_id": callbackID}
+	if text != "" {
+		payload["text"] = text
+		payload["show_alert"] = alert
+	}
+	data, _ := json.Marshal(payload)
+	url := fmt.Sprintf("https://api.telegram.org/bot%s/answerCallbackQuery", s.botToken)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(data))
+	if err != nil {
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := telegramBotHTTPClient.Do(req)
+	if err == nil && resp != nil {
+		resp.Body.Close()
+	}
+}
+
+// editMessageMarkup replaces the inline keyboard on an existing message.
+// Pass nil to remove the keyboard entirely. Used after an approval is
+// resolved so the buttons can't be tapped twice.
+func (s *BotService) editMessageMarkup(ctx context.Context, chatID, messageID int64, keyboard [][]InlineKeyboardButton) {
+	payload := map[string]any{
+		"chat_id":    chatID,
+		"message_id": messageID,
+	}
+	if keyboard != nil {
+		payload["reply_markup"] = map[string]any{"inline_keyboard": keyboard}
+	} else {
+		payload["reply_markup"] = map[string]any{"inline_keyboard": [][]InlineKeyboardButton{}}
+	}
+	data, _ := json.Marshal(payload)
+	url := fmt.Sprintf("https://api.telegram.org/bot%s/editMessageReplyMarkup", s.botToken)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(data))
+	if err != nil {
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := telegramBotHTTPClient.Do(req)
+	if err == nil && resp != nil {
+		resp.Body.Close()
+	}
+}
+
+// BroadcastToLinkedUsers sends the given text to every Telegram chat that has
+// completed the verification flow. Used by the proactive push pipeline to keep
+// the admin "in the loop" without requiring them to open the UI.
+//
+// Returns the number of chats reached. Failures are logged per-chat but never
+// abort the broadcast — one offline user must not break delivery to the rest.
+func (s *BotService) BroadcastToLinkedUsers(ctx context.Context, text string) int {
+	if s == nil || s.linkRepo == nil {
+		return 0
+	}
+	links, err := s.linkRepo.ListVerified(ctx)
+	if err != nil {
+		slog.Warn("telegram broadcast: list verified failed", slog.Any("error", err))
+		return 0
+	}
+	count := 0
+	for _, link := range links {
+		if link == nil || link.TelegramChatID == nil {
+			continue
+		}
+		s.sendMessage(ctx, *link.TelegramChatID, text)
+		count++
+	}
+	return count
 }
 
 func (s *BotService) sendMessage(ctx context.Context, chatID int64, text string) {

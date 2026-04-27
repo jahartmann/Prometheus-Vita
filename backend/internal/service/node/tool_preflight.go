@@ -35,6 +35,9 @@ var defaultToolDefinitions = []ToolDefinition{
 	{Name: "journalctl", Command: "command -v journalctl"},
 	{Name: "pct", Command: "command -v pct"},
 	{Name: "qm", Command: "command -v qm"},
+	{Name: "iperf3", Command: "command -v iperf3"},
+	{Name: "vmstat", Command: "command -v vmstat"},
+	{Name: "lsof", Command: "command -v lsof"},
 }
 
 func RunToolPreflight(ctx context.Context, runner SSHCommandRunner, nodeID uuid.UUID) (*ToolPreflightResult, error) {

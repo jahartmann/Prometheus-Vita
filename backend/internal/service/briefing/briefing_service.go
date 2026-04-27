@@ -20,6 +20,13 @@ type NodeServiceInterface interface {
 	GetVMs(ctx context.Context, id uuid.UUID) ([]proxmox.VMInfo, error)
 }
 
+// PushNotifier delivers the daily briefing to linked admins (Telegram).
+// We define the interface locally to keep this package free of any agent
+// package dependency. The wiring in main.go bridges the two.
+type PushNotifier interface {
+	PushBriefing(ctx context.Context, headline, body string)
+}
+
 type Service struct {
 	briefingRepo   repository.BriefingRepository
 	nodeRepo       repository.NodeRepository
@@ -28,6 +35,7 @@ type Service struct {
 	predictionRepo repository.PredictionRepository
 	llmRegistry    *llm.Registry
 	nodeSvc        NodeServiceInterface
+	pusher         PushNotifier
 }
 
 func NewService(
@@ -46,6 +54,12 @@ func NewService(
 		predictionRepo: predictionRepo,
 		llmRegistry:    llmRegistry,
 	}
+}
+
+// SetPushNotifier wires up the proactive notification channel. When set,
+// every newly generated briefing is also pushed to linked Telegram admins.
+func (s *Service) SetPushNotifier(p PushNotifier) {
+	s.pusher = p
 }
 
 func (s *Service) GenerateBriefing(ctx context.Context) error {
@@ -126,6 +140,16 @@ func (s *Service) GenerateBriefing(ctx context.Context) error {
 	}
 
 	slog.Info("morning briefing generated", slog.String("id", briefing.ID.String()))
+
+	// Proactive push to linked Telegram admins. Best-effort: failures must
+	// not abort briefing creation, since the briefing itself is already in
+	// the database and visible in the UI.
+	if s.pusher != nil {
+		headline := fmt.Sprintf("%d/%d Nodes online · %d Anomalien · %d kritische Vorhersagen",
+			briefingData.OnlineNodes, briefingData.TotalNodes,
+			briefingData.UnresolvedAnomalies, briefingData.CriticalPredictions)
+		s.pusher.PushBriefing(ctx, headline, summary)
+	}
 	return nil
 }
 

@@ -33,6 +33,7 @@ type ToolCallRepository interface {
 	Create(ctx context.Context, tc *model.AgentToolCall) error
 	UpdateResult(ctx context.Context, id uuid.UUID, result json.RawMessage, status string, durationMs int) error
 	ListByMessage(ctx context.Context, messageID uuid.UUID) ([]model.AgentToolCall, error)
+	ListRecent(ctx context.Context, limit int) ([]model.AgentToolCall, error)
 }
 
 // --- ChatConversationRepository implementation ---
@@ -211,6 +212,36 @@ func (r *pgToolCallRepository) ListByMessage(ctx context.Context, messageID uuid
 		 ORDER BY created_at ASC`, messageID)
 	if err != nil {
 		return nil, fmt.Errorf("list tool calls: %w", err)
+	}
+	defer rows.Close()
+
+	var tcs []model.AgentToolCall
+	for rows.Next() {
+		var tc model.AgentToolCall
+		if err := rows.Scan(&tc.ID, &tc.MessageID, &tc.ToolName, &tc.Arguments,
+			&tc.Result, &tc.Status, &tc.DurationMs, &tc.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan tool call: %w", err)
+		}
+		tcs = append(tcs, tc)
+	}
+	return tcs, rows.Err()
+}
+
+// ListRecent returns the most recent tool calls across all conversations,
+// ordered by creation time descending. Used by the agent activity feed in
+// the dashboard so the operator can see at a glance what the agent has been
+// doing — like a build log for the admin's autonomous helper.
+func (r *pgToolCallRepository) ListRecent(ctx context.Context, limit int) ([]model.AgentToolCall, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 50
+	}
+	rows, err := r.db.Query(ctx,
+		`SELECT id, message_id, tool_name, arguments, result, status, duration_ms, created_at
+		 FROM agent_tool_calls
+		 ORDER BY created_at DESC
+		 LIMIT $1`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list recent tool calls: %w", err)
 	}
 	defer rows.Close()
 

@@ -16,6 +16,7 @@ type TelegramLinkRepository interface {
 	GetByUserID(ctx context.Context, userID uuid.UUID) (*model.TelegramUserLink, error)
 	GetByTelegramChatID(ctx context.Context, chatID int64) (*model.TelegramUserLink, error)
 	GetByVerificationCode(ctx context.Context, code string) (*model.TelegramUserLink, error)
+	ListVerified(ctx context.Context) ([]*model.TelegramUserLink, error)
 	Verify(ctx context.Context, id uuid.UUID, chatID int64, username string) error
 	Delete(ctx context.Context, id uuid.UUID) error
 	DeleteByUserID(ctx context.Context, userID uuid.UUID) error
@@ -104,6 +105,32 @@ func (r *pgTelegramLinkRepository) Verify(ctx context.Context, id uuid.UUID, cha
 		return fmt.Errorf("verify telegram link: %w", err)
 	}
 	return nil
+}
+
+// ListVerified returns all telegram links whose verification flow is complete,
+// i.e. the user has linked their account via /start <code> in the bot. Used by
+// the proactive push pipeline to broadcast Briefings, critical events, and
+// agent decisions to every linked admin.
+func (r *pgTelegramLinkRepository) ListVerified(ctx context.Context) ([]*model.TelegramUserLink, error) {
+	rows, err := r.db.Query(ctx,
+		`SELECT id, user_id, telegram_chat_id, telegram_username, verification_code,
+		        is_verified, created_at, verified_at
+		 FROM telegram_user_links WHERE is_verified = true ORDER BY verified_at DESC`)
+	if err != nil {
+		return nil, fmt.Errorf("list verified telegram links: %w", err)
+	}
+	defer rows.Close()
+
+	var out []*model.TelegramUserLink
+	for rows.Next() {
+		var l model.TelegramUserLink
+		if err := rows.Scan(&l.ID, &l.UserID, &l.TelegramChatID, &l.TelegramUsername,
+			&l.VerificationCode, &l.IsVerified, &l.CreatedAt, &l.VerifiedAt); err != nil {
+			return nil, fmt.Errorf("scan telegram link: %w", err)
+		}
+		out = append(out, &l)
+	}
+	return out, rows.Err()
 }
 
 func (r *pgTelegramLinkRepository) Delete(ctx context.Context, id uuid.UUID) error {

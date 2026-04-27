@@ -152,7 +152,7 @@ func Load() (*Config, error) {
 			OpenAIKey:    getEnv("LLM_OPENAI_KEY", ""),
 			OpenAIURL:    getEnv("LLM_OPENAI_URL", ""),
 			AnthropicKey: getEnv("LLM_ANTHROPIC_KEY", ""),
-			DefaultModel: getEnv("LLM_DEFAULT_MODEL", "llama3"),
+			DefaultModel: getEnv("LLM_DEFAULT_MODEL", "llama3.1:8b"),
 		},
 		SMTP: SMTPConfig{
 			Host:     getEnv("SMTP_HOST", ""),

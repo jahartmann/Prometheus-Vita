@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { BookMarked, ChevronDown, Network, ShieldAlert, Wrench } from "lucide-react";
+import { BookMarked, ChevronDown, Gauge, Network, ShieldAlert, Wrench } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -20,6 +20,7 @@ import { NetworkAnomalyList } from "@/components/network/anomaly-list";
 import { ScanTimeline } from "@/components/network/scan-timeline";
 import { BaselineManager } from "@/components/network/baseline-manager";
 import { VMServiceAnalysis } from "@/components/network/vm-service-analysis";
+import { BandwidthTest } from "@/components/network/bandwidth-test";
 import { FeatureStatusCard } from "@/components/ui/feature-status-card";
 
 export default function ClusterNetworkPage() {
@@ -192,6 +193,10 @@ export default function ClusterNetworkPage() {
                 )}
               </TabsTrigger>
               <TabsTrigger value="services" className="text-sm">VM-/Service-Analyse</TabsTrigger>
+              <TabsTrigger value="bandwidth" className="text-sm gap-1.5">
+                <Gauge className="h-3.5 w-3.5" />
+                Bandbreite
+              </TabsTrigger>
               <TabsTrigger value="history" className="text-sm">Scan-Historie</TabsTrigger>
             </TabsList>
 
@@ -211,6 +216,10 @@ export default function ClusterNetworkPage() {
 
             <TabsContent value="services" className="mt-4">
               <VMServiceAnalysis nodeId={selectedNodeId} />
+            </TabsContent>
+
+            <TabsContent value="bandwidth" className="mt-4">
+              <BandwidthTest sourceNodeId={selectedNodeId} />
             </TabsContent>
 
             <TabsContent value="history" className="mt-4">

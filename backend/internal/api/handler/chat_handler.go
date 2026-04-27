@@ -54,6 +54,24 @@ func (h *ChatHandler) ToolCatalog(c echo.Context) error {
 	return apiPkg.Success(c, h.service.ToolCatalog())
 }
 
+// RecentActivity returns the agent's most recent tool calls — used by the
+// dashboard "Agent activity" feed to show what the admin-agent has been
+// doing without the user having to dig through individual conversations.
+func (h *ChatHandler) RecentActivity(c echo.Context) error {
+	limit := 50
+	if l := c.QueryParam("limit"); l != "" {
+		fmt.Sscanf(l, "%d", &limit)
+	}
+	calls, err := h.service.RecentActivity(c.Request().Context(), limit)
+	if err != nil {
+		return apiPkg.InternalError(c, "failed to load recent agent activity")
+	}
+	if calls == nil {
+		calls = []model.AgentToolCall{}
+	}
+	return apiPkg.Success(c, calls)
+}
+
 func (h *ChatHandler) ListConversations(c echo.Context) error {
 	userID, ok := c.Get(middleware.ContextKeyUserID).(uuid.UUID)
 	if !ok {

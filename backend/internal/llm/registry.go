@@ -79,7 +79,7 @@ func (r *Registry) DefaultModel() string {
 	if r.defaultModel != "" {
 		return r.defaultModel
 	}
-	return "llama3"
+	return "llama3.1:8b"
 }
 
 func (r *Registry) ListModels() []string {

@@ -10,6 +10,7 @@ import (
 	apiPkg "github.com/antigravity/prometheus/internal/api/response"
 	"github.com/antigravity/prometheus/internal/llm"
 	"github.com/antigravity/prometheus/internal/repository"
+	"github.com/antigravity/prometheus/internal/service/agent"
 	cryptoSvc "github.com/antigravity/prometheus/internal/service/crypto"
 	"github.com/labstack/echo/v4"
 )
@@ -19,6 +20,7 @@ type AgentConfigHandler struct {
 	llmRegistry     *llm.Registry
 	ollamaProvider  *llm.OllamaProvider
 	encryptor       *cryptoSvc.Encryptor
+	recommendSvc    *agent.RecommendationService
 }
 
 var allowedAgentConfigKeys = map[string]struct{}{
@@ -45,7 +47,44 @@ func NewAgentConfigHandler(
 		llmRegistry:     llmRegistry,
 		ollamaProvider:  ollamaProvider,
 		encryptor:       encryptor,
+		recommendSvc:    agent.NewRecommendationService(ollamaProvider),
 	}
+}
+
+// GetRecommendations returns the detected hardware spec plus a curated list
+// of Ollama models suitable for the system. Used by /settings/agent to guide
+// the user toward a tool-calling-capable model that fits their hardware.
+func (h *AgentConfigHandler) GetRecommendations(c echo.Context) error {
+	if h.recommendSvc == nil {
+		return apiPkg.InternalError(c, "Empfehlungs-Service nicht verfügbar")
+	}
+	rec := h.recommendSvc.Build(c.Request().Context())
+	return apiPkg.Success(c, rec)
+}
+
+// PullModel triggers an Ollama pull for the requested model. The request is
+// fire-and-wait; for large models the client may want to disable timeouts.
+func (h *AgentConfigHandler) PullModel(c echo.Context) error {
+	if h.recommendSvc == nil {
+		return apiPkg.InternalError(c, "Empfehlungs-Service nicht verfügbar")
+	}
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return apiPkg.BadRequest(c, "invalid request body")
+	}
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		return apiPkg.BadRequest(c, "Modellname fehlt")
+	}
+	if len(name) > 200 {
+		return apiPkg.BadRequest(c, "Modellname ist zu lang")
+	}
+	if err := h.recommendSvc.PullModel(c.Request().Context(), name); err != nil {
+		return apiPkg.InternalError(c, err.Error())
+	}
+	return apiPkg.Success(c, map[string]string{"status": "pulled", "model": name})
 }
 
 // GetConfig handles GET /agent/config.
@@ -172,7 +211,7 @@ func (h *AgentConfigHandler) DeleteSecret(c echo.Context) error {
 	}
 	if (keyName == "openai_key" && config["llm_provider"] == "openai") || (keyName == "anthropic_key" && config["llm_provider"] == "anthropic") {
 		_ = h.agentConfigRepo.Set(ctx, "llm_provider", "ollama")
-		_ = h.agentConfigRepo.Set(ctx, "llm_model", "llama3")
+		_ = h.agentConfigRepo.Set(ctx, "llm_model", "llama3.1:8b")
 	}
 	config, err = h.reloadRuntimeConfig(ctx)
 	if err != nil {

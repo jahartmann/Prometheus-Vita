@@ -36,8 +36,22 @@ func (p *OllamaProvider) Name() string {
 	return "ollama"
 }
 
+// Models returns common tags this provider can serve. The actual list of
+// installed models is discovered at runtime via DiscoverModels — this static
+// list is only used as a hint for routing in the registry. We keep it focused
+// on tool-calling-capable models, since the agent system relies on tool calls.
 func (p *OllamaProvider) Models() []string {
-	return []string{"llama3", "mistral", "codellama", "gemma"}
+	return []string{
+		"llama3.1", "llama3.1:8b", "llama3.1:70b",
+		"llama3.2", "llama3.2:3b",
+		"llama3.3", "llama3.3:70b",
+		"qwen2.5", "qwen2.5:7b", "qwen2.5:14b", "qwen2.5:32b", "qwen2.5:72b",
+		"qwen2.5-coder", "qwen2.5-coder:32b",
+		"mistral-small", "mistral-small:24b",
+		"mistral-nemo",
+		"qwq", "qwq:32b",
+		"command-r", "command-r-plus",
+	}
 }
 
 type ollamaChatRequest struct {

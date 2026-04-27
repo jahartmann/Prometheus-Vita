@@ -50,7 +50,7 @@ interface NetworkState {
   baselines: ScanBaseline[];
   toolPreflightByNode: Record<string, ToolPreflightResult | undefined>;
   errorsByScope: Record<string, string | undefined>;
-  activeTab: "ports" | "devices" | "anomalies" | "services" | "history";
+  activeTab: "ports" | "devices" | "anomalies" | "services" | "bandwidth" | "history";
   scanStatus: { lastQuick?: string; lastFull?: string; isScanning: boolean; scanningNodeId?: string };
 
   setActiveTab: (tab: NetworkState["activeTab"]) => void;

@@ -23,6 +23,25 @@ type NodeServiceInterface interface {
 	GetVMs(ctx context.Context, id uuid.UUID) ([]proxmox.VMInfo, error)
 }
 
+// PushNotifier is the contract used to deliver critical security findings to
+// linked admins via Telegram (or other transports). The agent.PushService
+// satisfies it (via an adapter in main.go). Kept as a local interface so we
+// don't take a hard dependency on the agent package.
+type PushNotifier interface {
+	PushSecurity(ctx context.Context, finding PushFinding)
+}
+
+// PushFinding mirrors agent.SecurityFinding without importing the agent
+// package. The bridging adapter in main.go handles the conversion.
+type PushFinding struct {
+	ID             string
+	NodeName       string
+	Severity       string
+	Title          string
+	Description    string
+	Recommendation string
+}
+
 // AnalysisMode controls whether to use LLM, rule-based, or both.
 type AnalysisMode string
 
@@ -42,6 +61,7 @@ type Service struct {
 	wsHub          *monitor.WSHub
 	nodeSvc        NodeServiceInterface
 	mode           AnalysisMode
+	pusher         PushNotifier
 }
 
 func NewAnalysisService(
@@ -67,6 +87,13 @@ func NewAnalysisService(
 
 func (s *Service) SetNodeService(svc NodeServiceInterface) {
 	s.nodeSvc = svc
+}
+
+// SetPushNotifier wires up the proactive notification channel. When set,
+// critical and emergency events are pushed to linked admins via Telegram
+// after they have been persisted. Calling with nil disables pushes.
+func (s *Service) SetPushNotifier(p PushNotifier) {
+	s.pusher = p
 }
 
 func (s *Service) SetMode(mode AnalysisMode) {
@@ -180,6 +207,20 @@ func (s *Service) RunAnalysis(ctx context.Context) error {
 				slog.String("category", events[i].Category),
 				slog.String("severity", events[i].Severity),
 				slog.String("title", events[i].Title))
+
+			// Proactive push for critical/emergency findings only — warnings
+			// would create too much noise. The push pipeline throttles per
+			// event ID so re-runs don't re-notify.
+			if s.pusher != nil && (events[i].Severity == "critical" || events[i].Severity == "emergency") {
+				s.pusher.PushSecurity(ctx, PushFinding{
+					ID:             events[i].ID.String(),
+					NodeName:       node.Name,
+					Severity:       events[i].Severity,
+					Title:          events[i].Title,
+					Description:    events[i].Description,
+					Recommendation: events[i].Recommendation,
+				})
+			}
 		}
 	}
 

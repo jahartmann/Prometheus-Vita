@@ -216,6 +216,24 @@ export const metricsApi = {
     api.get(`/nodes/${nodeId}/vms/${vmid}/rrd`, { params: { timeframe: timeframe || "hour" } }),
 };
 
+// Bandwidth API
+export const bandwidthApi = {
+  run: (
+    sourceNodeId: string,
+    data: {
+      target_node_id: string;
+      target_host?: string;
+      duration_sec?: number;
+      port?: number;
+      protocol?: "tcp" | "udp";
+      reverse?: boolean;
+    }
+  ) =>
+    api
+      .post(`/nodes/${sourceNodeId}/bandwidth-test`, data, { timeout: 90 * 1000 })
+      .then((r) => r.data),
+};
+
 // Network API
 export const networkApi = {
   getInterfaces: (nodeId: string) =>
@@ -420,6 +438,8 @@ export const chatApi = {
     api.get(`/chat/conversations/${id}/messages`).then((r) => toArray(r.data)),
   deleteConversation: (id: string) =>
     api.delete(`/chat/conversations/${id}`),
+  recentActivity: (limit?: number) =>
+    api.get("/agent/activity", { params: limit ? { limit } : undefined }).then((r) => toArray(r.data)),
 };
 
 // Migration API
@@ -582,6 +602,9 @@ export const agentConfigApi = {
     api.delete(`/agent/secrets/${provider}`).then((r) => r.data),
   testOllamaConnection: (url: string) =>
     api.get("/agent/models", { params: { url } }).then((r) => r.data),
+  getRecommendations: () => api.get("/agent/recommendations").then((r) => r.data),
+  pullModel: (name: string) =>
+    api.post("/agent/models/pull", { name }, { timeout: 30 * 60 * 1000 }).then((r) => r.data),
 };
 
 // ISO/Template API
