@@ -125,6 +125,9 @@ export default function SecurityPage() {
       }
     } catch {
       setError("Sicherheitsdaten konnten nicht geladen werden");
+      setEvents([]);
+      setStats(null);
+      setExpandedIds(new Set());
     } finally {
       setIsLoading(false);
     }
@@ -169,13 +172,17 @@ export default function SecurityPage() {
       ? events
       : events.filter((e) => e.category === categoryFilter);
 
+  const eventEmergencyCount = events.filter((e) => e.severity === "emergency").length;
+  const eventCriticalCount = events.filter((e) => e.severity === "critical").length;
   const unacknowledgedCount = stats?.unacknowledged ?? events.filter((e) => !e.is_acknowledged).length;
-  const criticalCount = (stats?.by_severity?.critical ?? 0) + (stats?.by_severity?.emergency ?? 0);
+  const emergencyCount = stats?.by_severity?.emergency ?? eventEmergencyCount;
+  const criticalCount = (stats?.by_severity?.critical ?? eventCriticalCount) + emergencyCount;
   const warningCount = stats?.by_severity?.warning ?? events.filter((e) => e.severity === "warning").length;
   const totalCount = stats?.total ?? events.length;
+  const canShowData = !error;
 
   const hasCritical = criticalCount > 0;
-  const hasEmergency = (stats?.by_severity?.emergency ?? 0) > 0;
+  const hasEmergency = emergencyCount > 0;
   const hasWarnings = !hasCritical && (warningCount > 0 || unacknowledgedCount > 0);
   const statusTone: StatusTone = hasCritical ? "critical" : hasWarnings ? "warning" : "ok";
   const statusIcon = hasCritical ? ShieldAlert : hasWarnings ? Bell : ShieldCheck;
@@ -187,7 +194,7 @@ export default function SecurityPage() {
         ? "Aufmerksamkeit"
         : "Stabil";
   const statusDescription = hasEmergency
-    ? `${stats?.by_severity?.emergency ?? 0} Notfall-Befund${(stats?.by_severity?.emergency ?? 0) > 1 ? "e" : ""} erkannt. Sofort pruefen und Massnahmen einleiten.`
+    ? `${emergencyCount} Notfall-Befund${emergencyCount > 1 ? "e" : ""} erkannt. Sofort pruefen und Massnahmen einleiten.`
     : hasCritical
       ? `${criticalCount} kritische Befunde erkannt. Bitte priorisiert bearbeiten und betroffene Nodes absichern.`
       : hasWarnings
@@ -247,6 +254,8 @@ export default function SecurityPage() {
         </div>
       )}
 
+      {canShowData && (
+        <>
       {!isLoading && (
         <FeatureStatusCard
           title="Sicherheitslage"
@@ -519,6 +528,8 @@ export default function SecurityPage() {
             );
           })}
         </div>
+      )}
+        </>
       )}
     </PageShell>
   );
