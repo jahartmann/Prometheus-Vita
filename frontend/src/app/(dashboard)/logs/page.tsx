@@ -2,13 +2,14 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useNodeStore } from "@/stores/node-store";
-import { logApi } from "@/lib/api";
+import { getApiErrorMessage, logApi } from "@/lib/api";
+import { PageShell } from "@/components/layout/page-shell";
+import { KpiCard } from "@/components/ui/kpi-card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
 import { Activity, AlertCircle, AlertTriangle, RefreshCw, Zap } from "lucide-react";
 
 const LOG_FILES = [
@@ -49,6 +50,7 @@ export default function ClusterLogsPage() {
   const [logFile, setLogFile] = useState("syslog");
   const [lineCount] = useState(100);
   const [nodeLogs, setNodeLogs] = useState<NodeLogData[]>([]);
+  const [loadErrors, setLoadErrors] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [filter, setFilter] = useState("");
@@ -65,7 +67,11 @@ export default function ClusterLogsPage() {
   }, [nodes, selectedNodeIds.length]);
 
   const fetchAllLogs = useCallback(async () => {
-    if (selectedNodeIds.length === 0) return;
+    if (selectedNodeIds.length === 0) {
+      setNodeLogs([]);
+      setLoadErrors({});
+      return;
+    }
     setIsLoading(true);
     try {
       const results = await Promise.allSettled(
@@ -80,7 +86,15 @@ export default function ClusterLogsPage() {
       const data: NodeLogData[] = results
         .filter((r): r is PromiseFulfilledResult<NodeLogData> => r.status === "fulfilled")
         .map((r) => r.value);
+      const errors: Record<string, string> = {};
+      results.forEach((result, index) => {
+        if (result.status === "rejected") {
+          const nodeId = selectedNodeIds[index];
+          errors[nodeId] = getApiErrorMessage(result.reason, "Logs konnten nicht geladen werden");
+        }
+      });
       setNodeLogs(data);
+      setLoadErrors(errors);
     } finally {
       setIsLoading(false);
     }
@@ -89,10 +103,19 @@ export default function ClusterLogsPage() {
   useEffect(() => { fetchAllLogs(); }, [fetchAllLogs]);
 
   useEffect(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
     if (autoRefresh) {
       intervalRef.current = setInterval(fetchAllLogs, 5000);
     }
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
   }, [autoRefresh, fetchAllLogs]);
 
   useEffect(() => {
@@ -126,70 +149,45 @@ export default function ClusterLogsPage() {
     else if (sev === "critical") counts.critical++;
   }
 
+  const loadErrorEntries = Object.entries(loadErrors);
+
   return (
-    <div className="flex flex-col gap-4 h-full">
-      {/* Header */}
-      <div className="flex items-center gap-3 shrink-0">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-500/10">
-          <Activity className="h-5 w-5 text-blue-500" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Cluster Log Viewer</h1>
-          <p className="text-sm text-zinc-400">
-            {filteredLines.length} Zeilen von {selectedNodeIds.length} Nodes
-          </p>
-        </div>
-      </div>
+    <PageShell
+      title="Logs"
+      eyebrow="Operations"
+      description="Clusterweite Log-Sicht mit Filter, Auto-Refresh und sichtbaren Ladefehlern."
+      className="h-full min-h-0"
+    >
 
       {/* Node Selector */}
       {nodes.length > 0 && (
-        <div className="shrink-0 flex flex-wrap items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/50 px-3 py-2">
-          <span className="text-xs text-zinc-500 mr-1">Nodes:</span>
-          <Button size="sm" variant="ghost" className="h-6 text-xs text-zinc-400 px-2"
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-card px-3 py-2">
+          <span className="mr-1 text-xs font-medium text-muted-foreground">Nodes:</span>
+          <Button size="sm" variant="ghost" className="h-6 px-2 text-xs text-muted-foreground"
             onClick={() => setSelectedNodeIds(nodes.map((n) => n.id))}>Alle</Button>
-          <Button size="sm" variant="ghost" className="h-6 text-xs text-zinc-400 px-2"
+          <Button size="sm" variant="ghost" className="h-6 px-2 text-xs text-muted-foreground"
             onClick={() => setSelectedNodeIds([])}>Keine</Button>
-          <div className="w-px h-4 bg-zinc-700" />
+          <div className="h-4 w-px bg-border" />
           {nodes.map((node) => (
             <button key={node.id} onClick={() => toggleNode(node.id)}
-              className={`rounded px-2 py-0.5 text-xs font-medium transition-colors cursor-pointer ${
+              className={`cursor-pointer rounded-md px-2 py-0.5 text-xs font-medium transition-colors ${
                 selectedNodeIds.includes(node.id)
-                  ? "bg-blue-600 text-blue-100"
-                  : "bg-zinc-800/50 text-zinc-500 hover:bg-zinc-700/50"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground hover:bg-accent hover:text-foreground"
               }`}>{node.name}</button>
           ))}
-          <Badge className="ml-auto bg-zinc-800 text-zinc-400 border-zinc-700 text-[10px]">
+          <Badge variant="secondary" className="ml-auto text-[10px]">
             {selectedNodeIds.length} / {nodes.length}
           </Badge>
         </div>
       )}
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 shrink-0">
-        <Card><CardContent className="flex items-center gap-3 p-4">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-red-500/10">
-            <AlertCircle className="h-4 w-4 text-red-500" /></div>
-          <div><p className="text-2xl font-bold text-red-500">{counts.errors}</p>
-          <p className="text-xs text-zinc-400">Errors</p></div>
-        </CardContent></Card>
-        <Card><CardContent className="flex items-center gap-3 p-4">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-yellow-500/10">
-            <AlertTriangle className="h-4 w-4 text-yellow-500" /></div>
-          <div><p className="text-2xl font-bold text-yellow-500">{counts.warnings}</p>
-          <p className="text-xs text-zinc-400">Warnings</p></div>
-        </CardContent></Card>
-        <Card><CardContent className="flex items-center gap-3 p-4">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-orange-500/10">
-            <Activity className="h-4 w-4 text-orange-500" /></div>
-          <div><p className="text-2xl font-bold text-orange-400">{counts.critical}</p>
-          <p className="text-xs text-zinc-400">Critical</p></div>
-        </CardContent></Card>
-        <Card><CardContent className="flex items-center gap-3 p-4">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-500/10">
-            <Zap className="h-4 w-4 text-blue-500" /></div>
-          <div><p className="text-2xl font-bold text-blue-400">{filteredLines.length}</p>
-          <p className="text-xs text-zinc-400">Sichtbar</p></div>
-        </CardContent></Card>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <KpiCard title="Errors" value={counts.errors} subtitle="Gefilterte Zeilen" icon={AlertCircle} color={counts.errors > 0 ? "red" : "neutral"} />
+        <KpiCard title="Warnings" value={counts.warnings} subtitle="Gefilterte Zeilen" icon={AlertTriangle} color="orange" />
+        <KpiCard title="Critical" value={counts.critical} subtitle="Gefilterte Zeilen" icon={Activity} color={counts.critical > 0 ? "red" : "neutral"} />
+        <KpiCard title="Sichtbar" value={filteredLines.length} subtitle="Log-Zeilen" icon={Zap} color="blue" />
       </div>
 
       {/* Controls */}
@@ -206,7 +204,7 @@ export default function ClusterLogsPage() {
           onChange={(e) => setFilter(e.target.value)} className="w-[200px]" />
         <div className="flex items-center gap-2">
           <Switch checked={autoRefresh} onCheckedChange={setAutoRefresh} />
-          <span className="text-xs text-zinc-400">Auto-Refresh</span>
+          <span className="text-xs text-muted-foreground">Auto-Refresh</span>
         </div>
         <Button variant="outline" size="sm" onClick={fetchAllLogs} disabled={isLoading}>
           <RefreshCw className={`h-4 w-4 mr-1 ${isLoading ? "animate-spin" : ""}`} />
@@ -214,10 +212,23 @@ export default function ClusterLogsPage() {
         </Button>
       </div>
 
+      {loadErrorEntries.length > 0 && (
+        <div className="flex flex-col gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {loadErrorEntries.map(([nodeId, message]) => {
+            const nodeName = nodes.find((node) => node.id === nodeId)?.name ?? nodeId;
+            return (
+              <div key={nodeId} className="flex items-start gap-2">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                <span><span className="font-medium">{nodeName}:</span> {message}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {/* Log Output */}
       <div ref={containerRef}
-        className="flex-1 overflow-auto bg-zinc-950 rounded-lg border border-zinc-800 p-3 font-mono text-sm min-h-0"
-        style={{ minHeight: "300px" }}>
+        className="min-h-[300px] flex-1 overflow-auto rounded-lg border bg-zinc-950 p-3 font-mono text-sm shadow-inner">
         {filteredLines.length === 0 && !isLoading && (
           <div className="flex items-center justify-center h-24 text-zinc-600 text-sm">
             Keine Log-Einträge gefunden
@@ -239,6 +250,6 @@ export default function ClusterLogsPage() {
           );
         })}
       </div>
-    </div>
+    </PageShell>
   );
 }

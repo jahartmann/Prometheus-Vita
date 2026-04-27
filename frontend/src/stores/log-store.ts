@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { logAnalysisApi, logApi } from "@/lib/api";
+import { getApiErrorMessage, logAnalysisApi, logApi } from "@/lib/api";
 
 interface LogEntry {
   id: string;
@@ -122,7 +122,7 @@ export const useLogStore = create<LogState>()((set, get) => ({
       set({ anomalies: Array.isArray(res.data) ? res.data : [] });
     } catch (e) {
       console.error('Failed to fetch anomalies:', e);
-      set({ error: 'Failed to fetch anomalies' });
+      set({ error: getApiErrorMessage(e, "Log-Anomalien konnten nicht geladen werden") });
     }
   },
 
@@ -132,7 +132,7 @@ export const useLogStore = create<LogState>()((set, get) => ({
       set({ bookmarks: Array.isArray(res.data) ? res.data : [] });
     } catch (e) {
       console.error('Failed to fetch bookmarks:', e);
-      set({ error: 'Failed to fetch bookmarks' });
+      set({ error: getApiErrorMessage(e, "Bookmarks konnten nicht geladen werden") });
     }
   },
 
@@ -142,7 +142,7 @@ export const useLogStore = create<LogState>()((set, get) => ({
       set({ sources: Array.isArray(res.data) ? res.data : [] });
     } catch (e) {
       console.error('Failed to fetch sources:', e);
-      set({ error: 'Failed to fetch sources' });
+      set({ error: getApiErrorMessage(e, "Log-Quellen konnten nicht geladen werden") });
     }
   },
 
@@ -183,7 +183,7 @@ export const useLogStore = create<LogState>()((set, get) => ({
       });
     } catch (e) {
       console.error('Failed to fetch logs:', e);
-      set({ error: 'Failed to fetch logs' });
+      set({ error: getApiErrorMessage(e, "Logs konnten nicht geladen werden") });
     }
   },
 
@@ -197,7 +197,7 @@ export const useLogStore = create<LogState>()((set, get) => ({
       }));
     } catch (e) {
       console.error('Failed to acknowledge anomaly:', e);
-      set({ error: 'Failed to acknowledge anomaly' });
+      set({ error: getApiErrorMessage(e, "Log-Anomalie konnte nicht bestaetigt werden") });
     }
   },
 
@@ -208,7 +208,7 @@ export const useLogStore = create<LogState>()((set, get) => ({
       set({ analysisReport: res.data?.report_json ? JSON.parse(res.data.report_json) : res.data, isAnalyzing: false });
     } catch (e) {
       console.error('Failed to analyze logs:', e);
-      set({ isAnalyzing: false, error: 'Failed to analyze logs' });
+      set({ isAnalyzing: false, error: getApiErrorMessage(e, "Log-Analyse konnte nicht ausgefuehrt werden") });
     }
   },
 
