@@ -8,6 +8,7 @@ backend/bin/
 frontend/.next/
 frontend/out/
 .worktrees/
+.superpowers/
 
 # Environment
 .env
