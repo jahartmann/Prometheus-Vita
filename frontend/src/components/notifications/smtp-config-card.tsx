@@ -58,6 +58,11 @@ export function SmtpConfigCard({ channels, onSaved }: SmtpConfigCardProps) {
 
     if (!smtpChannel || smtpPassword.trim()) {
       config.smtp_password = smtpPassword;
+    } else {
+      const existingPassword = smtpChannel.config?.smtp_password;
+      if (typeof existingPassword === "string") {
+        config.smtp_password = existingPassword;
+      }
     }
 
     return config;
