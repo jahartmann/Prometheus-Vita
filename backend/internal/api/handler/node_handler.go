@@ -832,6 +832,23 @@ func (h *NodeHandler) DiagnoseConnectivity(c echo.Context) error {
 	return apiPkg.Success(c, result)
 }
 
+func (h *NodeHandler) GetToolPreflight(c echo.Context) error {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return apiPkg.BadRequest(c, "invalid node id")
+	}
+
+	result, err := nodeService.RunToolPreflight(c.Request().Context(), h.service, id)
+	if err != nil {
+		slog.Warn("tool preflight failed",
+			slog.String("node_id", id.String()),
+			slog.Any("error", err))
+		return handleNodeError(c, err, "failed to run tool preflight")
+	}
+
+	return apiPkg.Success(c, result)
+}
+
 func (h *NodeHandler) ListISOs(c echo.Context) error {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {

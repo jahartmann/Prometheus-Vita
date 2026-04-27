@@ -106,6 +106,15 @@ export function toArray<T>(data: unknown): T[] {
   return [];
 }
 
+export function getApiErrorMessage(error: unknown, fallback: string): string {
+  if (error && typeof error === "object" && "response" in error) {
+    const response = (error as { response?: { data?: { message?: string; error?: string } } }).response;
+    return response?.data?.message ?? response?.data?.error ?? fallback;
+  }
+  if (error instanceof Error) return error.message;
+  return fallback;
+}
+
 // Bulk VM API
 export const bulkVmApi = {
   execute: (nodeId: string, data: { vmids: number[]; action: string }) =>
@@ -172,6 +181,7 @@ export const nodeApi = {
   list: () => api.get("/nodes"),
   getVMs: (nodeId: string) => api.get(`/nodes/${nodeId}/vms`),
   getStorage: (nodeId: string) => api.get(`/nodes/${nodeId}/storage`),
+  getToolPreflight: (nodeId: string) => api.get(`/nodes/${nodeId}/tools/preflight`),
 };
 
 // Schedule API

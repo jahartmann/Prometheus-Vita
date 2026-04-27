@@ -371,6 +371,17 @@ export interface NodePortsData {
   established: NodePort[];
 }
 
+export interface ToolCheck {
+  name: "nmap" | "ss" | "journalctl" | "pct" | "qm" | string;
+  available: boolean;
+  path?: string;
+}
+
+export interface ToolPreflightResult {
+  node_id: string;
+  tools: ToolCheck[];
+}
+
 // Disk types
 export interface DiskInfo {
   devpath: string;

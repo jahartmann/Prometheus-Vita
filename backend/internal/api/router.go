@@ -152,6 +152,7 @@ func SetupRouter(e *echo.Echo, cfg *config.Config, jwtSvc *auth.JWTService, h Ha
 	nodes.GET("/:id/disks", h.Node.GetDisks, middleware.RequirePermission(model.PermissionNodesRead))
 	nodes.GET("/:id/tags", h.Tag.GetNodeTags, middleware.RequirePermission(model.PermissionNodesRead))
 	nodes.GET("/:id/diagnose", h.Node.DiagnoseConnectivity, middleware.RequirePermission(model.PermissionNodesRead))
+	nodes.GET("/:id/tools/preflight", h.Node.GetToolPreflight, middleware.RequirePermission(model.PermissionNodesRead))
 	nodes.GET("/:id/isos", h.Node.ListISOs, middleware.RequirePermission(model.PermissionNodesRead))
 	nodes.GET("/:id/templates", h.Node.ListTemplates, middleware.RequirePermission(model.PermissionNodesRead))
 
