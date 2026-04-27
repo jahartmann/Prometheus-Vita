@@ -91,12 +91,32 @@
 }
 
 @layer utilities {
+  .surface-panel {
+    @apply rounded-lg border bg-card text-card-foreground shadow-sm;
+    box-shadow: 0 1px 2px oklch(0 0 0 / 0.04), 0 12px 28px oklch(0 0 0 / 0.05);
+  }
+  .surface-panel-strong {
+    @apply rounded-lg border bg-card text-card-foreground;
+    box-shadow: 0 18px 44px oklch(0 0 0 / 0.08);
+  }
+  .status-accent-ok {
+    @apply border-l-4 border-l-emerald-500;
+  }
+  .status-accent-warning {
+    @apply border-l-4 border-l-amber-500;
+  }
+  .status-accent-critical {
+    @apply border-l-4 border-l-red-500;
+  }
+  .status-accent-info {
+    @apply border-l-4 border-l-sky-500;
+  }
   .card-hover {
     transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
   }
   .card-hover:hover {
     transform: translateY(-1px);
-    box-shadow: 0 8px 22px oklch(0 0 0 / 0.08);
+    box-shadow: 0 14px 32px oklch(0 0 0 / 0.08);
   }
   .dark .card-hover:hover {
     box-shadow: 0 8px 22px oklch(0 0 0 / 0.35);

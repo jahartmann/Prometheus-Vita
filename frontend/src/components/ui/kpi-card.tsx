@@ -10,11 +10,11 @@ interface KpiCardProps {
 }
 
 const colorClasses: Record<string, string> = {
-  blue: "bg-blue-500/15 text-blue-600 dark:text-blue-300",
-  green: "bg-green-500/15 text-green-600 dark:text-green-300",
-  orange: "bg-orange-500/15 text-orange-600 dark:text-orange-300",
-  red: "bg-red-500/15 text-red-600 dark:text-red-300",
-  purple: "bg-violet-500/15 text-violet-600 dark:text-violet-300",
+  blue: "bg-sky-500/12 text-sky-600 dark:text-sky-300",
+  green: "bg-emerald-500/12 text-emerald-600 dark:text-emerald-300",
+  orange: "bg-amber-500/12 text-amber-700 dark:text-amber-300",
+  red: "bg-red-500/12 text-red-600 dark:text-red-300",
+  purple: "bg-violet-500/12 text-violet-600 dark:text-violet-300",
   neutral: "bg-muted text-muted-foreground",
 };
 
