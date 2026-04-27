@@ -1,37 +1,43 @@
 "use client";
 
-import { AlertTriangle, CheckCircle2, Info } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Cpu, Info, MemoryStick, ServerOff } from "lucide-react";
 import { useNodeStore } from "@/stores/node-store";
-import { cn } from "@/lib/utils";
+import { ActionCard } from "@/components/ui/action-card";
+import { Card, CardContent } from "@/components/ui/card";
+import type { StatusTone } from "@/components/ui/status-badge";
 
 interface AttentionItem {
   title: string;
   description: string;
   severity: "critical" | "warning" | "info";
+  kind: "offline" | "error" | "cpu" | "memory" | "info";
 }
 
 const severityMeta = {
   critical: {
     label: "Kritisch",
-    icon: AlertTriangle,
-    itemClass: "border-red-200 bg-red-50 text-red-950 dark:border-red-900/70 dark:bg-red-950/30 dark:text-red-100",
-    badgeClass: "bg-red-600 text-white",
+    tone: "critical",
     rank: 0,
   },
   warning: {
     label: "Warnung",
-    icon: AlertTriangle,
-    itemClass: "border-orange-200 bg-orange-50 text-orange-950 dark:border-orange-900/70 dark:bg-orange-950/30 dark:text-orange-100",
-    badgeClass: "bg-orange-500 text-white",
+    tone: "warning",
     rank: 1,
   },
   info: {
     label: "Hinweis",
-    icon: Info,
-    itemClass: "border-blue-200 bg-blue-50 text-blue-950 dark:border-blue-900/70 dark:bg-blue-950/30 dark:text-blue-100",
-    badgeClass: "bg-blue-500 text-white",
+    tone: "info",
     rank: 2,
   },
+} satisfies Record<AttentionItem["severity"], { label: string; tone: StatusTone; rank: number }>;
+
+const kindMeta: Record<AttentionItem["kind"], { icon: LucideIcon; href: string; actionLabel: string }> = {
+  offline: { icon: ServerOff, href: "/alerts", actionLabel: "Alerts pruefen" },
+  error: { icon: AlertTriangle, href: "/alerts", actionLabel: "Fehler oeffnen" },
+  cpu: { icon: Cpu, href: "/monitoring", actionLabel: "Monitoring oeffnen" },
+  memory: { icon: MemoryStick, href: "/monitoring", actionLabel: "Monitoring oeffnen" },
+  info: { icon: Info, href: "/task-center", actionLabel: "Tasks oeffnen" },
 };
 
 export function AttentionBanner() {
@@ -45,6 +51,7 @@ export function AttentionBanner() {
       title: `${n.name} ist offline`,
       description: "Server ist nicht erreichbar.",
       severity: "critical",
+      kind: "offline",
     });
   });
 
@@ -55,6 +62,7 @@ export function AttentionBanner() {
         title: `${node?.name ?? nodeId}: Verbindungsfehler`,
         description: error,
         severity: "warning",
+        kind: "error",
       });
     }
   });
@@ -66,6 +74,7 @@ export function AttentionBanner() {
         title: `Hohe CPU-Last auf ${node?.name ?? nodeId}`,
         description: `CPU bei ${status.cpu_usage.toFixed(0)}%.`,
         severity: status.cpu_usage > 95 ? "critical" : "warning",
+        kind: "cpu",
       });
     }
   });
@@ -79,6 +88,7 @@ export function AttentionBanner() {
           title: `Hoher RAM-Verbrauch auf ${node?.name ?? nodeId}`,
           description: `RAM bei ${memPercent.toFixed(0)}%.`,
           severity: memPercent > 95 ? "critical" : "warning",
+          kind: "memory",
         });
       }
     }
@@ -90,8 +100,8 @@ export function AttentionBanner() {
 
   if (items.length === 0) {
     return (
-      <section className="rounded-lg border bg-card p-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <Card>
+        <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-3">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted text-green-600 dark:text-green-400">
               <CheckCircle2 className="h-4 w-4" />
@@ -106,8 +116,8 @@ export function AttentionBanner() {
           <span className="w-fit rounded-full border px-2.5 py-1 text-xs font-medium text-muted-foreground">
             Lage ruhig
           </span>
-        </div>
-      </section>
+        </CardContent>
+      </Card>
     );
   }
 
@@ -121,7 +131,7 @@ export function AttentionBanner() {
           <div>
             <h2 className="text-sm font-semibold">Aufmerksamkeit zuerst</h2>
             <p className="text-sm text-muted-foreground">
-              Priorisierte Signale, bevor sie Workloads oder Wartungsfenster beeinträchtigen.
+              Priorisierte Signale, bevor sie Workloads oder Wartungsfenster beeintraechtigen.
             </p>
           </div>
         </div>
@@ -131,27 +141,22 @@ export function AttentionBanner() {
         </div>
       </div>
 
-      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-        {sortedItems.slice(0, 4).map((item, i) => {
+      <div className="grid gap-3 md:grid-cols-3">
+        {sortedItems.slice(0, 3).map((item, i) => {
           const meta = severityMeta[item.severity];
-          const Icon = meta.icon;
+          const action = kindMeta[item.kind];
 
           return (
-            <article
+            <ActionCard
               key={`${item.title}-${i}`}
-              className={cn("min-w-0 rounded-md border p-3", meta.itemClass)}
-            >
-              <div className="mb-2 flex items-start justify-between gap-2">
-                <div className="flex min-w-0 items-center gap-2">
-                  <Icon className="h-3.5 w-3.5 shrink-0" />
-                  <h3 className="truncate text-sm font-semibold">{item.title}</h3>
-                </div>
-                <span className={cn("shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium", meta.badgeClass)}>
-                  {meta.label}
-                </span>
-              </div>
-              <p className="text-xs opacity-85">{item.description}</p>
-            </article>
+              tone={meta.tone}
+              icon={action.icon}
+              title={item.title}
+              description={item.description}
+              badge={meta.label}
+              href={action.href}
+              actionLabel={action.actionLabel}
+            />
           );
         })}
       </div>

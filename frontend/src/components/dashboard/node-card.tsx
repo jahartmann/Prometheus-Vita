@@ -20,7 +20,7 @@ interface NodeCardProps {
 
 function UsageBar({ value, label }: { value: number; label: string }) {
   return (
-    <div className="space-y-1">
+    <div className="flex flex-col gap-1">
       <div className="flex items-center justify-between text-xs">
         <span className="text-muted-foreground">{label}</span>
         <span className="font-medium">{formatPercentage(value)}</span>
@@ -52,8 +52,8 @@ export function NodeCard({ node, status }: NodeCardProps) {
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-100 dark:bg-zinc-800">
-                <Server className="h-4 w-4 text-zinc-600 dark:text-zinc-400" />
+              <div className="flex h-8 w-8 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                <Server className="h-4 w-4" />
               </div>
               <CardTitle className="text-base">{node.name}</CardTitle>
             </div>
@@ -61,11 +61,11 @@ export function NodeCard({ node, status }: NodeCardProps) {
               {node.is_online ? "Online" : "Offline"}
             </Badge>
           </div>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground pl-10">
+          <div className="flex items-center gap-2 pl-10 text-xs text-muted-foreground">
             <span>{node.hostname}:{node.port}</span>
           </div>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="flex flex-col gap-3">
           {nodeError ? (
             <div className="flex items-center gap-2 py-3 text-xs text-amber-600 dark:text-amber-400">
               <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
@@ -73,7 +73,7 @@ export function NodeCard({ node, status }: NodeCardProps) {
             </div>
           ) : status ? (
             <>
-              <div className="flex items-center gap-4 text-xs text-muted-foreground">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
                 <span className="flex items-center gap-1">
                   <Cpu className="h-3 w-3" />
                   {status.cpu_cores} Cores
@@ -90,7 +90,7 @@ export function NodeCard({ node, status }: NodeCardProps) {
               <UsageBar value={cpuUsage} label="CPU" />
               <UsageBar value={memUsage} label="RAM" />
               <UsageBar value={diskUsage} label="Disk" />
-              <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <div className="flex flex-col gap-1 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
                 <span>Uptime: {formatUptime(status.uptime)}</span>
                 <div className="flex gap-2">
                   <span>{status.vm_running ?? 0}/{status.vm_count ?? 0} VMs</span>

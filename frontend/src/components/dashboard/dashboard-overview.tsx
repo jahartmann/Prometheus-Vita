@@ -1,12 +1,12 @@
 "use client";
 
-import { Activity, AlertTriangle, Cpu, Plus, Server, ServerCog, ShieldCheck } from "lucide-react";
+import { Activity, AlertTriangle, ArrowRight, Bell, Cpu, ListChecks, Network, Plus, ScrollText, Server, ServerCog, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useNodeStore } from "@/stores/node-store";
 import { KpiCard } from "@/components/ui/kpi-card";
+import { Card, CardContent } from "@/components/ui/card";
 import { NodeGrid } from "./node-grid";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 
 export function DashboardOverview() {
   const { nodes, nodeStatus } = useNodeStore();
@@ -26,67 +26,36 @@ export function DashboardOverview() {
   const avgCpu = statusValues.length > 0
     ? statusValues.reduce((acc, s) => acc + (s?.cpu_usage ?? 0), 0) / statusValues.length
     : 0;
-  const avgMemory = statusValues.length > 0
-    ? statusValues.reduce((acc, s) => {
-      if (!s || s.memory_total <= 0) return acc;
-      return acc + (s.memory_used / s.memory_total) * 100;
-    }, 0) / statusValues.length
-    : 0;
 
-  const healthTone = offlineNodes > 0 || avgCpu > 85 || avgMemory > 90 ? "warning" : "healthy";
-  const healthLabel = healthTone === "healthy" ? "Operativ" : "Prüfen";
-  const healthText = offlineNodes > 0
-    ? `${offlineNodes} Node${offlineNodes === 1 ? "" : "s"} offline`
-    : avgCpu > 85
-      ? "CPU-Auslastung erhöht"
-      : avgMemory > 90
-        ? "RAM-Auslastung erhöht"
-        : "Keine Blocker im Lagebild";
-
-  const healthItems = [
-    { label: "Cluster", value: healthLabel, detail: healthText, tone: healthTone },
-    { label: "Nodes online", value: `${onlineNodes}/${nodes.length}`, detail: "Erreichbare Hosts", tone: offlineNodes > 0 ? "warning" : "healthy" },
-    { label: "Workloads aktiv", value: runningVMs, detail: `${totalVMs} VMs/Container`, tone: "neutral" },
-    { label: "CPU Ø", value: `${avgCpu.toFixed(1)}%`, detail: `RAM Ø ${avgMemory.toFixed(1)}%`, tone: avgCpu > 85 || avgMemory > 90 ? "warning" : "neutral" },
+  const featureSummaries = [
+    {
+      title: "Notifications",
+      description: "Telegram, SMTP und Verlauf",
+      icon: Bell,
+      href: "/settings/notifications",
+    },
+    {
+      title: "Netzwerk",
+      description: "Ports, Devices, Anomalien",
+      icon: Network,
+      href: "/network",
+    },
+    {
+      title: "Logs",
+      description: "Filter, Export, Analyse",
+      icon: ScrollText,
+      href: "/logs",
+    },
+    {
+      title: "Tasks",
+      description: "Migrationen, Backups, Incidents",
+      icon: ListChecks,
+      href: "/task-center",
+    },
   ];
 
   return (
     <div className="flex flex-col gap-5">
-      <section className="rounded-lg border bg-card p-4">
-        <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h2 className="text-base font-semibold">Lagebild</h2>
-            <p className="text-sm text-muted-foreground">
-              Kompakte Sicht auf Betriebszustand, Kapazität und laufende Workloads.
-            </p>
-          </div>
-          <Button variant="outline" size="sm" asChild>
-            <Link href="/settings/nodes">
-              <Plus className="mr-2 h-4 w-4" />
-              Server hinzufügen
-            </Link>
-          </Button>
-        </div>
-
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {healthItems.map((item) => (
-            <div
-              key={item.label}
-              className={cn(
-                "rounded-md border p-3",
-                item.tone === "healthy" && "border-green-200 bg-green-50/70 dark:border-green-900/60 dark:bg-green-950/20",
-                item.tone === "warning" && "border-orange-200 bg-orange-50/70 dark:border-orange-900/60 dark:bg-orange-950/20",
-                item.tone === "neutral" && "bg-background"
-              )}
-            >
-              <p className="text-xs font-medium text-muted-foreground">{item.label}</p>
-              <p className="mt-1 text-xl font-semibold">{item.value}</p>
-              <p className="mt-1 text-xs text-muted-foreground">{item.detail}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
       <div className="grid gap-3 grid-cols-2 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
           title="Server"
@@ -122,7 +91,7 @@ export function DashboardOverview() {
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-base font-semibold">Server-Flotte</h2>
-            <p className="text-sm text-muted-foreground">Nodes und Workload-Zustand für den schnellen Drill-down.</p>
+            <p className="text-sm text-muted-foreground">Nodes und Workload-Zustand fuer den schnellen Drill-down.</p>
           </div>
           <Button variant="ghost" size="sm" asChild>
             <Link href="/health">
@@ -132,6 +101,48 @@ export function DashboardOverview() {
           </Button>
         </div>
         <NodeGrid />
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-base font-semibold">Funktionsbereiche</h2>
+            <p className="text-sm text-muted-foreground">Direkte Einstiege in zentrale Betriebsfunktionen.</p>
+          </div>
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/settings/nodes">
+              <Plus className="mr-2 h-4 w-4" />
+              Server hinzufuegen
+            </Link>
+          </Button>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {featureSummaries.map((feature) => {
+            const Icon = feature.icon;
+
+            return (
+              <Link key={feature.href} href={feature.href} className="block h-full">
+                <Card hover className="h-full">
+                  <CardContent className="flex h-full flex-col gap-4 p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                        <Icon className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <h3 className="text-base font-semibold">{feature.title}</h3>
+                        <p className="mt-1 text-sm text-muted-foreground">{feature.description}</p>
+                      </div>
+                    </div>
+                    <span className="mt-auto inline-flex items-center text-sm font-medium text-muted-foreground">
+                      Oeffnen
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </span>
+                  </CardContent>
+                </Card>
+              </Link>
+            );
+          })}
+        </div>
       </section>
     </div>
   );
