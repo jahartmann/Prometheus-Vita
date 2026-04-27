@@ -1,288 +1,224 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Check, Copy, ExternalLink, LinkIcon, MessageCircle, RefreshCw, Unlink } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { telegramApi } from "@/lib/api";
+import { FeatureStatusCard } from "@/components/ui/feature-status-card";
+import { getApiErrorMessage, telegramApi } from "@/lib/api";
 import type { TelegramStatus } from "@/types/api";
-import {
-  MessageCircle,
-  Copy,
-  Check,
-  ExternalLink,
-  Loader2,
-  LinkIcon,
-  Unlink,
-  RefreshCw,
-} from "lucide-react";
+
+interface TelegramLinkPayload {
+  verification_code?: string;
+  bot_username?: string;
+}
 
 export function TelegramLinkCard() {
   const [status, setStatus] = useState<TelegramStatus | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [statusLoaded, setStatusLoaded] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isLinking, setIsLinking] = useState(false);
+  const [isUnlinking, setIsUnlinking] = useState(false);
   const [linkCode, setLinkCode] = useState<string | null>(null);
   const [botUsername, setBotUsername] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const fetchStatus = useCallback(async () => {
+  const fetchStatus = useCallback(async (showPending = false) => {
+    if (showPending) setIsRefreshing(true);
     try {
-      const resp = await telegramApi.status();
-      const data = resp.data?.data || resp.data;
+      const response = await telegramApi.status();
+      const data = response.data as TelegramStatus;
       setStatus(data);
       if (data.bot_username) setBotUsername(data.bot_username);
+      if (data.verification_code) setLinkCode((current) => current ?? data.verification_code ?? null);
+      if (data.is_verified) setLinkCode(null);
       setError(null);
       return data;
-    } catch {
-      setError("Telegram-Service ist nicht erreichbar.");
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, "Telegram-Status konnte nicht geladen werden"));
       return null;
+    } finally {
+      setStatusLoaded(true);
+      if (showPending) setIsRefreshing(false);
     }
   }, []);
 
-  // Initial fetch
   useEffect(() => {
-    fetchStatus();
+    fetchStatus(true);
   }, [fetchStatus]);
 
-  // Auto-poll while waiting for verification
   useEffect(() => {
     if (!linkCode) return;
 
     pollRef.current = setInterval(async () => {
       const data = await fetchStatus();
-      if (data?.is_verified) {
-        setLinkCode(null);
-        if (pollRef.current) clearInterval(pollRef.current);
+      if (data?.is_verified && pollRef.current) {
+        clearInterval(pollRef.current);
       }
     }, 3000);
 
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
-  }, [linkCode, fetchStatus]);
+  }, [fetchStatus, linkCode]);
 
   const handleLink = async () => {
-    setLoading(true);
+    setIsLinking(true);
     setError(null);
     try {
-      const resp = await telegramApi.link();
-      const data = resp.data?.data || resp.data;
-      setLinkCode(data.verification_code);
+      const response = await telegramApi.link();
+      const data = response.data as TelegramLinkPayload;
+      setLinkCode(data.verification_code ?? null);
       if (data.bot_username) setBotUsername(data.bot_username);
-    } catch {
-      setError("Telegram-Verknüpfung fehlgeschlagen. Bitte versuchen Sie es später erneut.");
+      await fetchStatus();
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, "Telegram-Verknüpfung konnte nicht gestartet werden"));
     } finally {
-      setLoading(false);
+      setIsLinking(false);
     }
   };
 
   const handleUnlink = async () => {
-    setLoading(true);
+    setIsUnlinking(true);
     setError(null);
     try {
       await telegramApi.unlink();
-      setStatus(null);
       setLinkCode(null);
-    } catch {
-      setError("Verknüpfung konnte nicht aufgehoben werden.");
+      await fetchStatus();
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, "Telegram-Verknüpfung konnte nicht aufgehoben werden"));
     } finally {
-      setLoading(false);
+      setIsUnlinking(false);
     }
   };
 
-  const copyCode = async () => {
+  const copyStartCommand = async () => {
     if (!linkCode) return;
-    await navigator.clipboard.writeText(linkCode);
+    await navigator.clipboard.writeText(`/start ${linkCode}`);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // Build the t.me deep link that auto-sends /start CODE
-  const deepLink = botUsername && linkCode
-    ? `https://t.me/${botUsername}?start=${linkCode}`
+  const effectiveBotUsername = botUsername ?? status?.bot_username ?? null;
+  const deepLink = effectiveBotUsername && linkCode
+    ? `https://t.me/${effectiveBotUsername}?start=${linkCode}`
     : null;
+  const isPending = isRefreshing || isLinking || isUnlinking;
 
-  if (!status?.bot_enabled && !status && !error) return null;
+  const { tone, label } = useMemo(() => {
+    if (!statusLoaded) return { tone: "muted" as const, label: "Lade Status" };
+    if (!status?.bot_enabled) return { tone: "warning" as const, label: "Bot inaktiv" };
+    if (status.linked && status.is_verified) return { tone: "ok" as const, label: "Verbunden" };
+    return { tone: "info" as const, label: "Nicht verbunden" };
+  }, [status, statusLoaded]);
+
+  const details = (
+    <div className="space-y-4">
+      <dl className="grid gap-2 text-sm sm:grid-cols-2">
+        <div>
+          <dt className="text-muted-foreground">Link</dt>
+          <dd className="font-medium">{statusLoaded ? (status?.linked ? "vorhanden" : "nicht vorhanden") : "wird geladen"}</dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">Verifiziert</dt>
+          <dd className="font-medium">{statusLoaded ? (status?.is_verified ? "ja" : "nein") : "wird geladen"}</dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">Bot</dt>
+          <dd className="font-medium">{statusLoaded ? (status?.bot_enabled ? "aktiv" : "inaktiv") : "wird geladen"}</dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">Bot-Username</dt>
+          <dd className="font-medium">{effectiveBotUsername ? `@${effectiveBotUsername}` : "-"}</dd>
+        </div>
+        {status?.telegram_username && (
+          <div>
+            <dt className="text-muted-foreground">Telegram-User</dt>
+            <dd className="font-medium">@{status.telegram_username}</dd>
+          </div>
+        )}
+      </dl>
+
+      {!statusLoaded && (
+        <p className="text-sm text-muted-foreground">Telegram-Status wird geladen.</p>
+      )}
+
+      {statusLoaded && !status?.bot_enabled && (
+        <p className="rounded-md bg-muted p-3 text-sm text-muted-foreground">
+          Der Telegram-Bot ist nicht konfiguriert. Setze TELEGRAM_BOT_TOKEN und starte den Server neu.
+        </p>
+      )}
+
+      {linkCode && !status?.is_verified && (
+        <div className="space-y-3 rounded-md border border-dashed p-3">
+          <p className="text-sm text-muted-foreground">
+            Sende den Startbefehl an den Telegram-Bot, um die Verknüpfung zu verifizieren.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <code className="rounded-full bg-muted px-3 py-1.5 font-mono text-sm">
+              /start {linkCode}
+            </code>
+            <Button variant="outline" size="sm" onClick={copyStartCommand}>
+              {copied ? <Check className="mr-2 h-4 w-4" /> : <Copy className="mr-2 h-4 w-4" />}
+              {copied ? "Kopiert" : "Kopieren"}
+            </Button>
+            {deepLink && (
+              <Button variant="outline" size="sm" asChild>
+                <a href={deepLink} target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="mr-2 h-4 w-4" />
+                  Telegram öffnen
+                </a>
+              </Button>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Nach dem Senden wird der Status automatisch aktualisiert.
+          </p>
+        </div>
+      )}
+
+      {status?.bot_enabled && status.linked && status.is_verified && (
+        <p className="text-sm text-muted-foreground">
+          Telegram ist für Benachrichtigungen und den KI-Assistenten verknüpft.
+        </p>
+      )}
+
+      <div className="flex flex-wrap gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => fetchStatus(true)}
+          disabled={isPending}
+        >
+          <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+          Aktualisieren
+        </Button>
+        {status?.bot_enabled && !(status.linked && status.is_verified) && (
+          <Button size="sm" onClick={handleLink} disabled={isPending}>
+            {isLinking ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <LinkIcon className="mr-2 h-4 w-4" />}
+            {linkCode ? "Neuen Code erzeugen" : "Telegram verknüpfen"}
+          </Button>
+        )}
+        {status?.linked && (
+          <Button variant="outline" size="sm" onClick={handleUnlink} disabled={isPending}>
+            {isUnlinking ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <Unlink className="mr-2 h-4 w-4" />}
+            Verknüpfung aufheben
+          </Button>
+        )}
+      </div>
+    </div>
+  );
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base flex items-center gap-2">
-          <MessageCircle className="h-4 w-4" />
-          Telegram-Verknüpfung
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {error && (
-          <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-            {error}
-          </div>
-        )}
-
-        {!status?.bot_enabled && !linkCode && (
-          <div className="rounded-md bg-muted p-3 text-sm text-muted-foreground">
-            Der Telegram-Bot ist nicht konfiguriert. Setzen Sie die Umgebungsvariable{" "}
-            <code className="rounded bg-muted-foreground/10 px-1.5 py-0.5">TELEGRAM_BOT_TOKEN</code>{" "}
-            und starten Sie den Server neu.
-          </div>
-        )}
-
-        {/* Verified / Linked State */}
-        {status?.is_verified ? (
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <Badge variant="default" className="gap-1">
-                <Check className="h-3 w-3" />
-                Verknüpft
-              </Badge>
-              {status.telegram_username && (
-                <span className="text-sm text-muted-foreground">
-                  @{status.telegram_username}
-                </span>
-              )}
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Dein Telegram-Konto ist verknüpft. Du kannst mit dem KI-Assistenten über Telegram chatten.
-            </p>
-            <Button variant="outline" size="sm" onClick={handleUnlink} disabled={loading}>
-              <Unlink className="h-3 w-3 mr-1.5" />
-              Verknüpfung aufheben
-            </Button>
-          </div>
-        ) : linkCode ? (
-          /* Linking in progress - waiting for verification */
-          <div className="space-y-4">
-            {/* Step 1: Click the link */}
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
-                  1
-                </span>
-                Bot in Telegram öffnen
-              </div>
-
-              {deepLink ? (
-                <a
-                  href={deepLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 rounded-md bg-[#2AABEE] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#229ED9] transition-colors"
-                >
-                  <MessageCircle className="h-4 w-4" />
-                  In Telegram öffnen
-                  <ExternalLink className="h-3 w-3" />
-                </a>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  Öffne <span className="font-mono font-medium">@{botUsername || "den Bot"}</span>{" "}
-                  in Telegram.
-                </p>
-              )}
-            </div>
-
-            {/* Step 2: Auto or manual */}
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">
-                  2
-                </span>
-                {deepLink
-                  ? "Klicke \"Starten\" im Bot"
-                  : "Sende den Verifikationscode"}
-              </div>
-
-              {!deepLink && (
-                <div className="flex items-center gap-2">
-                  <div className="rounded-md bg-muted px-3 py-2 font-mono text-sm flex-1">
-                    /link {linkCode}
-                  </div>
-                  <Button variant="outline" size="icon" onClick={copyCode} className="shrink-0">
-                    {copied ? (
-                      <Check className="h-4 w-4 text-green-500" />
-                    ) : (
-                      <Copy className="h-4 w-4" />
-                    )}
-                  </Button>
-                </div>
-              )}
-
-              {deepLink && (
-                <p className="text-sm text-muted-foreground">
-                  Der Code wird automatisch übermittelt. Falls es nicht klappt, sende{" "}
-                  <button
-                    onClick={copyCode}
-                    className="inline-flex items-center gap-1 font-mono text-foreground hover:underline cursor-pointer"
-                  >
-                    /link {linkCode}
-                    {copied ? (
-                      <Check className="h-3 w-3 text-green-500 inline" />
-                    ) : (
-                      <Copy className="h-3 w-3 inline" />
-                    )}
-                  </button>{" "}
-                  manuell an den Bot.
-                </p>
-              )}
-            </div>
-
-            {/* Step 3: Waiting */}
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-muted text-muted-foreground text-xs">
-                  3
-                </span>
-                Warte auf Bestätigung
-              </div>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                Warte auf Verifikation...
-              </div>
-            </div>
-          </div>
-        ) : status?.bot_enabled ? (
-          /* Initial state - not linked */
-          <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Verknüpfe dein Telegram-Konto, um mit dem KI-Assistenten über Telegram zu chatten
-              und Benachrichtigungen zu erhalten.
-            </p>
-            <Button onClick={handleLink} disabled={loading}>
-              {loading ? (
-                <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
-              ) : (
-                <LinkIcon className="h-4 w-4 mr-1.5" />
-              )}
-              {loading ? "Verknüpfen..." : "Telegram verknüpfen"}
-            </Button>
-          </div>
-        ) : null}
-
-        {/* Unverified pending code from a previous session */}
-        {status && !status.is_verified && status.verification_code && !linkCode && status.bot_enabled && (
-          <div className="rounded-md border border-dashed p-3 space-y-2">
-            <p className="text-sm text-muted-foreground">
-              Es gibt einen offenen Verifikationscode. Moechtest du fortfahren?
-            </p>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setLinkCode(status.verification_code!);
-                  if (status.bot_username) setBotUsername(status.bot_username);
-                }}
-              >
-                <RefreshCw className="h-3 w-3 mr-1.5" />
-                Fortfahren
-              </Button>
-              <Button variant="outline" size="sm" onClick={handleLink} disabled={loading}>
-                Neuen Code generieren
-              </Button>
-            </div>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+    <FeatureStatusCard
+      title="Telegram-Verknüpfung"
+      description="Bot-Status, Konto-Link und Verifikation für Telegram-Benachrichtigungen."
+      icon={MessageCircle}
+      tone={tone}
+      status={label}
+      details={details}
+      error={error}
+    />
   );
 }

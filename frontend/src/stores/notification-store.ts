@@ -5,7 +5,7 @@ import type {
   NotificationHistoryEntry,
   AlertRule,
 } from "@/types/api";
-import { notificationApi, alertApi, toArray } from "@/lib/api";
+import { notificationApi, alertApi, getApiErrorMessage, toArray } from "@/lib/api";
 
 interface NotificationState {
   channels: NotificationChannel[];
@@ -32,8 +32,7 @@ export const useNotificationStore = create<NotificationState>()((set) => ({
       const response = await notificationApi.listChannels();
       set({ channels: toArray<NotificationChannel>(response.data), isLoading: false });
     } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "Kanäle konnten nicht geladen werden";
+      const message = getApiErrorMessage(err, "Kanaele konnten nicht geladen werden");
       toast.error(message);
       set({ error: message, isLoading: false });
     }
@@ -45,8 +44,7 @@ export const useNotificationStore = create<NotificationState>()((set) => ({
       const response = await notificationApi.listHistory(limit, offset);
       set({ history: toArray<NotificationHistoryEntry>(response.data), isLoading: false });
     } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "Verlauf konnte nicht geladen werden";
+      const message = getApiErrorMessage(err, "Verlauf konnte nicht geladen werden");
       toast.error(message);
       set({ error: message, isLoading: false });
     }
@@ -58,8 +56,7 @@ export const useNotificationStore = create<NotificationState>()((set) => ({
       const response = await alertApi.listRules();
       set({ alertRules: toArray<AlertRule>(response.data), isLoading: false });
     } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "Alert-Regeln konnten nicht geladen werden";
+      const message = getApiErrorMessage(err, "Alert-Regeln konnten nicht geladen werden");
       toast.error(message);
       set({ error: message, isLoading: false });
     }

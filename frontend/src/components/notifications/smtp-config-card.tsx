@@ -5,8 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { notificationApi } from "@/lib/api";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { getApiErrorMessage, notificationApi } from "@/lib/api";
 import type { NotificationChannel } from "@/types/api";
 import { Mail, Send, Loader2, CheckCircle2, XCircle, Save } from "lucide-react";
 
@@ -74,7 +74,7 @@ export function SmtpConfigCard({ channels, onSaved }: SmtpConfigCardProps) {
       }
       onSaved();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Fehler beim Speichern");
+      setError(getApiErrorMessage(err, "Fehler beim Speichern"));
     } finally {
       setSaving(false);
     }
@@ -84,13 +84,16 @@ export function SmtpConfigCard({ channels, onSaved }: SmtpConfigCardProps) {
     if (!smtpChannel) return;
     setTesting(true);
     setTestResult(null);
+    setError(null);
     try {
       await notificationApi.testChannel(smtpChannel.id);
       setTestResult("success");
-    } catch {
+    } catch (err: unknown) {
       setTestResult("error");
+      setError(getApiErrorMessage(err, "Fehler beim Testen der SMTP-Verbindung"));
     } finally {
       setTesting(false);
+      onSaved();
     }
   };
 
@@ -104,11 +107,9 @@ export function SmtpConfigCard({ channels, onSaved }: SmtpConfigCardProps) {
             <Mail className="h-5 w-5" />
             <CardTitle className="text-base">SMTP-Konfiguration</CardTitle>
           </div>
-          {smtpChannel && (
-            <Badge variant={smtpChannel.is_active ? "default" : "secondary"}>
-              {smtpChannel.is_active ? "Aktiv" : "Inaktiv"}
-            </Badge>
-          )}
+          <StatusBadge tone={smtpChannel?.is_active ? "ok" : "muted"}>
+            {smtpChannel?.is_active ? "Aktiv" : "Inaktiv"}
+          </StatusBadge>
         </div>
         <CardDescription>
           E-Mail-Benachrichtigungen über SMTP versenden.
@@ -184,8 +185,6 @@ export function SmtpConfigCard({ channels, onSaved }: SmtpConfigCardProps) {
           TLS aktivieren
         </label>
 
-        {error && <p className="text-sm text-destructive">{error}</p>}
-
         {testResult === "success" && (
           <div className="flex items-center gap-2 text-sm text-green-600">
             <CheckCircle2 className="h-4 w-4" />
@@ -223,6 +222,8 @@ export function SmtpConfigCard({ channels, onSaved }: SmtpConfigCardProps) {
             Speichern
           </Button>
         </div>
+
+        {error && <p className="text-sm text-destructive">{error}</p>}
       </CardContent>
     </Card>
   );

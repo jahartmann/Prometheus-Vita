@@ -31,6 +31,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { PageShell } from "@/components/layout/page-shell";
 import { useNotificationStore } from "@/stores/notification-store";
 import { useNodeStore } from "@/stores/node-store";
 import { useEscalationStore } from "@/stores/escalation-store";
@@ -202,17 +203,15 @@ export default function NotificationsSettingsPage() {
   };
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h2 className="text-lg font-semibold">Benachrichtigungen</h2>
-        <p className="text-sm text-muted-foreground">
-          Kanäle, Alert-Regeln und Benachrichtigungsverlauf verwalten.
-        </p>
-      </div>
-
-      <SmtpConfigCard channels={channels} onSaved={() => { fetchChannels(); fetchHistory(); }} />
-
-      <TelegramLinkCard />
+    <PageShell
+      title="Benachrichtigungen"
+      description="Kanaele, Telegram, SMTP, Alert-Regeln, Reflexe und Eskalationen als Betriebsflow."
+      eyebrow="Settings"
+    >
+      <section className="grid gap-4 xl:grid-cols-2">
+        <SmtpConfigCard channels={channels} onSaved={() => { fetchChannels(); fetchHistory(); }} />
+        <TelegramLinkCard />
+      </section>
 
       <Tabs defaultValue="channels">
         <TabsList>
@@ -646,6 +645,6 @@ export default function NotificationsSettingsPage() {
         rule={editReflex}
         nodes={nodes}
       />
-    </div>
+    </PageShell>
   );
 }
