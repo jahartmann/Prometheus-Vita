@@ -4,10 +4,13 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { securityApi } from "@/lib/api";
 import type { SecurityEvent, SecurityStats, SecurityCategory } from "@/types/api";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageShell } from "@/components/layout/page-shell";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { FeatureStatusCard } from "@/components/ui/feature-status-card";
 import { KpiCard } from "@/components/ui/kpi-card";
+import { StatusBadge, type StatusTone } from "@/components/ui/status-badge";
 import {
   Collapsible,
   CollapsibleContent,
@@ -33,37 +36,32 @@ import {
 
 const categoryConfig: Record<
   SecurityCategory,
-  { label: string; icon: typeof Shield; colorClass: string; badgeClass: string }
+  { label: string; icon: typeof Shield; colorClass: string }
 > = {
   security: {
     label: "Sicherheit",
     icon: Shield,
     colorClass: "text-violet-500",
-    badgeClass: "bg-violet-500/10 text-violet-500 border-violet-500/30",
   },
   performance: {
     label: "Performance",
     icon: Gauge,
     colorClass: "text-blue-500",
-    badgeClass: "bg-blue-500/10 text-blue-500 border-blue-500/30",
   },
   capacity: {
     label: "Kapazität",
     icon: HardDrive,
     colorClass: "text-orange-500",
-    badgeClass: "bg-orange-500/10 text-orange-500 border-orange-500/30",
   },
   availability: {
     label: "Verfügbarkeit",
     icon: Server,
     colorClass: "text-green-500",
-    badgeClass: "bg-green-500/10 text-green-500 border-green-500/30",
   },
   config: {
     label: "Konfiguration",
     icon: Settings,
     colorClass: "text-slate-500",
-    badgeClass: "bg-slate-500/10 text-slate-500 border-slate-500/30",
   },
 };
 
@@ -74,11 +72,18 @@ const severityBorder: Record<string, string> = {
   emergency: "border-l-red-500",
 };
 
-const severityBadge: Record<string, { label: string; variant: "secondary" | "warning" | "destructive" }> = {
-  info: { label: "Info", variant: "secondary" },
-  warning: { label: "Warnung", variant: "warning" },
-  critical: { label: "Kritisch", variant: "destructive" },
-  emergency: { label: "Notfall", variant: "destructive" },
+const severityBadge: Record<string, { label: string }> = {
+  info: { label: "Info" },
+  warning: { label: "Warnung" },
+  critical: { label: "Kritisch" },
+  emergency: { label: "Notfall" },
+};
+
+const severityTone: Record<string, StatusTone> = {
+  info: "info",
+  warning: "warning",
+  critical: "critical",
+  emergency: "critical",
 };
 
 function timeAgo(dateStr: string): string {
@@ -102,9 +107,11 @@ export default function SecurityPage() {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [acknowledgingIds, setAcknowledgingIds] = useState<Set<string>>(new Set());
   const [analysisMode, setAnalysisMode] = useState<string>("hybrid");
+  const [error, setError] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
+    setError(null);
     try {
       const [evts, st, modeRes] = await Promise.all([
         securityApi.getRecent(100),
@@ -117,7 +124,7 @@ export default function SecurityPage() {
         setAnalysisMode((modeRes as { mode: string }).mode);
       }
     } catch {
-      // silent
+      setError("Sicherheitsdaten konnten nicht geladen werden");
     } finally {
       setIsLoading(false);
     }
@@ -164,96 +171,97 @@ export default function SecurityPage() {
 
   const unacknowledgedCount = stats?.unacknowledged ?? events.filter((e) => !e.is_acknowledged).length;
   const criticalCount = (stats?.by_severity?.critical ?? 0) + (stats?.by_severity?.emergency ?? 0);
+  const warningCount = stats?.by_severity?.warning ?? events.filter((e) => e.severity === "warning").length;
   const totalCount = stats?.total ?? events.length;
 
-  // Status banner
   const hasCritical = criticalCount > 0;
-  const hasWarnings = unacknowledgedCount > 0 && !hasCritical;
   const hasEmergency = (stats?.by_severity?.emergency ?? 0) > 0;
+  const hasWarnings = !hasCritical && (warningCount > 0 || unacknowledgedCount > 0);
+  const statusTone: StatusTone = hasCritical ? "critical" : hasWarnings ? "warning" : "ok";
+  const statusIcon = hasCritical ? ShieldAlert : hasWarnings ? Bell : ShieldCheck;
+  const statusLabel = hasEmergency
+    ? "Notfall"
+    : hasCritical
+      ? "Kritisch"
+      : hasWarnings
+        ? "Aufmerksamkeit"
+        : "Stabil";
+  const statusDescription = hasEmergency
+    ? `${stats?.by_severity?.emergency ?? 0} Notfall-Befund${(stats?.by_severity?.emergency ?? 0) > 1 ? "e" : ""} erkannt. Sofort pruefen und Massnahmen einleiten.`
+    : hasCritical
+      ? `${criticalCount} kritische Befunde erkannt. Bitte priorisiert bearbeiten und betroffene Nodes absichern.`
+      : hasWarnings
+        ? `${warningCount || unacknowledgedCount} Befund${(warningCount || unacknowledgedCount) > 1 ? "e" : ""} benoetigen Aufmerksamkeit oder Bestaetigung.`
+        : totalCount > 0
+          ? "Aktuelle Analyse ohne kritische oder warnende Befunde."
+          : "Alle Systeme sicher, keine offenen Befunde.";
+  const pageActions = (
+    <>
+      <div className="flex items-center rounded-lg border bg-muted/50 p-0.5">
+        {([
+          { value: "hybrid", label: "Hybrid" },
+          { value: "full_llm", label: "Full LLM" },
+          { value: "rule_only", label: "Nur Regeln" },
+        ] as const).map((m) => (
+          <button
+            key={m.value}
+            onClick={async () => {
+              try {
+                await securityApi.setMode(m.value);
+                setAnalysisMode(m.value);
+              } catch { /* silent */ }
+            }}
+            className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+              analysisMode === m.value
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {m.label}
+          </button>
+        ))}
+      </div>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={fetchData}
+        disabled={isLoading}
+      >
+        <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+        Aktualisieren
+      </Button>
+    </>
+  );
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">
-            Sicherheit & Intelligente Analyse
-          </h1>
-          <p className="text-muted-foreground">
-            KI-gestützte Erkennung von Anomalien, Sicherheitsbedrohungen und
-            Kapazitätsrisiken
-          </p>
+    <PageShell
+      title="Sicherheit"
+      eyebrow="Security"
+      description="Befunde, Analysemodus und Bestaetigungen in einem klaren Bewertungsflow."
+      actions={pageActions}
+    >
+      {error && (
+        <div className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/25 dark:text-red-300">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{error}</span>
         </div>
-        <div className="flex items-center gap-2">
-          {/* Analysis Mode Switcher */}
-          <div className="flex items-center rounded-lg border bg-muted/50 p-0.5">
-            {([
-              { value: "hybrid", label: "Hybrid" },
-              { value: "full_llm", label: "Full LLM" },
-              { value: "rule_only", label: "Nur Regeln" },
-            ] as const).map((m) => (
-              <button
-                key={m.value}
-                onClick={async () => {
-                  try {
-                    await securityApi.setMode(m.value);
-                    setAnalysisMode(m.value);
-                  } catch { /* silent */ }
-                }}
-                className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                  analysisMode === m.value
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {m.label}
-              </button>
-            ))}
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={fetchData}
-            disabled={isLoading}
-          >
-            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
-            Aktualisieren
-          </Button>
-        </div>
-      </div>
+      )}
 
-      {/* Status Banner */}
       {!isLoading && (
-        <div
-          className={`flex items-center gap-3 rounded-lg border p-4 ${
-            hasEmergency
-              ? "border-red-700 bg-red-950/50 text-red-300"
-              : hasCritical
-                ? "border-red-500/50 bg-red-500/10 text-red-500"
-                : hasWarnings
-                  ? "border-yellow-500/50 bg-yellow-500/10 text-yellow-600 dark:text-yellow-400"
-                  : "border-green-500/50 bg-green-500/10 text-green-600 dark:text-green-400"
-          }`}
-        >
-          {hasEmergency ? (
-            <ShieldAlert className="h-5 w-5 shrink-0" />
-          ) : hasCritical ? (
-            <AlertTriangle className="h-5 w-5 shrink-0" />
-          ) : hasWarnings ? (
-            <Bell className="h-5 w-5 shrink-0" />
-          ) : (
-            <ShieldCheck className="h-5 w-5 shrink-0" />
-          )}
-          <span className="font-medium">
-            {hasEmergency
-              ? `NOTFALL: ${stats?.by_severity?.emergency ?? 0} Sicherheitsvorfall${(stats?.by_severity?.emergency ?? 0) > 1 ? "e" : ""} erkannt`
-              : hasCritical
-                ? `${criticalCount} kritische Befunde -- sofortiges Handeln erforderlich`
-                : hasWarnings
-                  ? `${unacknowledgedCount} Befund${unacknowledgedCount > 1 ? "e" : ""} erfordern Aufmerksamkeit`
-                  : "Alle Systeme sicher -- keine offenen Befunde"}
-          </span>
-        </div>
+        <FeatureStatusCard
+          title="Sicherheitslage"
+          description={statusDescription}
+          icon={statusIcon}
+          tone={statusTone}
+          status={statusLabel}
+          details={
+            <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
+              <span>{totalCount} Befunde gesamt</span>
+              <span>{criticalCount} kritisch/notfall</span>
+              <span>{unacknowledgedCount} unbestaetigt</span>
+            </div>
+          }
+        />
       )}
 
       {/* KPI Cards */}
@@ -353,26 +361,14 @@ export default function SecurityPage() {
                 onOpenChange={() => toggleExpand(event.id)}
               >
                 <Card
-                  className={`border-l-4 ${severityBorder[event.severity] ?? "border-l-muted"} ${
+                  className={`border-l-2 ${severityBorder[event.severity] ?? "border-l-muted"} ${
                     event.is_acknowledged ? "opacity-60" : ""
                   }`}
                 >
                   <CardHeader className="pb-2 pt-4 px-5">
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex items-start gap-3 min-w-0">
-                        <div
-                          className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
-                            catCfg.colorClass === "text-violet-500"
-                              ? "bg-violet-500/10"
-                              : catCfg.colorClass === "text-blue-500"
-                                ? "bg-blue-500/10"
-                                : catCfg.colorClass === "text-orange-500"
-                                  ? "bg-orange-500/10"
-                                  : catCfg.colorClass === "text-green-500"
-                                    ? "bg-green-500/10"
-                                    : "bg-slate-500/10"
-                          }`}
-                        >
+                        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted">
                           <CatIcon className={`h-4 w-4 ${catCfg.colorClass}`} />
                         </div>
                         <div className="min-w-0">
@@ -380,18 +376,12 @@ export default function SecurityPage() {
                             <span className="font-semibold text-sm">
                               {event.title}
                             </span>
-                            <Badge
-                              variant={sevCfg.variant}
-                              className="text-xs"
-                            >
+                            <StatusBadge tone={severityTone[event.severity] ?? "muted"} className="text-xs">
                               {sevCfg.label}
-                            </Badge>
-                            <Badge
-                              variant="outline"
-                              className={`text-xs ${catCfg.badgeClass}`}
-                            >
+                            </StatusBadge>
+                            <StatusBadge tone="muted" className="text-xs" withIcon={false}>
                               {catCfg.label}
-                            </Badge>
+                            </StatusBadge>
                             {event.is_acknowledged && (
                               <Badge variant="secondary" className="text-xs gap-1">
                                 <CheckCircle2 className="h-3 w-3" />
@@ -530,6 +520,6 @@ export default function SecurityPage() {
           })}
         </div>
       )}
-    </div>
+    </PageShell>
   );
 }

@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Activity, Archive, ArrowRightLeft, Bell, CalendarClock, Clock, ListChecks, RefreshCw, ShieldAlert } from "lucide-react";
-import { operationsApi } from "@/lib/api";
+import { Activity, AlertCircle, Archive, ArrowRightLeft, Bell, CalendarClock, CheckCircle2, Clock, ListChecks, RefreshCw, ShieldAlert } from "lucide-react";
+import { getApiErrorMessage, operationsApi } from "@/lib/api";
 import type { OperationTask } from "@/types/api";
+import { PageShell } from "@/components/layout/page-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { KpiCard } from "@/components/ui/kpi-card";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 
@@ -36,17 +37,21 @@ export default function TaskCenterPage() {
   const [tasks, setTasks] = useState<OperationTask[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setIsLoading(true);
+    setError(null);
     try {
       const nextTasks = await operationsApi.listTasks({ limit: 80 }) as OperationTask[];
       setTasks(nextTasks);
-    } catch {
+    } catch (e) {
+      setError(getApiErrorMessage(e, "Tasks konnten nicht geladen werden"));
       setTasks([]);
+    } finally {
+      setLastUpdated(new Date());
+      setIsLoading(false);
     }
-    setLastUpdated(new Date());
-    setIsLoading(false);
   }, []);
 
   useEffect(() => {
@@ -70,25 +75,34 @@ export default function TaskCenterPage() {
     return <Bell className="h-4 w-4" />;
   };
 
+  const pageActions = (
+    <Button variant="outline" size="sm" onClick={load} disabled={isLoading}>
+      <RefreshCw className={cn("mr-2 h-4 w-4", isLoading && "animate-spin")} />
+      Aktualisieren
+    </Button>
+  );
+
   return (
-    <div className="space-y-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Task-Center</h1>
-          <p className="text-sm text-muted-foreground">Lange Operationen, offene Incidents und fehlgeschlagene Benachrichtigungen in einer Arbeitsliste.</p>
-        </div>
-        <Button variant="outline" size="sm" onClick={load} disabled={isLoading}>
-          <RefreshCw className={cn("mr-2 h-4 w-4", isLoading && "animate-spin")} />
-          Aktualisieren
-        </Button>
-      </div>
+    <PageShell
+      title="Task-Center"
+      eyebrow="Operations"
+      description="Lange Operationen, offene Incidents und fehlgeschlagene Benachrichtigungen in einer Arbeitsliste."
+      actions={pageActions}
+    >
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Aktiv</CardTitle></CardHeader><CardContent className="text-2xl font-semibold">{totals.active}</CardContent></Card>
-        <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Fehler</CardTitle></CardHeader><CardContent className="text-2xl font-semibold">{totals.failed}</CardContent></Card>
-        <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Pruefen</CardTitle></CardHeader><CardContent className="text-2xl font-semibold">{totals.warning}</CardContent></Card>
-        <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Fertig</CardTitle></CardHeader><CardContent className="text-2xl font-semibold">{totals.done}</CardContent></Card>
+        <KpiCard title="Aktiv" value={totals.active} subtitle="Laufend oder wartend" icon={Activity} color="blue" />
+        <KpiCard title="Fehler" value={totals.failed} subtitle="Fehlgeschlagen" icon={ShieldAlert} color="red" />
+        <KpiCard title="Pruefen" value={totals.warning} subtitle="Benoetigen Aufmerksamkeit" icon={AlertCircle} color="orange" />
+        <KpiCard title="Fertig" value={totals.done} subtitle="Abgeschlossen" icon={CheckCircle2} color="green" />
       </div>
+
+      {error && (
+        <div className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/25 dark:text-red-300">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
 
       <div className="rounded-md border">
         <div className="flex items-center justify-between border-b px-4 py-3">
@@ -129,6 +143,6 @@ export default function TaskCenterPage() {
         <Activity className="h-4 w-4" />
         Migrationen, Backups, Incidents und Notification-Fehler werden zusammengefuehrt. Schreibende Aktionen bleiben auf den jeweiligen Detailseiten.
       </div>
-    </div>
+    </PageShell>
   );
 }
