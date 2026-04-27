@@ -12,6 +12,7 @@ interface AttentionItem {
   description: string;
   severity: "critical" | "warning" | "info";
   kind: "offline" | "error" | "cpu" | "memory" | "info";
+  href: string;
 }
 
 const severityMeta = {
@@ -32,12 +33,12 @@ const severityMeta = {
   },
 } satisfies Record<AttentionItem["severity"], { label: string; tone: StatusTone; rank: number }>;
 
-const kindMeta: Record<AttentionItem["kind"], { icon: LucideIcon; href: string; actionLabel: string }> = {
-  offline: { icon: ServerOff, href: "/alerts", actionLabel: "Alerts pruefen" },
-  error: { icon: AlertTriangle, href: "/alerts", actionLabel: "Fehler oeffnen" },
-  cpu: { icon: Cpu, href: "/monitoring", actionLabel: "Monitoring oeffnen" },
-  memory: { icon: MemoryStick, href: "/monitoring", actionLabel: "Monitoring oeffnen" },
-  info: { icon: Info, href: "/task-center", actionLabel: "Tasks oeffnen" },
+const kindMeta: Record<AttentionItem["kind"], { icon: LucideIcon; actionLabel: string }> = {
+  offline: { icon: ServerOff, actionLabel: "Node pruefen" },
+  error: { icon: AlertTriangle, actionLabel: "Signal pruefen" },
+  cpu: { icon: Cpu, actionLabel: "Auslastung pruefen" },
+  memory: { icon: MemoryStick, actionLabel: "Auslastung pruefen" },
+  info: { icon: Info, actionLabel: "Tasks oeffnen" },
 };
 
 export function AttentionBanner() {
@@ -52,6 +53,7 @@ export function AttentionBanner() {
       description: "Server ist nicht erreichbar.",
       severity: "critical",
       kind: "offline",
+      href: `/nodes/${n.id}`,
     });
   });
 
@@ -63,6 +65,7 @@ export function AttentionBanner() {
         description: error,
         severity: "warning",
         kind: "error",
+        href: node ? `/nodes/${node.id}` : "/monitoring",
       });
     }
   });
@@ -75,6 +78,7 @@ export function AttentionBanner() {
         description: `CPU bei ${status.cpu_usage.toFixed(0)}%.`,
         severity: status.cpu_usage > 95 ? "critical" : "warning",
         kind: "cpu",
+        href: node ? `/nodes/${node.id}` : "/monitoring",
       });
     }
   });
@@ -89,6 +93,7 @@ export function AttentionBanner() {
           description: `RAM bei ${memPercent.toFixed(0)}%.`,
           severity: memPercent > 95 ? "critical" : "warning",
           kind: "memory",
+          href: node ? `/nodes/${node.id}` : "/monitoring",
         });
       }
     }
@@ -154,7 +159,7 @@ export function AttentionBanner() {
               title={item.title}
               description={item.description}
               badge={meta.label}
-              href={action.href}
+              href={item.href}
               actionLabel={action.actionLabel}
             />
           );
