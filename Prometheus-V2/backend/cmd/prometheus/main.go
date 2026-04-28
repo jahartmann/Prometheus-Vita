@@ -10,6 +10,7 @@ import (
 	"github.com/antigravity/prometheus-v2/internal/config"
 	httpserver "github.com/antigravity/prometheus-v2/internal/http"
 	"github.com/antigravity/prometheus-v2/internal/platform/db"
+	"github.com/antigravity/prometheus-v2/internal/platform/jobs"
 	"github.com/antigravity/prometheus-v2/internal/platform/log"
 )
 
@@ -37,6 +38,22 @@ func main() {
 		os.Exit(1)
 	}
 	defer pool.Close()
+
+	if err := jobs.MigrateUp(ctx, pool); err != nil {
+		logger.Error("river migrations failed", slog.Any("error", err))
+		os.Exit(1)
+	}
+
+	riverClient, err := jobs.NewClient(ctx, pool, jobs.NewWorkers())
+	if err != nil {
+		logger.Error("river client init failed", slog.Any("error", err))
+		os.Exit(1)
+	}
+	defer func() {
+		if err := riverClient.Stop(context.Background()); err != nil {
+			logger.Error("river client stop failed", slog.Any("error", err))
+		}
+	}()
 
 	server := httpserver.NewServer(httpserver.Deps{
 		Logger: logger,
