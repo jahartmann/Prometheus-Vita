@@ -7,9 +7,7 @@ frontend/.vite/
 
 # Generated code (regenerated via make generate)
 backend/internal/api/openapi.gen.go
-backend/internal/db/repo/*.sql.go
-backend/internal/db/repo/db.go
-backend/internal/db/repo/models.go
+backend/internal/db/repo/*.go
 frontend/src/lib/api/schema.d.ts
 frontend/src/routeTree.gen.ts
 
