@@ -8,7 +8,7 @@ COPY backend/api ../backend/api
 RUN npm run generate:api
 RUN npm run build
 
-FROM golang:1.24-alpine AS backend-build
+FROM golang:1.25-alpine AS backend-build
 WORKDIR /app
 RUN apk add --no-cache make
 COPY backend/go.mod backend/go.sum ./
