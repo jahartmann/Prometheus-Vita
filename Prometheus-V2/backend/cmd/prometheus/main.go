@@ -13,6 +13,8 @@ import (
 	"github.com/antigravity/prometheus-v2/internal/platform/db"
 	"github.com/antigravity/prometheus-v2/internal/platform/jobs"
 	"github.com/antigravity/prometheus-v2/internal/platform/log"
+	"github.com/antigravity/prometheus-v2/internal/platform/metrics"
+	"github.com/antigravity/prometheus-v2/internal/platform/redis"
 )
 
 func main() {
@@ -60,10 +62,20 @@ func main() {
 		}
 	}()
 
+	redisClient, err := redis.New(ctx, cfg.RedisURL)
+	if err != nil {
+		logger.Error("redis init failed", slog.Any("error", err))
+		os.Exit(1)
+	}
+	defer redisClient.Close()
+
+	reg := metrics.New()
+
 	server := httpserver.NewServer(httpserver.Deps{
-		Logger: logger,
-		DB:     pool,
-		Redis:  nil,
+		Logger:  logger,
+		DB:      pool,
+		Redis:   redisClient,
+		Metrics: reg,
 	})
 
 	if err := httpserver.ListenAndServe(ctx, server, cfg.HTTPAddr, logger); err != nil {

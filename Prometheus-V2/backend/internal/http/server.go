@@ -8,15 +8,18 @@ import (
 	"time"
 
 	"github.com/antigravity/prometheus-v2/internal/api"
+	"github.com/antigravity/prometheus-v2/internal/platform/metrics"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	oapimw "github.com/oapi-codegen/echo-middleware"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type Deps struct {
-	Logger *slog.Logger
-	DB     DBPinger
-	Redis  RedisPinger
+	Logger  *slog.Logger
+	DB      DBPinger
+	Redis   RedisPinger
+	Metrics *metrics.Registry
 }
 
 type apiServer struct{}
@@ -38,6 +41,25 @@ func NewServer(deps Deps) *echo.Echo {
 	e.Use(middleware.Gzip())
 
 	RegisterHealth(e, deps.DB, deps.Redis)
+
+	if deps.Metrics != nil {
+		e.GET("/metrics", echo.WrapHandler(promhttp.HandlerFor(deps.Metrics.Registry, promhttp.HandlerOpts{})))
+
+		e.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
+			return func(c echo.Context) error {
+				start := time.Now()
+				err := next(c)
+				route := c.Path()
+				if route == "" {
+					route = "unknown"
+				}
+				status := c.Response().Status
+				deps.Metrics.HTTPRequestsTotal.WithLabelValues(c.Request().Method, route, http.StatusText(status)).Inc()
+				deps.Metrics.HTTPRequestDuration.WithLabelValues(c.Request().Method, route).Observe(time.Since(start).Seconds())
+				return err
+			}
+		})
+	}
 
 	spec, err := api.GetSwagger()
 	if err != nil {
