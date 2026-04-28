@@ -3,11 +3,15 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HealthStatus } from "./health-status";
 
-vi.mock("@/lib/api/client", () => ({
-  api: {
-    GET: vi.fn(),
-  },
-}));
+vi.mock("@/lib/api/client", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/api/client")>("@/lib/api/client");
+  return {
+    ...actual,
+    api: {
+      GET: vi.fn(),
+    },
+  };
+});
 
 import { api } from "@/lib/api/client";
 
@@ -42,12 +46,15 @@ describe("HealthStatus", () => {
   it("renders error state when backend fails", async () => {
     (api.GET as ReturnType<typeof vi.fn>).mockResolvedValue({
       data: undefined,
-      error: { code: "X", message: "down", request_id: "rid" },
+      error: { code: "X", message: "down", request_id: "rid-42" },
+      response: { status: 503 },
     });
 
     renderWith();
     await waitFor(() => {
-      expect(screen.getByTestId("health-status").textContent).toContain("Backend nicht erreichbar");
+      const text = screen.getByTestId("health-status").textContent ?? "";
+      expect(text).toContain("Backend nicht erreichbar");
+      expect(text).toContain("rid-42");
     });
   });
 });
