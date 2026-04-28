@@ -1,6 +1,10 @@
 package auth
 
 import (
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"time"
@@ -86,4 +90,21 @@ func (s *JWTSigner) VerifyAccessToken(raw string) (*AccessClaims, error) {
 		return nil, fmt.Errorf("%w: wrong issuer", ErrInvalidToken)
 	}
 	return claims, nil
+}
+
+// HashRefreshToken returns a deterministic hash of a raw refresh token,
+// suitable for indexed lookup. Refresh tokens are random 32-byte strings,
+// not JWTs, so we use SHA-256 (fast lookup, no secret needed).
+func HashRefreshToken(raw string) string {
+	sum := sha256.Sum256([]byte(raw))
+	return hex.EncodeToString(sum[:])
+}
+
+// NewRefreshToken returns a fresh 32-byte random token, base64url-encoded.
+func NewRefreshToken() (string, error) {
+	buf := make([]byte, 32)
+	if _, err := rand.Read(buf); err != nil {
+		return "", fmt.Errorf("rand refresh token: %w", err)
+	}
+	return base64.RawURLEncoding.EncodeToString(buf), nil
 }
