@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/antigravity/prometheus-v2/internal/api"
@@ -14,6 +15,15 @@ import (
 	oapimw "github.com/oapi-codegen/echo-middleware"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
+
+// metricsExcludedPaths skips probe and self-scrape endpoints so they don't
+// pollute the http_request_duration_seconds histogram and don't recursively
+// observe the /metrics serializer.
+var metricsExcludedPaths = map[string]struct{}{
+	"/healthz": {},
+	"/readyz":  {},
+	"/metrics": {},
+}
 
 type Deps struct {
 	Logger  *slog.Logger
@@ -43,6 +53,9 @@ func NewServer(deps Deps) *echo.Echo {
 	RegisterHealth(e, deps.DB, deps.Redis)
 
 	if deps.Metrics != nil {
+		// TODO(auth): once auth middleware lands, restrict /metrics to admin or
+		// to a scrape-target IP allowlist. Today this endpoint exposes Go
+		// runtime details and the application's request matrix without auth.
 		e.GET("/metrics", echo.WrapHandler(promhttp.HandlerFor(deps.Metrics.Registry, promhttp.HandlerOpts{})))
 
 		e.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
@@ -50,11 +63,14 @@ func NewServer(deps Deps) *echo.Echo {
 				start := time.Now()
 				err := next(c)
 				route := c.Path()
+				if _, skip := metricsExcludedPaths[route]; skip {
+					return err
+				}
 				if route == "" {
 					route = "unknown"
 				}
 				status := c.Response().Status
-				deps.Metrics.HTTPRequestsTotal.WithLabelValues(c.Request().Method, route, http.StatusText(status)).Inc()
+				deps.Metrics.HTTPRequestsTotal.WithLabelValues(c.Request().Method, route, strconv.Itoa(status)).Inc()
 				deps.Metrics.HTTPRequestDuration.WithLabelValues(c.Request().Method, route).Observe(time.Since(start).Seconds())
 				return err
 			}
