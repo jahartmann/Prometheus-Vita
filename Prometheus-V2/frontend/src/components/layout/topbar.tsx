@@ -1,5 +1,6 @@
 import { ThemeToggle } from "@/components/theme-toggle";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { UserMenu } from "@/components/auth/user-menu";
 
 export function Topbar() {
   return (
@@ -10,6 +11,7 @@ export function Topbar() {
       </div>
       <div className="flex items-center gap-3">
         <ThemeToggle />
+        <UserMenu />
       </div>
     </header>
   );
