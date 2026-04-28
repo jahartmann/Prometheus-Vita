@@ -11,25 +11,6 @@ import (
 
 const refreshCookieName = "prometheus_v2_refresh"
 
-// claimsContextKey is the echo.Context key under which RequireAuth stores the
-// verified access-token claims. It is package-private and shared with the
-// auth middleware (see middleware.go) so that other packages must go through
-// ClaimsFromContext to read the claims rather than reaching for a string key.
-const claimsContextKey = "auth.claims"
-
-// ClaimsFromContext returns the access-token claims set by RequireAuth, or
-// (nil, false) if the request was not authenticated. Handlers in other
-// domains use this instead of touching c.Get directly so the storage key
-// can be changed in one place.
-func ClaimsFromContext(c echo.Context) (*AccessClaims, bool) {
-	v := c.Get(claimsContextKey)
-	if v == nil {
-		return nil, false
-	}
-	claims, ok := v.(*AccessClaims)
-	return claims, ok
-}
-
 // HTTPHandler wires HTTP handlers for the auth domain. Construct via
 // NewHTTPHandler. The Reader behaviors are exposed by the underlying
 // Service through this handler's Login/Refresh/Logout/GetMe methods.
