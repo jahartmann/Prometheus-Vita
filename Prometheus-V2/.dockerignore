@@ -1,0 +1,27 @@
+# Build outputs that bloat context and conflict with multi-stage builds.
+**/node_modules
+**/dist
+**/.vite
+backend/bin
+backend/.tools
+backend/coverage.out
+**/*.exe
+
+# Local env files often contain secrets — never copy into image context.
+**/.env
+**/.env.local
+
+# Source control + worktrees
+.git
+.gitignore
+.worktrees
+
+# IDE / OS
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+
+# Tests/coverage artifacts
+**/coverage
+**/coverage.out
