@@ -46,7 +46,7 @@ export function FeatureStatusCard({
       <CardContent>
         {details}
         {error && (
-          <p className="rounded-md border border-[oklch(from_var(--color-status-critical)_l_c_h_/_0.4)] bg-[oklch(from_var(--color-status-critical)_l_c_h_/_0.08)] px-3 py-2 text-sm" style={{ color: "oklch(var(--color-status-critical))" }}>
+          <p className="rounded-md border border-[oklch(from_var(--color-status-critical)_l_c_h_/_0.4)] bg-[oklch(from_var(--color-status-critical)_l_c_h_/_0.08)] px-3 py-2 text-sm" style={{ color: "var(--color-status-critical)" }}>
             {error}
           </p>
         )}

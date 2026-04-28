@@ -7,10 +7,10 @@ export type KpiTone = "neutral" | "primary" | "ok" | "warning" | "critical" | "i
 const toneIconBg: Record<KpiTone, string> = {
   neutral: "bg-muted text-muted-foreground",
   primary: "bg-primary/12 text-primary",
-  ok: "bg-[oklch(from_var(--color-status-ok)_l_c_h_/_0.12)] text-[oklch(var(--color-status-ok))]",
-  warning: "bg-[oklch(from_var(--color-status-warning)_l_c_h_/_0.12)] text-[oklch(var(--color-status-warning))]",
-  critical: "bg-[oklch(from_var(--color-status-critical)_l_c_h_/_0.12)] text-[oklch(var(--color-status-critical))]",
-  info: "bg-[oklch(from_var(--color-status-info)_l_c_h_/_0.12)] text-[oklch(var(--color-status-info))]",
+  ok: "bg-[oklch(from_var(--color-status-ok)_l_c_h_/_0.12)] text-[var(--color-status-ok)]",
+  warning: "bg-[oklch(from_var(--color-status-warning)_l_c_h_/_0.12)] text-[var(--color-status-warning)]",
+  critical: "bg-[oklch(from_var(--color-status-critical)_l_c_h_/_0.12)] text-[var(--color-status-critical)]",
+  info: "bg-[oklch(from_var(--color-status-info)_l_c_h_/_0.12)] text-[var(--color-status-info)]",
 };
 
 export interface KpiCardProps {

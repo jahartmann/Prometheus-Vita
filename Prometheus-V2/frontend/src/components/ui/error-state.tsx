@@ -26,7 +26,7 @@ export function ErrorState({
       style={{
         borderColor: "oklch(from var(--color-status-critical) l c h / 0.4)",
         backgroundColor: "oklch(from var(--color-status-critical) l c h / 0.08)",
-        color: "oklch(var(--color-status-critical))",
+        color: "var(--color-status-critical)",
       }}
     >
       <div className="flex items-start gap-2">

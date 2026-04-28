@@ -2,7 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import { ArrowRight } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { Card, CardContent } from "./card";
-import { Button } from "./button";
+import { buttonVariants } from "./button";
 import { StatusBadge, type StatusTone } from "./status-badge";
 import { cn } from "@/lib/utils";
 
@@ -40,12 +40,16 @@ export function ActionCard({ tone, icon: Icon, title, description, badge, href, 
           </div>
           <StatusBadge tone={tone}>{badge}</StatusBadge>
         </div>
-        <Button variant="outline" size="sm" className="mt-auto w-fit">
-          <Link to={href}>
-            {actionLabel}
-            <ArrowRight className="ml-2 h-4 w-4" />
-          </Link>
-        </Button>
+        <Link
+          to={href}
+          className={cn(
+            buttonVariants({ variant: "outline", size: "sm" }),
+            "mt-auto w-fit"
+          )}
+        >
+          {actionLabel}
+          <ArrowRight className="ml-2 h-4 w-4" />
+        </Link>
       </CardContent>
     </Card>
   );
