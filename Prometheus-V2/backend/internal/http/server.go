@@ -10,6 +10,7 @@ import (
 
 	"github.com/antigravity/prometheus-v2/internal/api"
 	"github.com/antigravity/prometheus-v2/internal/platform/metrics"
+	"github.com/antigravity/prometheus-v2/internal/web"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	oapimw "github.com/oapi-codegen/echo-middleware"
@@ -89,6 +90,10 @@ func NewServer(deps Deps) *echo.Echo {
 	v1 := e.Group("/api/v1")
 	v1.Use(oapimw.OapiRequestValidator(spec))
 	api.RegisterHandlersWithBaseURL(e, &apiServer{}, "/api/v1")
+
+	if err := web.RegisterStatic(e); err != nil {
+		deps.Logger.Error("static asset registration failed", slog.Any("error", err))
+	}
 
 	return e
 }
