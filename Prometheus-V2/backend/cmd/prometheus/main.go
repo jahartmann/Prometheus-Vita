@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/antigravity/prometheus-v2/internal/config"
 	httpserver "github.com/antigravity/prometheus-v2/internal/http"
@@ -44,13 +45,17 @@ func main() {
 		os.Exit(1)
 	}
 
-	riverClient, err := jobs.NewClient(ctx, pool, jobs.NewWorkers())
+	riverClient, err := jobs.NewClient(ctx, pool, jobs.NewWorkers(), jobs.DefaultQueues())
 	if err != nil {
 		logger.Error("river client init failed", slog.Any("error", err))
 		os.Exit(1)
 	}
 	defer func() {
-		if err := riverClient.Stop(context.Background()); err != nil {
+		// Use a fresh context with a deadline so River drains in-flight jobs
+		// even after the signal-cancel context fires, but never blocks forever.
+		stopCtx, stopCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer stopCancel()
+		if err := riverClient.Stop(stopCtx); err != nil {
 			logger.Error("river client stop failed", slog.Any("error", err))
 		}
 	}()

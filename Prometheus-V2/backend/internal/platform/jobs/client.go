@@ -19,6 +19,14 @@ const QueueDefault = "default"
 // type used by the riverpgxv5 driver.
 type Client = river.Client[pgx.Tx]
 
+// DefaultQueues returns the baseline queue config used until domain modules
+// contribute their own (one shared "default" queue with 4 workers).
+func DefaultQueues() map[string]river.QueueConfig {
+	return map[string]river.QueueConfig{
+		QueueDefault: {MaxWorkers: 4},
+	}
+}
+
 // NewWorkers returns an empty worker registry. Domain modules append their
 // workers to it before NewClient is called.
 func NewWorkers() *river.Workers {
@@ -26,14 +34,18 @@ func NewWorkers() *river.Workers {
 }
 
 // NewClient builds a River client backed by the shared pgx pool and starts it.
-// The caller is responsible for invoking Stop on shutdown.
-func NewClient(ctx context.Context, pool *db.Pool, workers *river.Workers) (*Client, error) {
+// The queues map controls per-queue worker counts; pass DefaultQueues() to
+// start with just the shared default queue, or merge in per-domain entries to
+// isolate workloads (e.g. host_polls, migrations, backups). The caller is
+// responsible for invoking Stop on shutdown.
+func NewClient(ctx context.Context, pool *db.Pool, workers *river.Workers, queues map[string]river.QueueConfig) (*Client, error) {
+	if len(queues) == 0 {
+		queues = DefaultQueues()
+	}
 	driver := riverpgxv5.New(pool.Pool)
 	cli, err := river.NewClient(driver, &river.Config{
 		Workers: workers,
-		Queues: map[string]river.QueueConfig{
-			QueueDefault: {MaxWorkers: 4},
-		},
+		Queues:  queues,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("init river client: %w", err)

@@ -23,7 +23,7 @@ func TestNewClient_RegistersWorkers(t *testing.T) {
 
 	require.NoError(t, jobs.MigrateUp(ctx, pool))
 
-	client, err := jobs.NewClient(ctx, pool, jobs.NewWorkers())
+	client, err := jobs.NewClient(ctx, pool, jobs.NewWorkers(), jobs.DefaultQueues())
 	require.NoError(t, err)
 	require.NotNil(t, client)
 	require.NoError(t, client.Stop(ctx))
