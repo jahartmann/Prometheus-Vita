@@ -31,16 +31,75 @@ type Deps struct {
 	DB      DBPinger
 	Redis   RedisPinger
 	Metrics *metrics.Registry
+	// Auth is the small surface server.go uses to delegate authentication
+	// endpoints to the auth domain. May be nil during early bring-up
+	// (existing tests) — in that case the auth methods on apiServer return
+	// 501 instead of panicking on a nil dispatch.
+	Auth AuthHandler
 }
 
-type apiServer struct{}
+// AuthHandler is the narrow interface server.go calls to implement the
+// generated auth endpoints. The auth domain's HTTPHandler satisfies this
+// interface; keeping the surface here avoids importing the domain package
+// from the http package and lets tests inject fakes.
+type AuthHandler interface {
+	Login(c echo.Context) error
+	Refresh(c echo.Context) error
+	Logout(c echo.Context) error
+	GetMe(c echo.Context) error
+}
 
-func (apiServer) GetSystemHealth(c echo.Context) error {
+// apiServer implements api.ServerInterface. The auth methods are forwarded
+// to the injected AuthHandler; GetSystemHealth is implemented inline because
+// it has no dependencies beyond the request context.
+type apiServer struct {
+	auth AuthHandler
+}
+
+func (a apiServer) GetSystemHealth(c echo.Context) error {
 	return c.JSON(http.StatusOK, api.SystemHealth{
 		Status:    api.Ok,
 		Version:   "0.1.0",
 		RequestId: c.Response().Header().Get(echo.HeaderXRequestID),
 	})
+}
+
+// notWired returns a 501 when an auth method is invoked without a configured
+// AuthHandler. This keeps the existing tests (which build a server with
+// Deps.Auth == nil) safe: they only hit /healthz, /readyz, and
+// /api/v1/system/health, none of which touch auth — but if a future test
+// accidentally hits an auth path we surface a clear error instead of nil
+// pointer panic.
+func notWired() error {
+	return echo.NewHTTPError(http.StatusNotImplemented, "auth not wired")
+}
+
+func (a apiServer) Login(c echo.Context) error {
+	if a.auth == nil {
+		return notWired()
+	}
+	return a.auth.Login(c)
+}
+
+func (a apiServer) Refresh(c echo.Context) error {
+	if a.auth == nil {
+		return notWired()
+	}
+	return a.auth.Refresh(c)
+}
+
+func (a apiServer) Logout(c echo.Context) error {
+	if a.auth == nil {
+		return notWired()
+	}
+	return a.auth.Logout(c)
+}
+
+func (a apiServer) GetMe(c echo.Context) error {
+	if a.auth == nil {
+		return notWired()
+	}
+	return a.auth.GetMe(c)
 }
 
 func NewServer(deps Deps) *echo.Echo {
@@ -89,7 +148,7 @@ func NewServer(deps Deps) *echo.Echo {
 	spec.Servers = nil
 	v1 := e.Group("/api/v1")
 	v1.Use(oapimw.OapiRequestValidator(spec))
-	api.RegisterHandlersWithBaseURL(e, &apiServer{}, "/api/v1")
+	api.RegisterHandlersWithBaseURL(e, &apiServer{auth: deps.Auth}, "/api/v1")
 
 	if err := web.RegisterStatic(e); err != nil {
 		deps.Logger.Error("static asset registration failed", slog.Any("error", err))
