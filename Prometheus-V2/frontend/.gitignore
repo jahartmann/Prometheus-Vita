@@ -1,7 +1,9 @@
 node_modules/
 dist/
+dist-tsc-node/
 .vite/
 coverage/
 *.log
+*.tsbuildinfo
 src/routeTree.gen.ts
 src/lib/api/schema.d.ts

@@ -1,0 +1,23 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light dark;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: oklch(0.98 0.005 240);
+  color: oklch(0.18 0.02 240);
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    background: oklch(0.16 0.01 240);
+    color: oklch(0.95 0.01 240);
+  }
+}
