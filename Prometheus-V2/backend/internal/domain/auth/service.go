@@ -25,6 +25,7 @@ const (
 var (
 	ErrInvalidCredentials = errors.New("invalid credentials")
 	ErrUserDisabled       = errors.New("user disabled")
+	ErrUserNotFound       = errors.New("user not found")
 	ErrSessionNotFound    = errors.New("session not found")
 	ErrSessionExpired     = errors.New("session expired")
 )
@@ -121,7 +122,9 @@ func (s *Service) Refresh(ctx context.Context, rawRefresh, userAgent, ipAddress 
 	u, err := s.queries.GetUserByID(ctx, sess.UserID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrInvalidCredentials
+			// Session pointed at a now-deleted user. Treat as orphaned
+			// session: client must log in again. Not a credential failure.
+			return nil, ErrSessionNotFound
 		}
 		return nil, fmt.Errorf("get user by id: %w", err)
 	}
@@ -161,7 +164,7 @@ func (s *Service) GetUser(ctx context.Context, id uuid.UUID) (*User, error) {
 	u, err := s.queries.GetUserByID(ctx, pgUUID(id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrInvalidCredentials
+			return nil, ErrUserNotFound
 		}
 		return nil, fmt.Errorf("get user by id: %w", err)
 	}

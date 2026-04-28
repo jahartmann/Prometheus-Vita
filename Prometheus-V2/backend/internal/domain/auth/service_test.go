@@ -204,11 +204,8 @@ func TestRefresh_RotatesAndReturnsNewTokens(t *testing.T) {
 	require.NotEqual(t, first.RefreshToken, second.RefreshToken,
 		"refresh token must rotate")
 	require.NotEmpty(t, second.AccessToken, "refresh must mint a new access token")
-	// Note: two access tokens minted in the same second for the same user
-	// will have identical claims and therefore identical signed bytes —
-	// that is by design (no nonce in AccessClaims). The access-token
-	// rotation guarantee comes from a fresh signature each time, not from
-	// byte-distinct tokens.
+	require.NotEqual(t, first.AccessToken, second.AccessToken,
+		"access tokens must be byte-distinct via jti claim")
 
 	// The old session should be revoked.
 	old := m.sessions[originalSessionID]
@@ -219,6 +216,46 @@ func TestRefresh_RotatesAndReturnsNewTokens(t *testing.T) {
 	require.Error(t, err)
 	require.True(t, errors.Is(err, ErrSessionNotFound) || errors.Is(err, ErrSessionExpired),
 		"old refresh token must not be re-usable")
+}
+
+
+
+func TestLogin_RejectsDisabledUser(t *testing.T) {
+	svc, m, _ := newTestService(t)
+	// Disable the seeded user; Login must refuse before checking the password.
+	for id, u := range m.usersByID {
+		u.Enabled = false
+		m.usersByID[id] = u
+	}
+	for email, u := range m.usersByEmail {
+		u.Enabled = false
+		m.usersByEmail[email] = u
+	}
+
+	_, err := svc.Login(context.Background(), LoginRequest{
+		Email:    "alice@example.com",
+		Password: "a-good-password-1234",
+	})
+	require.ErrorIs(t, err, ErrUserDisabled)
+}
+
+func TestLogin_AccessTokenCarriesAdminPermissions(t *testing.T) {
+	svc, _, userID := newTestService(t)
+	signer := NewJWTSigner([]byte("test-secret-please-be-32-bytes-or-more!"), "prometheus-v2")
+
+	tokens, err := svc.Login(context.Background(), LoginRequest{
+		Email:    "alice@example.com",
+		Password: "a-good-password-1234",
+	})
+	require.NoError(t, err)
+
+	claims, err := signer.VerifyAccessToken(tokens.AccessToken)
+	require.NoError(t, err)
+	require.Equal(t, userID, claims.UserID)
+	require.Equal(t, RoleAdmin, claims.Role)
+	require.ElementsMatch(t, PermissionsForRole(RoleAdmin), claims.Permissions,
+		"access token must carry the role's full permission set")
+	require.NotEmpty(t, claims.ID, "jti claim must be populated")
 }
 
 func TestLogout_RevokesSessionIdempotent(t *testing.T) {

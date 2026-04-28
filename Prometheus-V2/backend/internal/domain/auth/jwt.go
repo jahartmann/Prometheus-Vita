@@ -51,6 +51,10 @@ func (s *JWTSigner) SignAccessToken(userID uuid.UUID, role string, perms []strin
 		Role:        role,
 		Permissions: perms,
 		RegisteredClaims: jwt.RegisteredClaims{
+			// Per-token unique ID makes two tokens minted in the same wall
+			// second byte-distinct, gives audit a correlation handle, and
+			// allows future per-token revocation.
+			ID:        uuid.NewString(),
 			Issuer:    s.issuer,
 			Subject:   userID.String(),
 			IssuedAt:  jwt.NewNumericDate(now),
