@@ -1,6 +1,7 @@
 # Build outputs
 backend/bin/
-backend/internal/web/dist/assets/
+backend/internal/web/dist/*
+!backend/internal/web/dist/index.html
 frontend/dist/
 frontend/node_modules/
 frontend/.vite/
