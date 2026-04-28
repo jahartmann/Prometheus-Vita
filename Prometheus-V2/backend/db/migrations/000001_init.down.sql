@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS prom_v2._v2_meta;
+DROP SCHEMA IF EXISTS prom_v2;

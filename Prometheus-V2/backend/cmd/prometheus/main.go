@@ -9,6 +9,7 @@ import (
 
 	"github.com/antigravity/prometheus-v2/internal/config"
 	httpserver "github.com/antigravity/prometheus-v2/internal/http"
+	"github.com/antigravity/prometheus-v2/internal/platform/db"
 	"github.com/antigravity/prometheus-v2/internal/platform/log"
 )
 
@@ -25,9 +26,21 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
+	if err := db.RunMigrations(cfg.DatabaseURL, "file://db/migrations"); err != nil {
+		logger.Error("db migrations failed", slog.Any("error", err))
+		os.Exit(1)
+	}
+
+	pool, err := db.New(ctx, cfg.DatabaseURL)
+	if err != nil {
+		logger.Error("db init failed", slog.Any("error", err))
+		os.Exit(1)
+	}
+	defer pool.Close()
+
 	server := httpserver.NewServer(httpserver.Deps{
 		Logger: logger,
-		DB:     nil,
+		DB:     pool,
 		Redis:  nil,
 	})
 
