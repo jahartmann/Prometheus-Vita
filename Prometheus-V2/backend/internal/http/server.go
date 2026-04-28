@@ -44,6 +44,9 @@ func NewServer(deps Deps) *echo.Echo {
 		deps.Logger.Error("openapi spec load failed", slog.Any("error", err))
 		return e
 	}
+	// kin-openapi's request validator matches request URL against spec.Servers; clearing
+	// it lets the validator work when mounted on an Echo sub-group (the group prefix is
+	// already stripped before the middleware runs).
 	spec.Servers = nil
 	v1 := e.Group("/api/v1")
 	v1.Use(oapimw.OapiRequestValidator(spec))
