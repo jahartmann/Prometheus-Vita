@@ -7,14 +7,26 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/antigravity/prometheus-v2/internal/api"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	oapimw "github.com/oapi-codegen/echo-middleware"
 )
 
 type Deps struct {
 	Logger *slog.Logger
 	DB     DBPinger
 	Redis  RedisPinger
+}
+
+type apiServer struct{}
+
+func (apiServer) GetSystemHealth(c echo.Context) error {
+	return c.JSON(http.StatusOK, api.SystemHealth{
+		Status:    api.Ok,
+		Version:   "0.1.0",
+		RequestId: c.Response().Header().Get(echo.HeaderXRequestID),
+	})
 }
 
 func NewServer(deps Deps) *echo.Echo {
@@ -26,6 +38,17 @@ func NewServer(deps Deps) *echo.Echo {
 	e.Use(middleware.Gzip())
 
 	RegisterHealth(e, deps.DB, deps.Redis)
+
+	spec, err := api.GetSwagger()
+	if err != nil {
+		deps.Logger.Error("openapi spec load failed", slog.Any("error", err))
+		return e
+	}
+	spec.Servers = nil
+	v1 := e.Group("/api/v1")
+	v1.Use(oapimw.OapiRequestValidator(spec))
+	api.RegisterHandlersWithBaseURL(e, &apiServer{}, "/api/v1")
+
 	return e
 }
 

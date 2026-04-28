@@ -1,6 +1,7 @@
 package http_test
 
 import (
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -31,4 +32,17 @@ func TestReadyz_ReturnsServiceUnavailableWhenDBNil(t *testing.T) {
 	e.ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusServiceUnavailable, rec.Code)
+}
+
+func TestSystemHealth_ReturnsExpectedShape(t *testing.T) {
+	deps := httpserver.Deps{Logger: slog.Default(), DB: nil, Redis: nil}
+	server := httpserver.NewServer(deps)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/system/health", nil)
+	rec := httptest.NewRecorder()
+	server.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), `"status":"ok"`)
+	require.Contains(t, rec.Body.String(), `"version":"0.1.0"`)
 }
