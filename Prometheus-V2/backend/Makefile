@@ -1,4 +1,4 @@
-.PHONY: tools fmt lint test test-integration generate sqlc oapi build verify clean
+.PHONY: tools fmt fmt-check lint test test-integration generate sqlc oapi build verify clean
 
 GO ?= go
 SQLC ?= sqlc
@@ -10,8 +10,18 @@ tools:
 	$(GO) install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
 	$(GO) install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 
+# fmt mutates files to apply gofmt formatting. Use this locally when you want
+# to fix formatting; CI should call fmt-check instead so unformatted code fails
+# the build instead of being silently rewritten.
 fmt:
 	$(GO) fmt ./...
+
+# fmt-check exits non-zero if any file needs reformatting. Suitable for CI.
+fmt-check:
+	@unformatted="$$(gofmt -l . 2>/dev/null)"; \
+	if [ -n "$$unformatted" ]; then \
+		echo "Files need gofmt:"; echo "$$unformatted"; exit 1; \
+	fi
 
 lint:
 	golangci-lint run ./...
@@ -33,10 +43,15 @@ oapi:
 build:
 	$(GO) build -trimpath -ldflags="-s -w" -o bin/prometheus ./cmd/prometheus
 
-verify: fmt lint test
+# verify is CI-safe: fmt-check fails on unformatted files instead of rewriting
+# them, so unformatted code can't sneak into the build.
+verify: fmt-check lint test
 
-# clean removes build artifacts and all generated code under internal/db/repo
-# (sqlc emits db.go, models.go, querier.go and *.sql.go) plus the generated
-# OpenAPI server stub.
+# clean removes build artifacts and the explicit list of generated files so
+# hand-written code in internal/db/repo (e.g. integration test helpers) is not
+# accidentally deleted by a glob.
 clean:
-	rm -rf bin/ internal/api/openapi.gen.go internal/db/repo/*.go
+	rm -rf bin/
+	rm -f internal/api/openapi.gen.go
+	rm -f internal/db/repo/db.go internal/db/repo/models.go internal/db/repo/querier.go
+	rm -f internal/db/repo/*.sql.go
