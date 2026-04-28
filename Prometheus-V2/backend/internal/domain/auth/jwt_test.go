@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/antigravity/prometheus-v2/internal/domain/auth"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -40,5 +41,28 @@ func TestVerifyAccessToken_RejectsWrongSecret(t *testing.T) {
 
 	other := auth.NewJWTSigner([]byte("a-different-secret-also-32-or-more-yes!"), "prometheus-v2")
 	_, err = other.VerifyAccessToken(tok)
+	require.Error(t, err)
+}
+
+// TestVerifyAccessToken_RejectsNonHS256Algorithm guards against algorithm
+// confusion: a token signed with HS512 (or any non-HS256 algorithm) using
+// the same secret must be rejected, because the verifier pins to HS256.
+func TestVerifyAccessToken_RejectsNonHS256Algorithm(t *testing.T) {
+	secret := []byte("test-secret-please-be-32-bytes-or-more!")
+	signer := auth.NewJWTSigner(secret, "prometheus-v2")
+
+	// Manually sign a token with HS512 using the same secret.
+	now := time.Now().UTC()
+	claims := jwt.RegisteredClaims{
+		Issuer:    "prometheus-v2",
+		Subject:   uuid.New().String(),
+		IssuedAt:  jwt.NewNumericDate(now),
+		ExpiresAt: jwt.NewNumericDate(now.Add(5 * time.Minute)),
+	}
+	hs512 := jwt.NewWithClaims(jwt.SigningMethodHS512, claims)
+	raw, err := hs512.SignedString(secret)
+	require.NoError(t, err)
+
+	_, err = signer.VerifyAccessToken(raw)
 	require.Error(t, err)
 }

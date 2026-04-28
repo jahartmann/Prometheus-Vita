@@ -64,12 +64,18 @@ func (s *JWTSigner) SignAccessToken(userID uuid.UUID, role string, perms []strin
 
 func (s *JWTSigner) VerifyAccessToken(raw string) (*AccessClaims, error) {
 	claims := &AccessClaims{}
-	parsed, err := jwt.ParseWithClaims(raw, claims, func(t *jwt.Token) (interface{}, error) {
-		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
-		}
-		return s.secret, nil
-	})
+	// WithValidMethods pins to HS256 exactly. Without it the parser would
+	// accept any HMAC-family algorithm in the token header, opening an
+	// algorithm-confusion attack vector against the same secret bytes.
+	parsed, err := jwt.ParseWithClaims(raw, claims,
+		func(t *jwt.Token) (interface{}, error) {
+			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+			}
+			return s.secret, nil
+		},
+		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidToken, err)
 	}
