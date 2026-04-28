@@ -9,8 +9,10 @@ import (
 	"time"
 
 	"github.com/antigravity/prometheus-v2/internal/api"
+	authmw "github.com/antigravity/prometheus-v2/internal/domain/auth"
 	"github.com/antigravity/prometheus-v2/internal/platform/metrics"
 	"github.com/antigravity/prometheus-v2/internal/web"
+	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	oapimw "github.com/oapi-codegen/echo-middleware"
@@ -36,6 +38,11 @@ type Deps struct {
 	// (existing tests) — in that case the auth methods on apiServer return
 	// 501 instead of panicking on a nil dispatch.
 	Auth AuthHandler
+	// AuthSigner is the JWT signer used by the RequireAuth middleware to
+	// verify access tokens on protected endpoints. When nil (existing tests
+	// and early bring-up), protected routes are registered without the
+	// middleware so they remain reachable.
+	AuthSigner *authmw.JWTSigner
 }
 
 // AuthHandler is the narrow interface server.go calls to implement the
@@ -142,13 +149,37 @@ func NewServer(deps Deps) *echo.Echo {
 		deps.Logger.Error("openapi spec load failed", slog.Any("error", err))
 		return e
 	}
-	// kin-openapi's request validator matches request URL against spec.Servers; clearing
-	// it lets the validator work when mounted on an Echo sub-group (the group prefix is
-	// already stripped before the middleware runs).
-	spec.Servers = nil
+	// kin-openapi's gorillamux router matches the full request URL against
+	// spec paths plus the Servers prefix. Echo group middleware does not
+	// strip the group prefix from c.Request().URL.Path, so we keep a single
+	// pathless server entry "/api/v1" — gorilla will trim that prefix before
+	// matching against /auth/login, /system/health, etc. Using a path-only
+	// URL (no scheme/host) avoids Host-header validation.
+	spec.Servers = openapi3.Servers{{URL: "/api/v1"}}
 	v1 := e.Group("/api/v1")
-	v1.Use(oapimw.OapiRequestValidator(spec))
-	api.RegisterHandlersWithBaseURL(e, &apiServer{auth: deps.Auth}, "/api/v1")
+	v1.Use(oapimw.OapiRequestValidatorWithOptions(spec, &oapimw.Options{SilenceServersWarning: true}))
+
+	// Manual route registration replaces api.RegisterHandlersWithBaseURL so we
+	// can split public auth endpoints (login/refresh/logout) from protected
+	// ones (auth/me, system/health). The OAPI validator sits on the v1 group
+	// and runs first; RequireAuth sits on the protected sub-group and runs
+	// second — Echo applies group middleware in registration order.
+	server := &apiServer{auth: deps.Auth}
+	v1.POST("/auth/login", server.Login)
+	v1.POST("/auth/refresh", server.Refresh)
+	v1.POST("/auth/logout", server.Logout)
+
+	if deps.AuthSigner != nil {
+		protected := v1.Group("")
+		protected.Use(authmw.RequireAuth(deps.AuthSigner))
+		protected.GET("/auth/me", server.GetMe)
+		protected.GET("/system/health", server.GetSystemHealth)
+	} else {
+		// Fallback for tests / early bring-up without a JWT signer: register
+		// the routes without auth so they remain reachable.
+		v1.GET("/auth/me", server.GetMe)
+		v1.GET("/system/health", server.GetSystemHealth)
+	}
 
 	if err := web.RegisterStatic(e); err != nil {
 		deps.Logger.Error("static asset registration failed", slog.Any("error", err))
