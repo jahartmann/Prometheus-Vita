@@ -1,0 +1,53 @@
+openapi: 3.0.3
+info:
+  title: Prometheus V2 API
+  version: 0.1.0
+  description: Prometheus V2 Operations Cockpit API.
+servers:
+  - url: /api/v1
+    description: Default V2 base path
+paths:
+  /system/health:
+    get:
+      summary: System health summary
+      operationId: getSystemHealth
+      tags: [system]
+      responses:
+        "200":
+          description: System is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SystemHealth"
+        "503":
+          description: System is degraded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+components:
+  schemas:
+    SystemHealth:
+      type: object
+      required: [status, version, request_id]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded, down]
+        version:
+          type: string
+        request_id:
+          type: string
+    Error:
+      type: object
+      required: [code, message, request_id]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+        request_id:
+          type: string

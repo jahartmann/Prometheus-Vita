@@ -1,0 +1,33 @@
+# Build outputs
+backend/bin/
+backend/internal/web/dist/*
+!backend/internal/web/dist/index.html
+frontend/dist/
+frontend/node_modules/
+frontend/.vite/
+
+# Generated code (regenerated via make generate)
+backend/internal/api/openapi.gen.go
+backend/internal/db/repo/*.go
+frontend/src/lib/api/schema.d.ts
+frontend/src/routeTree.gen.ts
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+.env.local
+
+# Test artifacts
+backend/coverage.out
+frontend/coverage/
+
+# Tooling
+backend/.tools/
