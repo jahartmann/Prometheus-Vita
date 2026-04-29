@@ -1,8 +1,19 @@
 import createClient from "openapi-fetch";
 import type { paths, components } from "./schema";
+import { getAccessToken } from "@/lib/auth/store";
 
 export const api = createClient<paths>({
   baseUrl: "/api/v1",
+});
+
+api.use({
+  onRequest({ request }) {
+    const token = getAccessToken();
+    if (token) {
+      request.headers.set("Authorization", `Bearer ${token}`);
+    }
+    return request;
+  },
 });
 
 export type SystemHealth = NonNullable<

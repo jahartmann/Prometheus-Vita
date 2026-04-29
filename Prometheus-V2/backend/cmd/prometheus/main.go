@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/antigravity/prometheus-v2/internal/config"
+	"github.com/antigravity/prometheus-v2/internal/db/repo"
+	"github.com/antigravity/prometheus-v2/internal/domain/auth"
 	httpserver "github.com/antigravity/prometheus-v2/internal/http"
 	"github.com/antigravity/prometheus-v2/internal/platform/db"
 	"github.com/antigravity/prometheus-v2/internal/platform/jobs"
@@ -71,11 +73,32 @@ func main() {
 
 	reg := metrics.New()
 
+	if cfg.JWTSecret == "" {
+		logger.Error("PROMETHEUS_JWT_SECRET is required")
+		os.Exit(1)
+	}
+	if len(cfg.JWTSecret) < 32 {
+		logger.Error("PROMETHEUS_JWT_SECRET must be at least 32 bytes")
+		os.Exit(1)
+	}
+
+	queries := repo.New(pool.Pool)
+	signer := auth.NewJWTSigner([]byte(cfg.JWTSecret), cfg.JWTIssuer)
+	authSvc := auth.NewService(queries, signer)
+	authHandler := auth.NewHTTPHandler(authSvc, cfg.CookieDomain, cfg.CookieSecure)
+
+	if err := auth.SeedBootstrapAdmin(ctx, queries, cfg.BootstrapAdminEmail, cfg.BootstrapAdminPassword, logger); err != nil {
+		logger.Error("bootstrap admin seed failed", slog.Any("error", err))
+		os.Exit(1)
+	}
+
 	server := httpserver.NewServer(httpserver.Deps{
-		Logger:  logger,
-		DB:      pool,
-		Redis:   redisClient,
-		Metrics: reg,
+		Logger:     logger,
+		DB:         pool,
+		Redis:      redisClient,
+		Metrics:    reg,
+		Auth:       authHandler,
+		AuthSigner: signer,
 	})
 
 	if err := httpserver.ListenAndServe(ctx, server, cfg.HTTPAddr, logger); err != nil {
