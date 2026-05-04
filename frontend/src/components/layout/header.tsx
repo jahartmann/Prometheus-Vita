@@ -23,6 +23,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useAuthStore } from "@/stores/auth-store";
 import { SearchTrigger } from "@/components/search/search-command";
 import { Breadcrumbs } from "@/components/layout/breadcrumbs";
+import { ScopeSwitcher } from "@/components/layout/scope-switcher";
 import { chatApi } from "@/lib/api";
 
 const segmentLabels: Record<string, string> = {
@@ -124,6 +125,8 @@ export function Header({ onMobileMenuToggle }: HeaderProps) {
 
       {/* Search — visually anchored on the left for fast access */}
       <SearchTrigger />
+
+      <ScopeSwitcher />
 
       {/* Mobile page title */}
       <span className="truncate text-sm font-medium md:hidden">{mobileTitle}</span>

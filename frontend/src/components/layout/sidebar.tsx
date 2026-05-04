@@ -5,148 +5,151 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import {
+  Activity,
+  AlertTriangle,
+  Archive,
+  Bell,
+  Bot,
+  Brain,
+  ChevronDown,
+  Flame,
+  GitBranch,
+  GitCompare,
+  HardDrive,
+  HeartPulse,
+  KeyRound,
   LayoutDashboard,
+  Link2,
+  ListChecks,
+  LogOut,
+  Moon,
+  Network,
+  Plus,
+  RadioTower,
+  Search,
+  SearchCheck,
   Server,
   Settings,
-  Flame,
-  ChevronDown,
-  ChevronRight,
-  Network,
-  HardDrive,
-  Archive,
-  ShieldCheck,
-  Disc,
-  ArrowRightLeft,
-  GitCompare,
-  Zap,
-  GitBranch,
-  Tag,
-  AlertTriangle,
-  Search,
-  Moon,
-  Sun,
-  LogOut,
-  HeartPulse,
-  Link2,
-  Bot,
-  KeyRound,
-  Users,
-  RadioTower,
-  UserCog,
-  ListChecks,
-  SearchCheck,
-  FileBarChart,
-  FileText,
-  Plus,
-  Sparkles,
-  Bell,
   Shield,
-  Activity,
+  ShieldCheck,
+  Sun,
+  Tag,
+  UserCog,
+  Users,
   Workflow,
+  Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useNodeStore } from "@/stores/node-store";
 import { useAuthStore } from "@/stores/auth-store";
+import { useNodeStore } from "@/stores/node-store";
 import { OnboardNodeDialog } from "@/components/nodes/onboard-node-dialog";
-
-// Keep the operational core visible and put deeper functions behind
-// predictable collapsed groups. No navigation target is removed.
 
 interface NavItem {
   label: string;
   href: string;
   icon: React.ComponentType<{ className?: string }>;
   matchPrefix?: string;
-  excludePrefix?: string[];
   keywords?: string;
 }
 
-interface NavSection {
+interface WorkspaceNav {
+  id: string;
   label: string;
-  defaultOpen?: boolean;
-  includeNodes?: boolean;
+  description: string;
+  icon: React.ComponentType<{ className?: string }>;
   items: NavItem[];
 }
 
-const sections: NavSection[] = [
+const workspaces: WorkspaceNav[] = [
   {
-    label: "Übersicht",
-    defaultOpen: true,
+    id: "lage",
+    label: "Lage",
+    description: "Status, Aufgaben, Alarme",
+    icon: LayoutDashboard,
     items: [
-      { label: "Dashboard", href: "/", icon: LayoutDashboard, keywords: "lagezentrum start home" },
-      { label: "Monitoring", href: "/monitoring", icon: Activity, matchPrefix: "/monitoring", keywords: "metriken graphs" },
-      { label: "Task-Center", href: "/task-center", icon: ListChecks, matchPrefix: "/task-center", keywords: "aufgaben todo timeline" },
+      { label: "Lagezentrum", href: "/", icon: LayoutDashboard, keywords: "dashboard start cockpit" },
+      { label: "Monitoring", href: "/monitoring", icon: Activity, matchPrefix: "/monitoring" },
+      { label: "Tasks", href: "/task-center", icon: ListChecks, matchPrefix: "/task-center" },
       { label: "Alerts", href: "/alerts", icon: AlertTriangle, matchPrefix: "/alerts" },
     ],
   },
   {
+    id: "infra",
     label: "Infrastruktur",
-    defaultOpen: false,
-    includeNodes: true,
+    description: "Nodes, VMs, Netz, Storage",
+    icon: Server,
     items: [
+      { label: "Nodes", href: "/nodes", icon: Server, matchPrefix: "/nodes" },
       { label: "Cluster", href: "/cluster", icon: RadioTower, matchPrefix: "/cluster" },
-      { label: "Speicher", href: "/storage", icon: HardDrive, matchPrefix: "/storage" },
-      { label: "Backups", href: "/backups", icon: Archive, matchPrefix: "/backups" },
-      { label: "Migrationen", href: "/migrations", icon: ArrowRightLeft, matchPrefix: "/migrations" },
-      { label: "Disaster Recovery", href: "/disaster-recovery", icon: Shield, matchPrefix: "/disaster-recovery", keywords: "dr runbook" },
-      { label: "ISOs & Vorlagen", href: "/isos", icon: Disc, matchPrefix: "/isos" },
+      { label: "Storage", href: "/storage", icon: HardDrive, matchPrefix: "/storage" },
+      { label: "Netzwerk", href: "/network", icon: Network, matchPrefix: "/network" },
       { label: "Topologie", href: "/topology", icon: Workflow, matchPrefix: "/topology" },
+      { label: "ISOs & Vorlagen", href: "/isos", icon: Archive, matchPrefix: "/isos" },
     ],
   },
   {
-    label: "Intelligenz",
-    defaultOpen: false,
+    id: "schutz",
+    label: "Schutz",
+    description: "Security, Backup, Recovery",
+    icon: ShieldCheck,
+    items: [
+      { label: "Sicherheit", href: "/security", icon: ShieldCheck, matchPrefix: "/security" },
+      { label: "Backups", href: "/backups", icon: Archive, matchPrefix: "/backups" },
+      { label: "Disaster Recovery", href: "/disaster-recovery", icon: Shield, matchPrefix: "/disaster-recovery" },
+      { label: "Migrationen", href: "/migrations", icon: GitBranch, matchPrefix: "/migrations" },
+      { label: "Reports", href: "/reports", icon: Activity, matchPrefix: "/reports" },
+    ],
+  },
+  {
+    id: "automation",
+    label: "Automatisierung",
+    description: "Agent, Analyse, Regeln",
+    icon: Bot,
     items: [
       { label: "KI-Chat", href: "/chat", icon: Bot, matchPrefix: "/chat" },
-      { label: "Sicherheit", href: "/security", icon: ShieldCheck, matchPrefix: "/security" },
-      { label: "Netzwerk-Analyse", href: "/network", icon: Network, matchPrefix: "/network", keywords: "ports scan bandbreite" },
-      { label: "VM-Gesundheit", href: "/health", icon: HeartPulse, matchPrefix: "/health" },
-      { label: "Drift-Erkennung", href: "/drift", icon: GitCompare, matchPrefix: "/drift" },
+      { label: "Briefing", href: "/briefing", icon: Bell, matchPrefix: "/briefing" },
+      { label: "Empfehlungen", href: "/recommendations", icon: HeartPulse, matchPrefix: "/recommendations" },
+      { label: "Drift", href: "/drift", icon: GitCompare, matchPrefix: "/drift" },
       { label: "Root Cause", href: "/root-cause", icon: SearchCheck, matchPrefix: "/root-cause" },
-      { label: "Reflex-Regeln", href: "/reflex", icon: Zap, matchPrefix: "/reflex" },
-      { label: "Knowledge Graph", href: "/knowledge-graph", icon: GitBranch, matchPrefix: "/knowledge-graph", keywords: "wissensbasis brain" },
-    ],
-  },
-  {
-    label: "Verwaltung",
-    defaultOpen: false,
-    items: [
-      { label: "Logs", href: "/logs", icon: FileText, matchPrefix: "/logs" },
-      { label: "Reports", href: "/reports", icon: FileBarChart, matchPrefix: "/reports" },
+      { label: "Reflex", href: "/reflex", icon: Zap, matchPrefix: "/reflex" },
+      { label: "Knowledge Graph", href: "/knowledge-graph", icon: Brain, matchPrefix: "/knowledge-graph" },
       { label: "Abhängigkeiten", href: "/dependencies", icon: Link2, matchPrefix: "/dependencies" },
-      { label: "Tags", href: "/tags", icon: Tag, matchPrefix: "/tags" },
+      { label: "VM-Gesundheit", href: "/health", icon: HeartPulse, matchPrefix: "/health" },
     ],
   },
   {
-    label: "Einstellungen",
-    defaultOpen: false,
+    id: "admin",
+    label: "Admin",
+    description: "Rechte, Tokens, System",
+    icon: Settings,
     items: [
-      { label: "Übersicht", href: "/settings", icon: Settings },
-      { label: "Nodes", href: "/settings/nodes", icon: Server, matchPrefix: "/settings/nodes" },
-      { label: "Agent & KI", href: "/settings/agent", icon: Sparkles, matchPrefix: "/settings/agent" },
+      { label: "Admin-Hub", href: "/settings", icon: Settings },
+      { label: "Systemstatus", href: "/settings/system", icon: Activity, matchPrefix: "/settings/system" },
       { label: "Benutzer", href: "/settings/users", icon: Users, matchPrefix: "/settings/users" },
       { label: "Rollen & Rechte", href: "/settings/roles", icon: UserCog, matchPrefix: "/settings/roles" },
       { label: "API-Tokens", href: "/settings/api-tokens", icon: KeyRound, matchPrefix: "/settings/api-tokens" },
-      { label: "Audit-Log", href: "/settings/audit-log", icon: FileText, matchPrefix: "/settings/audit-log" },
-      { label: "Benachrichtigungen", href: "/settings/notifications", icon: Bell, matchPrefix: "/settings/notifications" },
+      { label: "Tags", href: "/settings/tags", icon: Tag, matchPrefix: "/settings/tags" },
     ],
   },
 ];
 
 function matchesNavItem(pathname: string, item: NavItem): boolean {
-  if (item.matchPrefix) {
-    if (item.excludePrefix?.some((p) => pathname.startsWith(p))) return false;
-    return pathname.startsWith(item.matchPrefix);
-  }
+  if (item.href === "/") return pathname === "/";
+  if (item.matchPrefix) return pathname.startsWith(item.matchPrefix);
   return pathname === item.href;
 }
 
 function fuzzyMatch(query: string, item: NavItem): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
-  const haystack = `${item.label} ${item.keywords ?? ""} ${item.href}`.toLowerCase();
-  return haystack.includes(q);
+  return `${item.label} ${item.keywords ?? ""} ${item.href}`.toLowerCase().includes(q);
+}
+
+function workspaceForPath(pathname: string): string {
+  const match = workspaces.find((workspace) =>
+    workspace.items.some((item) => matchesNavItem(pathname, item))
+  );
+  return match?.id ?? "lage";
 }
 
 interface SidebarProps {
@@ -158,22 +161,12 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { theme, setTheme } = useTheme();
-  const { nodes, fetchNodes } = useNodeStore();
+  const { fetchNodes } = useNodeStore();
   const { user, logout } = useAuthStore();
   const [onboardOpen, setOnboardOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const [openSections, setOpenSections] = useState<Record<string, boolean>>(() =>
-    sections.reduce<Record<string, boolean>>((acc, section) => {
-      acc[section.label] =
-        Boolean(section.defaultOpen) ||
-        (section.includeNodes && pathname.startsWith("/nodes")) ||
-        section.items.some((item) => matchesNavItem(pathname, item));
-      return acc;
-    }, {})
-  );
-  const [serversOpen, setServersOpen] = useState(pathname.startsWith("/nodes"));
-  const [openNodes, setOpenNodes] = useState<Record<string, boolean>>({});
+  const [openWorkspace, setOpenWorkspace] = useState(() => workspaceForPath(pathname));
 
   useEffect(() => {
     const token = useAuthStore.getState().accessToken;
@@ -185,44 +178,18 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
   }, [fetchNodes]);
 
   useEffect(() => {
-    if (pathname.startsWith("/nodes/")) {
-      const activeNodeId = pathname.split("/")[2];
-      if (activeNodeId) {
-        setServersOpen(true);
-        setOpenNodes((prev) => ({ ...prev, [activeNodeId]: true }));
-      }
-    }
-    const activeSection = sections.find(
-      (s) =>
-        (s.includeNodes && pathname.startsWith("/nodes")) ||
-        s.items.some((item) => matchesNavItem(pathname, item))
-    );
-    if (activeSection) {
-      setOpenSections((prev) => ({ ...prev, [activeSection.label]: true }));
-    }
+    setOpenWorkspace(workspaceForPath(pathname));
   }, [pathname]);
 
-  const filteredSections = useMemo(() => {
-    if (!search.trim()) return sections;
-    return sections
-      .map((section) => ({
-        ...section,
-        items: section.items.filter((item) => fuzzyMatch(search, item)),
+  const filteredWorkspaces = useMemo(() => {
+    if (!search.trim()) return workspaces;
+    return workspaces
+      .map((workspace) => ({
+        ...workspace,
+        items: workspace.items.filter((item) => fuzzyMatch(search, item)),
       }))
-      .filter((section) => section.items.length > 0 || (section.includeNodes && search.trim() === ""));
+      .filter((workspace) => workspace.items.length > 0);
   }, [search]);
-
-  // While searching, force-open every section that has results.
-  useEffect(() => {
-    if (!search.trim()) return;
-    setOpenSections((prev) => {
-      const next = { ...prev };
-      for (const section of filteredSections) {
-        next[section.label] = true;
-      }
-      return next;
-    });
-  }, [search, filteredSections]);
 
   const handleLogout = () => {
     logout();
@@ -231,11 +198,10 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
 
   const initials = user?.username ? user.username.slice(0, 2).toUpperCase() : "??";
 
-  // ────────────── Render helpers ──────────────
-
   const renderNavLink = (item: NavItem) => {
     const active = matchesNavItem(pathname, item);
     const Icon = item.icon;
+
     return (
       <Link
         key={item.href}
@@ -251,12 +217,12 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
         {active && (
           <span
             aria-hidden
-            className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-r-full bg-primary"
+            className="absolute bottom-1.5 left-0 top-1.5 w-0.5 rounded-r-full bg-primary"
           />
         )}
         <Icon
           className={cn(
-            "h-4 w-4 shrink-0 transition-colors",
+            "h-4 w-4 shrink-0",
             active ? "text-foreground" : "text-sidebar-muted group-hover:text-foreground"
           )}
         />
@@ -265,139 +231,54 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
     );
   };
 
-  const renderNodeTree = () => (
-    <div className="space-y-0.5">
-      <button
-        type="button"
-        onClick={() => setServersOpen((v) => !v)}
-        className={cn(
-          "flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] transition-colors",
-          pathname.startsWith("/nodes")
-            ? "bg-accent/70 font-medium text-foreground"
-            : "text-sidebar-muted hover:bg-accent/45 hover:text-foreground"
-        )}
-      >
-        <Server className="h-4 w-4 shrink-0" />
-        <span className="flex-1 truncate text-left">Server</span>
-        <span className="text-[10px] tabular-nums text-sidebar-muted">{nodes.length}</span>
-        {serversOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-      </button>
-      {serversOpen && (
-        <div className="ml-3.5 flex flex-col gap-0.5 border-l border-border/60 pl-2">
-          {nodes.map((node) => {
-            const open = openNodes[node.id] ?? false;
-            const onPath = pathname.startsWith(`/nodes/${node.id}`);
-            return (
-              <div key={node.id}>
-                <button
-                  type="button"
-                  onClick={() => setOpenNodes((p) => ({ ...p, [node.id]: !p[node.id] }))}
-                  className={cn(
-                    "flex w-full items-center gap-2 rounded-md px-2 py-1 text-[12.5px] transition-colors",
-                    onPath
-                      ? "bg-primary/10 text-primary"
-                      : "text-sidebar-muted hover:bg-accent/45 hover:text-foreground"
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "h-1.5 w-1.5 shrink-0 rounded-full",
-                      node.is_online ? "bg-emerald-500" : "bg-zinc-500"
-                    )}
-                  />
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="flex-1 truncate text-left">{node.name}</span>
-                    </TooltipTrigger>
-                    <TooltipContent side="right">
-                      <p className="font-medium">{node.name}</p>
-                      <p className="text-[11px] text-muted-foreground">{node.hostname}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                  {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-                </button>
-                {open && (
-                  <div className="mb-1 ml-3 flex flex-col gap-0.5 border-l border-border/60 pl-2">
-                    {[
-                      { label: "Übersicht", path: "" },
-                      { label: "VMs & Container", path: "vms" },
-                      { label: "Monitoring", path: "monitoring" },
-                      { label: "Netzwerk", path: "network" },
-                      { label: "Storage", path: "storage" },
-                      { label: "Backups", path: "backups" },
-                      { label: "ISOs & Vorlagen", path: "iso-templates" },
-                    ].map((sub) => {
-                      const subHref = sub.path ? `/nodes/${node.id}/${sub.path}` : `/nodes/${node.id}`;
-                      const subActive = pathname === subHref;
-                      return (
-                        <Link
-                          key={sub.path || "overview"}
-                          href={subHref}
-                          className={cn(
-                            "rounded-md px-2 py-0.5 text-[11.5px] transition-colors",
-                            subActive
-                              ? "bg-primary/10 text-primary"
-                              : "text-sidebar-muted hover:bg-accent/45 hover:text-foreground"
-                          )}
-                        >
-                          {sub.label}
-                        </Link>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-          <button
-            type="button"
-            onClick={() => setOnboardOpen(true)}
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-[12.5px] text-sidebar-muted transition-colors hover:bg-accent/45 hover:text-foreground"
-          >
-            <Plus className="h-3 w-3 shrink-0" />
-            <span>Server hinzufügen</span>
-          </button>
-        </div>
-      )}
-    </div>
-  );
+  const renderWorkspace = (workspace: WorkspaceNav) => {
+    const open = search.trim() ? true : openWorkspace === workspace.id;
+    const active = workspaceForPath(pathname) === workspace.id;
+    const Icon = workspace.icon;
 
-  const renderSection = (section: NavSection) => {
-    const open = openSections[section.label] ?? false;
     return (
-      <div key={section.label} className="mb-1">
+      <div key={workspace.id} className="rounded-lg">
         <button
           type="button"
-          onClick={() => setOpenSections((prev) => ({ ...prev, [section.label]: !open }))}
+          onClick={() => setOpenWorkspace(workspace.id)}
           className={cn(
-            "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-[12px] font-medium transition-colors hover:bg-accent/35 hover:text-foreground",
-            open ? "text-foreground" : "text-sidebar-muted"
+            "flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left transition-colors",
+            active
+              ? "bg-accent/55 text-foreground"
+              : "text-sidebar-muted hover:bg-accent/35 hover:text-foreground"
           )}
         >
-          <span className="flex-1 text-left">{section.label}</span>
-          {!open && (
-            <span className="text-[10px] tabular-nums text-sidebar-muted/70">
-              {section.items.length + (section.includeNodes ? 1 : 0)}
-            </span>
-          )}
-          <ChevronDown
-            className={cn(
-              "h-3 w-3 transition-transform",
-              open ? "rotate-0" : "-rotate-90"
+          <Icon className="h-4 w-4 shrink-0" />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[13px] font-medium">{workspace.label}</span>
+            {!open && (
+              <span className="block truncate text-[10.5px] text-sidebar-muted/75">
+                {workspace.description}
+              </span>
             )}
+          </span>
+          <ChevronDown
+            className={cn("h-3.5 w-3.5 shrink-0 transition-transform", open ? "rotate-0" : "-rotate-90")}
           />
         </button>
         {open && (
-          <div className="mt-0.5 space-y-0.5">
-            {section.includeNodes && renderNodeTree()}
-            {section.items.map(renderNavLink)}
+          <div className="mt-1 space-y-0.5 border-l border-border/70 pl-2">
+            {workspace.items.map(renderNavLink)}
+            {workspace.id === "infra" && (
+              <button
+                type="button"
+                onClick={() => setOnboardOpen(true)}
+                className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] text-sidebar-muted transition-colors hover:bg-accent/45 hover:text-foreground"
+              >
+                <Plus className="h-4 w-4 shrink-0" />
+                <span>Node hinzufügen</span>
+              </button>
+            )}
           </div>
         )}
       </div>
     );
   };
-
-  // ────────────── Layout ──────────────
 
   const sidebarContent = (
     <aside
@@ -405,7 +286,6 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
       role="navigation"
       aria-label="Hauptnavigation"
     >
-      {/* Brand */}
       <div className="flex h-12 items-center gap-2.5 border-b border-border px-3.5">
         <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground shadow-sm">
           <Flame className="h-4 w-4 text-white" />
@@ -416,31 +296,28 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
         </div>
       </div>
 
-      {/* Search */}
       <div className="border-b border-border/70 px-2.5 py-2">
         <div className="relative">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-sidebar-muted" />
           <input
             type="text"
-            placeholder="Suchen…"
+            placeholder="Funktion suchen..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="h-7 w-full rounded-md border border-border/80 bg-background/65 pl-8 pr-2.5 text-[12px] outline-none transition-colors focus:border-ring placeholder:text-sidebar-muted/70"
+            onChange={(event) => setSearch(event.target.value)}
+            className="h-7 w-full rounded-md border border-border/80 bg-background/65 pl-8 pr-2.5 text-[12px] outline-none transition-colors placeholder:text-sidebar-muted/70 focus:border-ring"
           />
         </div>
       </div>
 
-      {/* Sections */}
       <nav className="flex-1 overflow-y-auto px-2 py-2.5">
-        {filteredSections.map(renderSection)}
-        {filteredSections.length === 0 && (
+        <div className="space-y-1">{filteredWorkspaces.map(renderWorkspace)}</div>
+        {filteredWorkspaces.length === 0 && (
           <p className="px-3 py-6 text-center text-[12px] text-sidebar-muted">
-            Keine Treffer für „{search}".
+            Keine Treffer für "{search}".
           </p>
         )}
       </nav>
 
-      {/* User Area */}
       <div className="border-t border-border p-2">
         <button
           type="button"
