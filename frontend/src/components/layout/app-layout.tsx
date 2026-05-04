@@ -21,6 +21,10 @@ export function AppLayout({ children }: AppLayoutProps) {
   const router = useRouter();
   const pathname = usePathname();
   const { isAuthenticated, user } = useAuthStore();
+  const devAuthBypass =
+    process.env.NODE_ENV === "development" &&
+    process.env.NEXT_PUBLIC_DEV_AUTH_BYPASS === "true";
+  const canAccessApp = isAuthenticated || devAuthBypass;
 
   useEffect(() => {
     if (useAuthStore.persist.hasHydrated()) {
@@ -34,10 +38,10 @@ export function AppLayout({ children }: AppLayoutProps) {
   }, []);
 
   useEffect(() => {
-    if (hydrated && !isAuthenticated) {
+    if (hydrated && !canAccessApp) {
       router.push("/login");
     }
-  }, [isAuthenticated, hydrated, router]);
+  }, [canAccessApp, hydrated, router]);
 
   // Redirect users who must change password
   useEffect(() => {
@@ -50,7 +54,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     }
   }, [isAuthenticated, user, pathname, router]);
 
-  if (!hydrated || !isAuthenticated) {
+  if (!hydrated || !canAccessApp) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-3">
