@@ -9,12 +9,14 @@ import {
   Settings,
   PanelLeftClose,
   PanelLeftOpen,
+  AlertCircle,
 } from "lucide-react";
 import Link from "next/link";
 import { useChatStore } from "@/stores/chat-store";
 import { ChatMessage } from "@/components/chat/chat-message";
 import { ChatInput } from "@/components/chat/chat-input";
 import { ToolCallCard } from "@/components/chat/tool-call-card";
+import { ToolApprovalCard } from "@/components/approval/tool-approval-card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { agentConfigApi } from "@/lib/api";
@@ -28,6 +30,7 @@ export default function ChatPage() {
     toolCalls,
     isLoading,
     isSending,
+    error,
     fetchConversations,
     selectConversation,
     sendMessage,
@@ -279,6 +282,18 @@ export default function ChatPage() {
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto">
+          <div className="mx-auto w-full max-w-4xl px-4 pt-4 md:px-6">
+            <ToolApprovalCard />
+            {error && (
+              <div className="mt-3 flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+                <div>
+                  <p className="font-medium text-destructive">KI-Assistent momentan nicht bereit</p>
+                  <p className="text-muted-foreground">{error}</p>
+                </div>
+              </div>
+            )}
+          </div>
           {messages.length === 0 && !isLoading && (
             <div className="flex h-full flex-col items-center justify-center gap-4 text-muted-foreground px-4">
               <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted">

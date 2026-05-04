@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { approvalApi } from "@/lib/api";
+import { approvalApi, getApiErrorMessage } from "@/lib/api";
 import type { AgentPendingApproval } from "@/types/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { toast } from "sonner";
 
 export function ToolApprovalCard() {
   const [approvals, setApprovals] = useState<AgentPendingApproval[]>([]);
@@ -15,7 +16,12 @@ export function ToolApprovalCard() {
     setIsLoading(true);
     approvalApi
       .listPending()
-      .then((data) => setApprovals((data || []) as AgentPendingApproval[]))
+      .then((data) => {
+        setApprovals((data || []) as AgentPendingApproval[]);
+      })
+      .catch(() => {
+        setApprovals([]);
+      })
       .finally(() => setIsLoading(false));
   };
 
@@ -26,13 +32,23 @@ export function ToolApprovalCard() {
   }, []);
 
   const handleApprove = async (id: string) => {
-    await approvalApi.approve(id);
-    fetchApprovals();
+    try {
+      await approvalApi.approve(id);
+      toast.success("Agent-Aktion genehmigt");
+      fetchApprovals();
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, "Genehmigung fehlgeschlagen"));
+    }
   };
 
   const handleReject = async (id: string) => {
-    await approvalApi.reject(id);
-    fetchApprovals();
+    try {
+      await approvalApi.reject(id);
+      toast.success("Agent-Aktion abgelehnt");
+      fetchApprovals();
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, "Ablehnen fehlgeschlagen"));
+    }
   };
 
   if (isLoading && approvals.length === 0) {

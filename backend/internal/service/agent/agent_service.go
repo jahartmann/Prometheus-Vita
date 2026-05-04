@@ -80,16 +80,16 @@ type ApprovalNotifier interface {
 }
 
 type Service struct {
-	llmRegistry     *llm.Registry
-	toolRegistry    *ToolRegistry
-	convRepo        repository.ChatConversationRepository
-	msgRepo         repository.ChatMessageRepository
-	toolCallRepo    repository.ToolCallRepository
-	approvalRepo    repository.ApprovalRepository
-	userRepo        repository.UserRepository
+	llmRegistry        *llm.Registry
+	toolRegistry       *ToolRegistry
+	convRepo           repository.ChatConversationRepository
+	msgRepo            repository.ChatMessageRepository
+	toolCallRepo       repository.ToolCallRepository
+	approvalRepo       repository.ApprovalRepository
+	userRepo           repository.UserRepository
 	rolePermissionRepo repository.RolePermissionRepository
-	agentConfigRepo repository.AgentConfigRepository
-	approvalNotifier ApprovalNotifier
+	agentConfigRepo    repository.AgentConfigRepository
+	approvalNotifier   ApprovalNotifier
 }
 
 func NewService(
@@ -104,15 +104,15 @@ func NewService(
 	agentConfigRepo repository.AgentConfigRepository,
 ) *Service {
 	return &Service{
-		llmRegistry:     llmRegistry,
-		toolRegistry:    toolRegistry,
-		convRepo:        convRepo,
-		msgRepo:         msgRepo,
-		toolCallRepo:    toolCallRepo,
-		approvalRepo:    approvalRepo,
-		userRepo:        userRepo,
+		llmRegistry:        llmRegistry,
+		toolRegistry:       toolRegistry,
+		convRepo:           convRepo,
+		msgRepo:            msgRepo,
+		toolCallRepo:       toolCallRepo,
+		approvalRepo:       approvalRepo,
+		userRepo:           userRepo,
 		rolePermissionRepo: rolePermissionRepo,
-		agentConfigRepo: agentConfigRepo,
+		agentConfigRepo:    agentConfigRepo,
 	}
 }
 
@@ -613,6 +613,25 @@ func (s *Service) GetConversation(ctx context.Context, id uuid.UUID) (*model.Cha
 
 func (s *Service) GetMessages(ctx context.Context, conversationID uuid.UUID) ([]model.ChatMessage, error) {
 	return s.msgRepo.ListByConversation(ctx, conversationID)
+}
+
+func (s *Service) GetToolCalls(ctx context.Context, conversationID uuid.UUID) ([]model.AgentToolCall, error) {
+	if s.toolCallRepo == nil {
+		return []model.AgentToolCall{}, nil
+	}
+	messages, err := s.msgRepo.ListByConversation(ctx, conversationID)
+	if err != nil {
+		return nil, err
+	}
+	calls := make([]model.AgentToolCall, 0)
+	for _, msg := range messages {
+		msgCalls, err := s.toolCallRepo.ListByMessage(ctx, msg.ID)
+		if err != nil {
+			return nil, err
+		}
+		calls = append(calls, msgCalls...)
+	}
+	return calls, nil
 }
 
 func (s *Service) DeleteConversation(ctx context.Context, id uuid.UUID) error {

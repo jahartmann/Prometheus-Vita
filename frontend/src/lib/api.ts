@@ -451,6 +451,8 @@ export const chatApi = {
     api.get(`/chat/conversations/${id}`).then((r) => r.data),
   getMessages: (id: string) =>
     api.get(`/chat/conversations/${id}/messages`).then((r) => toArray(r.data)),
+  getToolCalls: (id: string) =>
+    api.get(`/chat/conversations/${id}/tool-calls`).then((r) => toArray(r.data)),
   deleteConversation: (id: string) =>
     api.delete(`/chat/conversations/${id}`),
   recentActivity: (limit?: number) =>

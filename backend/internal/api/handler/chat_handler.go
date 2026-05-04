@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 
-	apiPkg "github.com/antigravity/prometheus/internal/api/response"
 	"github.com/antigravity/prometheus/internal/api/middleware"
+	apiPkg "github.com/antigravity/prometheus/internal/api/response"
 	"github.com/antigravity/prometheus/internal/model"
 	"github.com/antigravity/prometheus/internal/repository"
 	"github.com/antigravity/prometheus/internal/service/agent"
@@ -91,6 +91,11 @@ func (h *ChatHandler) ListConversations(c echo.Context) error {
 }
 
 func (h *ChatHandler) GetConversation(c echo.Context) error {
+	userID, ok := c.Get(middleware.ContextKeyUserID).(uuid.UUID)
+	if !ok {
+		return apiPkg.Unauthorized(c, "user not found in context")
+	}
+
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		return apiPkg.BadRequest(c, "invalid conversation id")
@@ -103,14 +108,33 @@ func (h *ChatHandler) GetConversation(c echo.Context) error {
 		}
 		return apiPkg.InternalError(c, "failed to get conversation")
 	}
+	if conv.UserID != userID {
+		return apiPkg.NotFound(c, "conversation not found")
+	}
 
 	return apiPkg.Success(c, conv)
 }
 
 func (h *ChatHandler) GetMessages(c echo.Context) error {
+	userID, ok := c.Get(middleware.ContextKeyUserID).(uuid.UUID)
+	if !ok {
+		return apiPkg.Unauthorized(c, "user not found in context")
+	}
+
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		return apiPkg.BadRequest(c, "invalid conversation id")
+	}
+
+	conv, err := h.service.GetConversation(c.Request().Context(), id)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return apiPkg.NotFound(c, "conversation not found")
+		}
+		return apiPkg.InternalError(c, "failed to get conversation")
+	}
+	if conv.UserID != userID {
+		return apiPkg.NotFound(c, "conversation not found")
 	}
 
 	msgs, err := h.service.GetMessages(c.Request().Context(), id)
@@ -125,10 +149,58 @@ func (h *ChatHandler) GetMessages(c echo.Context) error {
 	return apiPkg.Success(c, msgs)
 }
 
-func (h *ChatHandler) DeleteConversation(c echo.Context) error {
+func (h *ChatHandler) GetToolCalls(c echo.Context) error {
+	userID, ok := c.Get(middleware.ContextKeyUserID).(uuid.UUID)
+	if !ok {
+		return apiPkg.Unauthorized(c, "user not found in context")
+	}
+
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		return apiPkg.BadRequest(c, "invalid conversation id")
+	}
+
+	conv, err := h.service.GetConversation(c.Request().Context(), id)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return apiPkg.NotFound(c, "conversation not found")
+		}
+		return apiPkg.InternalError(c, "failed to get conversation")
+	}
+	if conv.UserID != userID {
+		return apiPkg.NotFound(c, "conversation not found")
+	}
+
+	calls, err := h.service.GetToolCalls(c.Request().Context(), id)
+	if err != nil {
+		return apiPkg.InternalError(c, "failed to get tool calls")
+	}
+	if calls == nil {
+		calls = []model.AgentToolCall{}
+	}
+	return apiPkg.Success(c, calls)
+}
+
+func (h *ChatHandler) DeleteConversation(c echo.Context) error {
+	userID, ok := c.Get(middleware.ContextKeyUserID).(uuid.UUID)
+	if !ok {
+		return apiPkg.Unauthorized(c, "user not found in context")
+	}
+
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return apiPkg.BadRequest(c, "invalid conversation id")
+	}
+
+	conv, err := h.service.GetConversation(c.Request().Context(), id)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return apiPkg.NotFound(c, "conversation not found")
+		}
+		return apiPkg.InternalError(c, "failed to get conversation")
+	}
+	if conv.UserID != userID {
+		return apiPkg.NotFound(c, "conversation not found")
 	}
 
 	if err := h.service.DeleteConversation(c.Request().Context(), id); err != nil {

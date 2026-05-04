@@ -13,32 +13,32 @@ import (
 )
 
 type Handlers struct {
-	Health       *handler.HealthHandler
-	Auth         *handler.AuthHandler
-	Node         *handler.NodeHandler
-	WS           *handler.WSHandler
-	Backup       *handler.BackupHandler
-	Schedule     *handler.ScheduleHandler
-	Metrics      *handler.MetricsHandler
-	Tag          *handler.TagHandler
-	PBS          *handler.PBSHandler
-	User         *handler.UserHandler
-	DR           *handler.DRHandler
-	Notification *handler.NotificationHandler
-	Chat         *handler.ChatHandler
-	Migration    *handler.MigrationHandler
-	Escalation   *handler.EscalationHandler
-	Telegram     *handler.TelegramHandler
-	Cluster      *handler.ClusterHandler
-	Anomaly      *handler.AnomalyHandler
-	Prediction   *handler.PredictionHandler
-	Briefing     *handler.BriefingHandler
-	Approval     *handler.ApprovalHandler
-	Drift        *handler.DriftHandler
-	Environment  *handler.EnvironmentHandler
-	Update       *handler.UpdateHandler
-	Rightsizing  *handler.RightsizingHandler
-	SSHKey       *handler.SSHKeyHandler
+	Health         *handler.HealthHandler
+	Auth           *handler.AuthHandler
+	Node           *handler.NodeHandler
+	WS             *handler.WSHandler
+	Backup         *handler.BackupHandler
+	Schedule       *handler.ScheduleHandler
+	Metrics        *handler.MetricsHandler
+	Tag            *handler.TagHandler
+	PBS            *handler.PBSHandler
+	User           *handler.UserHandler
+	DR             *handler.DRHandler
+	Notification   *handler.NotificationHandler
+	Chat           *handler.ChatHandler
+	Migration      *handler.MigrationHandler
+	Escalation     *handler.EscalationHandler
+	Telegram       *handler.TelegramHandler
+	Cluster        *handler.ClusterHandler
+	Anomaly        *handler.AnomalyHandler
+	Prediction     *handler.PredictionHandler
+	Briefing       *handler.BriefingHandler
+	Approval       *handler.ApprovalHandler
+	Drift          *handler.DriftHandler
+	Environment    *handler.EnvironmentHandler
+	Update         *handler.UpdateHandler
+	Rightsizing    *handler.RightsizingHandler
+	SSHKey         *handler.SSHKeyHandler
 	Gateway        *handler.GatewayHandler
 	Log            *handler.LogHandler
 	Topology       *handler.TopologyHandler
@@ -364,6 +364,7 @@ func SetupRouter(e *echo.Echo, cfg *config.Config, jwtSvc *auth.JWTService, h Ha
 		chat.GET("/conversations", h.Chat.ListConversations)
 		chat.GET("/conversations/:id", h.Chat.GetConversation)
 		chat.GET("/conversations/:id/messages", h.Chat.GetMessages)
+		chat.GET("/conversations/:id/tool-calls", h.Chat.GetToolCalls)
 		chat.DELETE("/conversations/:id", h.Chat.DeleteConversation)
 	}
 
