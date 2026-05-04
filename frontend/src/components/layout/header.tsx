@@ -110,7 +110,7 @@ export function Header({ onMobileMenuToggle }: HeaderProps) {
   const initials = user?.username ? user.username.slice(0, 2).toUpperCase() : "??";
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-3 border-b ops-divider bg-background/88 px-4 backdrop-blur-md">
+    <header className="sticky top-0 z-30 flex h-12 shrink-0 items-center gap-2 border-b ops-divider bg-background/88 px-3.5 backdrop-blur-md">
       {/* Mobile menu trigger */}
       <Button
         variant="ghost"
@@ -129,19 +129,20 @@ export function Header({ onMobileMenuToggle }: HeaderProps) {
       <span className="truncate text-sm font-medium md:hidden">{mobileTitle}</span>
 
       {/* Desktop breadcrumbs */}
-      <div className="hidden flex-1 md:flex">
+      <div className="hidden flex-1 lg:flex">
         <Breadcrumbs />
       </div>
 
-      <div className="ml-auto flex items-center gap-1">
+      <div className="ml-auto flex items-center gap-0.5">
         {/* Agent live-status pill — small but constant signal that the
             admin-agent is paying attention. */}
         <Tooltip>
           <TooltipTrigger asChild>
             <button
               type="button"
-              className="ops-focus-ring flex items-center gap-1.5 rounded-md border border-border/70 bg-card/80 px-2.5 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent"
+              className="ops-focus-ring flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               onClick={() => router.push("/chat")}
+              aria-label="Agent öffnen"
             >
               <span
                 className={`relative flex h-1.5 w-1.5 rounded-full ${
@@ -156,10 +157,7 @@ export function Header({ onMobileMenuToggle }: HeaderProps) {
                   <span className="absolute inset-0 animate-ping rounded-full bg-emerald-500/60" />
                 )}
               </span>
-              <Bot className="h-3 w-3" />
-              <span className="hidden lg:inline">
-                {agentLive === "active" ? "Agent aktiv" : agentLive === "idle" ? "Agent bereit" : "Agent"}
-              </span>
+              <Bot className="h-4 w-4" />
             </button>
           </TooltipTrigger>
           <TooltipContent side="bottom">

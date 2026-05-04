@@ -199,7 +199,7 @@ export function SearchCommand() {
         icon: Package,
         label: "Updates",
         description: "Paket-Updates und Sicherheitsupdates",
-        href: "/updates",
+        href: "/settings/system",
         tags: ["pakete", "update", "sicherheit", "apt"],
       },
       {
@@ -646,7 +646,7 @@ export function SearchTrigger() {
   return (
     <button
       onClick={handleClick}
-      className="flex h-9 w-64 items-center gap-2 rounded-lg border bg-muted/50 px-3 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+      className="flex h-8 w-44 items-center gap-2 rounded-md border bg-muted/40 px-2.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:w-52"
     >
       <Search className="h-4 w-4 shrink-0" />
       <span className="flex-1 text-left">Suchen...</span>

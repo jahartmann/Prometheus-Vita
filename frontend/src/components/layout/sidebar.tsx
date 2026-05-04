@@ -50,16 +50,8 @@ import { useNodeStore } from "@/stores/node-store";
 import { useAuthStore } from "@/stores/auth-store";
 import { OnboardNodeDialog } from "@/components/nodes/onboard-node-dialog";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// The sidebar's organizing principle:
-// Four sections, each one answering a different question the operator asks.
-//   1. Übersicht  → "Was ist gerade los?"
-//   2. Infrastruktur → "Was läuft auf welcher Node?"
-//   3. Intelligenz  → "Wer denkt für mich mit / Was sind Auffälligkeiten?"
-//   4. Verwaltung  → "Was ist konfiguriert / wer hat Zugriff?"
-// Settings stays as its own collapsed section at the bottom because it's both
-// rarely-used AND nested deeply.
-// ─────────────────────────────────────────────────────────────────────────────
+// Keep the operational core visible and put deeper functions behind
+// predictable collapsed groups. No navigation target is removed.
 
 interface NavItem {
   label: string;
@@ -90,7 +82,7 @@ const sections: NavSection[] = [
   },
   {
     label: "Infrastruktur",
-    defaultOpen: true,
+    defaultOpen: false,
     includeNodes: true,
     items: [
       { label: "Cluster", href: "/cluster", icon: RadioTower, matchPrefix: "/cluster" },
@@ -251,8 +243,8 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
         className={cn(
           "group relative flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] transition-colors",
           active
-            ? "bg-primary/12 font-medium text-foreground"
-            : "text-sidebar-muted hover:bg-accent/60 hover:text-foreground"
+            ? "bg-primary/10 font-medium text-foreground"
+            : "text-sidebar-muted hover:bg-accent/45 hover:text-foreground"
         )}
         onClick={() => onMobileClose?.()}
       >
@@ -281,8 +273,8 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
         className={cn(
           "flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] transition-colors",
           pathname.startsWith("/nodes")
-            ? "bg-accent font-medium text-foreground"
-            : "text-sidebar-muted hover:bg-accent/60 hover:text-foreground"
+            ? "bg-accent/70 font-medium text-foreground"
+            : "text-sidebar-muted hover:bg-accent/45 hover:text-foreground"
         )}
       >
         <Server className="h-4 w-4 shrink-0" />
@@ -304,7 +296,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
                     "flex w-full items-center gap-2 rounded-md px-2 py-1 text-[12.5px] transition-colors",
                     onPath
                       ? "bg-primary/10 text-primary"
-                      : "text-sidebar-muted hover:bg-accent/60 hover:text-foreground"
+                      : "text-sidebar-muted hover:bg-accent/45 hover:text-foreground"
                   )}
                 >
                   <span
@@ -345,7 +337,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
                             "rounded-md px-2 py-0.5 text-[11.5px] transition-colors",
                             subActive
                               ? "bg-primary/10 text-primary"
-                              : "text-sidebar-muted hover:bg-accent/60 hover:text-foreground"
+                              : "text-sidebar-muted hover:bg-accent/45 hover:text-foreground"
                           )}
                         >
                           {sub.label}
@@ -360,7 +352,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
           <button
             type="button"
             onClick={() => setOnboardOpen(true)}
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-[12.5px] text-sidebar-muted transition-colors hover:bg-accent/60 hover:text-foreground"
+            className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-[12.5px] text-sidebar-muted transition-colors hover:bg-accent/45 hover:text-foreground"
           >
             <Plus className="h-3 w-3 shrink-0" />
             <span>Server hinzufügen</span>
@@ -377,9 +369,17 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
         <button
           type="button"
           onClick={() => setOpenSections((prev) => ({ ...prev, [section.label]: !open }))}
-          className="flex w-full items-center gap-1.5 px-2.5 py-1 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-sidebar-muted/70 transition-colors hover:text-foreground"
+          className={cn(
+            "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-[12px] font-medium transition-colors hover:bg-accent/35 hover:text-foreground",
+            open ? "text-foreground" : "text-sidebar-muted"
+          )}
         >
           <span className="flex-1 text-left">{section.label}</span>
+          {!open && (
+            <span className="text-[10px] tabular-nums text-sidebar-muted/70">
+              {section.items.length + (section.includeNodes ? 1 : 0)}
+            </span>
+          )}
           <ChevronDown
             className={cn(
               "h-3 w-3 transition-transform",
@@ -401,13 +401,13 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
 
   const sidebarContent = (
     <aside
-      className="flex h-screen w-64 flex-col border-r ops-divider bg-sidebar"
+      className="flex h-screen w-60 flex-col border-r ops-divider bg-sidebar"
       role="navigation"
       aria-label="Hauptnavigation"
     >
       {/* Brand */}
-      <div className="flex h-14 items-center gap-2.5 border-b border-border px-4">
-        <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground shadow-sm">
+      <div className="flex h-12 items-center gap-2.5 border-b border-border px-3.5">
+        <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground shadow-sm">
           <Flame className="h-4 w-4 text-white" />
         </div>
         <div className="leading-tight">
@@ -417,7 +417,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
       </div>
 
       {/* Search */}
-      <div className="border-b border-border px-3 py-2.5">
+      <div className="border-b border-border/70 px-2.5 py-2">
         <div className="relative">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-sidebar-muted" />
           <input
@@ -425,7 +425,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
             placeholder="Suchen…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="h-8 w-full rounded-md border border-border bg-background pl-8 pr-2.5 text-[13px] outline-none transition-colors focus:border-ring placeholder:text-sidebar-muted/70"
+            className="h-7 w-full rounded-md border border-border/80 bg-background/65 pl-8 pr-2.5 text-[12px] outline-none transition-colors focus:border-ring placeholder:text-sidebar-muted/70"
           />
         </div>
       </div>
@@ -494,7 +494,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
               onClick={onMobileClose}
               aria-hidden="true"
             />
-            <div className="fixed inset-y-0 left-0 z-50 w-64 shadow-2xl">{sidebarContent}</div>
+            <div className="fixed inset-y-0 left-0 z-50 w-60 shadow-2xl">{sidebarContent}</div>
           </>
         )}
       </div>
