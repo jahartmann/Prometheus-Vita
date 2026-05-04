@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { AgentActivityFeed } from "@/components/dashboard/agent-activity-feed";
 import { AttentionBanner } from "@/components/dashboard/attention-banner";
 import { BriefingWidget } from "@/components/dashboard/briefing-widget";
@@ -11,6 +11,7 @@ import { useNodeStore } from "@/stores/node-store";
 
 export default function DashboardPage() {
   const { nodes, nodeStatus, fetchNodes, fetchNodeStatus } = useNodeStore();
+  const requestedStatusRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     fetchNodes();
@@ -18,8 +19,9 @@ export default function DashboardPage() {
 
   useEffect(() => {
     nodes.forEach((node) => {
-      if (node.is_online && !nodeStatus[node.id]) {
-        fetchNodeStatus(node.id);
+      if (node.is_online && !nodeStatus[node.id] && !requestedStatusRef.current.has(node.id)) {
+        requestedStatusRef.current.add(node.id);
+        void fetchNodeStatus(node.id);
       }
     });
   }, [nodes, nodeStatus, fetchNodeStatus]);
