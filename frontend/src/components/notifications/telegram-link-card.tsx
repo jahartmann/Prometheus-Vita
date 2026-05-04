@@ -5,6 +5,7 @@ import { Check, Copy, ExternalLink, LinkIcon, MessageCircle, RefreshCw, Unlink }
 import { Button } from "@/components/ui/button";
 import { FeatureStatusCard } from "@/components/ui/feature-status-card";
 import { getApiErrorMessage, telegramApi } from "@/lib/api";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import type { TelegramStatus } from "@/types/api";
 
 interface TelegramLinkPayload {
@@ -95,7 +96,11 @@ export function TelegramLinkCard() {
 
   const copyStartCommand = async () => {
     if (!linkCode) return;
-    await navigator.clipboard.writeText(`/start ${linkCode}`);
+    const copiedToClipboard = await copyTextToClipboard(`/start ${linkCode}`);
+    if (!copiedToClipboard) {
+      setError("Kopieren wurde vom Browser blockiert. Bitte den Start-Befehl manuell kopieren.");
+      return;
+    }
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };

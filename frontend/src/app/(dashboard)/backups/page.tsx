@@ -18,6 +18,7 @@ import {
   Server,
   AlertCircle,
   RefreshCw,
+  ArrowRightLeft,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -117,7 +118,6 @@ export default function BackupsPage() {
       setBackups(data);
       setLoadError(null);
     } catch (e: unknown) {
-      console.error('Failed to load backups:', e);
       const message = getApiErrorMessage(e, "Fehler beim Laden der Backups");
       setLoadError(message);
       setBackups([]);
@@ -150,7 +150,6 @@ export default function BackupsPage() {
             const res = await scheduleApi.listSchedules(n.id);
             return toArray<BackupSchedule>(res.data).map((s) => ({ ...s, _nodeId: n.id }));
           } catch (e: unknown) {
-            console.error(`Failed to load schedules for node ${n.id}:`, e);
             nextErrors[n.name || n.id] = getApiErrorMessage(e, "Zeitpläne konnten nicht geladen werden");
             return [];
           }
@@ -159,7 +158,6 @@ export default function BackupsPage() {
       setAllSchedules(results.flat());
       setScheduleLoadErrors(nextErrors);
     } catch (e: unknown) {
-      console.error('Failed to load schedules:', e);
       setScheduleLoadErrors({ Allgemein: getApiErrorMessage(e, "Zeitpläne konnten nicht geladen werden") });
       setAllSchedules([]);
     } finally {
@@ -194,7 +192,6 @@ export default function BackupsPage() {
       window.URL.revokeObjectURL(url);
       setActionError(null);
     } catch (e: unknown) {
-      console.error('Failed to download backup:', e);
       const message = getApiErrorMessage(e, "Backup konnte nicht heruntergeladen werden");
       setActionError(message);
       toast.error(message);
@@ -209,7 +206,6 @@ export default function BackupsPage() {
       setActionError(null);
       toast.success("Backup gelöscht");
     } catch (e: unknown) {
-      console.error('Failed to delete backup:', e);
       const message = getApiErrorMessage(e, "Backup konnte nicht gelöscht werden");
       setActionError(message);
       toast.error(message);
@@ -233,7 +229,6 @@ export default function BackupsPage() {
       setActionError(null);
       loadBackups();
     } catch (e: unknown) {
-      console.error('Failed to create backup:', e);
       const message = getApiErrorMessage(e, "Backup konnte nicht erstellt werden");
       setActionError(message);
       toast.error(message);
@@ -254,7 +249,6 @@ export default function BackupsPage() {
       setActionError(null);
       loadAllSchedules();
     } catch (e: unknown) {
-      console.error('Failed to create schedule:', e);
       const message = getApiErrorMessage(e, "Backup-Zeitplan konnte nicht erstellt werden");
       setActionError(message);
       toast.error(message);
@@ -269,7 +263,6 @@ export default function BackupsPage() {
       setActionError(null);
       loadAllSchedules();
     } catch (e: unknown) {
-      console.error('Failed to delete schedule:', e);
       const message = getApiErrorMessage(e, "Zeitplan konnte nicht gelöscht werden");
       setActionError(message);
       toast.error(message);
@@ -283,7 +276,6 @@ export default function BackupsPage() {
       setActionError(null);
       loadAllSchedules();
     } catch (e: unknown) {
-      console.error('Failed to toggle schedule:', e);
       const message = getApiErrorMessage(e, "Zeitplan konnte nicht geändert werden");
       setActionError(message);
       toast.error(message);
@@ -304,17 +296,23 @@ export default function BackupsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Backups</h1>
           <p className="text-muted-foreground">
             Zentrale Verwaltung aller Konfigurations-Backups, Zeitpläne und Vzdump-Sicherungen.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" onClick={() => loadBackups()}>
             <RefreshCw className="mr-2 h-4 w-4" />
             Aktualisieren
+          </Button>
+          <Button asChild variant="outline" size="sm">
+            <Link href="/migrations">
+              <ArrowRightLeft className="mr-2 h-4 w-4" />
+              Migrationen
+            </Link>
           </Button>
           <Button variant="outline" size="sm" onClick={() => setVzdumpOpen(true)}>
             <HardDrive className="mr-2 h-4 w-4" />

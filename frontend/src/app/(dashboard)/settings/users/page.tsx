@@ -35,6 +35,7 @@ import { CreateUserDialog } from "@/components/users/create-user-dialog";
 import { DeleteUserDialog } from "@/components/users/delete-user-dialog";
 import { EditUserDialog } from "@/components/users/edit-user-dialog";
 import { userApi, toArray } from "@/lib/api";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import { useUserStore } from "@/stores/user-store";
 import type { APIToken, CreateUserInvitationResponse, UserInvitation, UserResponse, UserSession } from "@/types/api";
 
@@ -425,8 +426,12 @@ function CreateInvitationDialog({ open, onOpenChange, onSuccess }: { open: boole
               <Button
                 variant="outline"
                 size="icon"
-                onClick={() => {
-                  navigator.clipboard.writeText(token);
+                onClick={async () => {
+                  const copiedToClipboard = await copyTextToClipboard(token);
+                  if (!copiedToClipboard) {
+                    toast.error("Kopieren wurde vom Browser blockiert");
+                    return;
+                  }
                   setCopied(true);
                   toast.success("Token kopiert");
                 }}

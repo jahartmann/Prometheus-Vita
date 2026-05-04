@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 import { useNodeStore } from "@/stores/node-store";
 import { useBackupStore } from "@/stores/backup-store";
 import { backupApi } from "@/lib/api";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import type { Node, ConfigBackup } from "@/types/api";
 
 // --- Types ---
@@ -77,8 +78,9 @@ const STEP_LABELS = [
 function CopyableCommand({ command, label }: { command: string; label?: string }) {
   const [copied, setCopied] = useState(false);
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(command);
+  const handleCopy = async () => {
+    const copiedToClipboard = await copyTextToClipboard(command);
+    if (!copiedToClipboard) return;
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
