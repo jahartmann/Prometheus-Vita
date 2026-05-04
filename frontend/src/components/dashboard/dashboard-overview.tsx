@@ -39,7 +39,7 @@ export function DashboardOverview() {
           <OpsPanelHeader>
             <OpsPanelTitle>Direkteinstiege</OpsPanelTitle>
             <OpsPanelDescription>
-              Funktionen bleiben erreichbar, ohne den ersten Blick zu ueberladen.
+              Funktionen bleiben erreichbar, ohne den ersten Blick zu überladen.
             </OpsPanelDescription>
           </OpsPanelHeader>
           <OpsPanelContent className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
@@ -59,7 +59,7 @@ export function DashboardOverview() {
             <Button variant="outline" size="sm" asChild className="justify-start">
               <Link href="/settings/nodes">
                 <Plus className="h-4 w-4" />
-                Server hinzufuegen
+                Server hinzufügen
               </Link>
             </Button>
           </OpsPanelContent>

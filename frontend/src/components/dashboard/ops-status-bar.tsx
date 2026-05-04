@@ -10,7 +10,7 @@ interface OpsStatusBarProps {
 
 export function OpsStatusBar({ summary }: OpsStatusBarProps) {
   return (
-    <OpsPanel className="grid gap-4 p-4 lg:grid-cols-[1.2fr_repeat(4,minmax(0,1fr))]">
+    <OpsPanel className="grid gap-4 p-4 md:grid-cols-[1.2fr_repeat(4,minmax(0,1fr))]">
       <div className="flex min-w-0 items-center gap-3">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/12 text-primary ring-1 ring-primary/25">
           <Activity className="h-5 w-5" />

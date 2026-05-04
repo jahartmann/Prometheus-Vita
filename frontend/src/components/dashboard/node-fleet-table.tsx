@@ -36,7 +36,7 @@ export function NodeFleetTable({ nodes, nodeStatus, isLoading }: NodeFleetTableP
         <div>
           <OpsPanelTitle>Server-Flotte</OpsPanelTitle>
           <p className="mt-1 text-xs text-muted-foreground">
-            Kompakte Uebersicht. Details bleiben per Klick auf die Node erreichbar.
+            Kompakte Übersicht. Details bleiben per Klick auf die Node erreichbar.
           </p>
         </div>
         <Link href="/nodes" className="text-xs font-medium text-primary hover:underline">
@@ -50,7 +50,7 @@ export function NodeFleetTable({ nodes, nodeStatus, isLoading }: NodeFleetTableP
             className="ops-row ops-focus-ring flex items-center justify-between px-3 py-3 text-sm hover:bg-accent/60"
           >
             <span>Keine Nodes konfiguriert.</span>
-            <span className="text-primary">Node hinzufuegen</span>
+            <span className="text-primary">Node hinzufügen</span>
           </Link>
         ) : (
           nodes.map((node) => {

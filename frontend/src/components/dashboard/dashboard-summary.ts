@@ -82,7 +82,7 @@ function buildAttentionItems(
       id: "offline-nodes",
       severity: "critical",
       title: `${offlineNodes} Node${offlineNodes === 1 ? "" : "s"} offline`,
-      description: "Pruefen Sie Erreichbarkeit, Token und Netzwerkpfad.",
+      description: "Prüfen Sie Erreichbarkeit, Token und Netzwerkpfad.",
       href: "/nodes",
     });
   }
@@ -102,7 +102,7 @@ function buildAttentionItems(
     items.push({
       id: "memory-pressure",
       severity: "warning",
-      title: "RAM-Auslastung erhoeht",
+      title: "RAM-Auslastung erhöht",
       description: `Durchschnittlich ${avgMemory.toFixed(1)} Prozent belegt.`,
       href: "/monitoring",
     });
@@ -123,7 +123,7 @@ function buildAttentionItems(
       id: "no-nodes",
       severity: "info",
       title: "Noch keine Nodes konfiguriert",
-      description: "Fuegen Sie den ersten Proxmox Node in den Einstellungen hinzu.",
+      description: "Fügen Sie den ersten Proxmox Node in den Einstellungen hinzu.",
       href: "/settings/nodes",
     });
   }

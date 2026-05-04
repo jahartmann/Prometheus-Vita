@@ -27,7 +27,7 @@ export default function DashboardPage() {
           <p className="eyebrow">{greetingFor(new Date())}</p>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight">Lagezentrum</h1>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Prioritaeten, Clusterzustand und naechste Aktionen - ohne Funktionslaerm.
+            Prioritäten, Clusterzustand und nächste Aktionen - ohne Funktionslärm.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -60,5 +60,5 @@ function greetingFor(d: Date): string {
   if (hour < 14) return "Mittag";
   if (hour < 18) return "Guten Tag";
   if (hour < 22) return "Guten Abend";
-  return "Spaete Stunde";
+  return "Späte Stunde";
 }
