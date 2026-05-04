@@ -29,7 +29,7 @@ export function buildDashboardSummary(
 ): DashboardSummary {
   const onlineNodes = nodes.filter((node) => node.is_online).length;
   const offlineNodes = nodes.length - onlineNodes;
-  const statuses = Object.values(nodeStatus).filter(Boolean) as NodeStatus[];
+  const statuses = nodes.map((node) => nodeStatus[node.id]).filter(Boolean) as NodeStatus[];
 
   const totalWorkloads = statuses.reduce(
     (sum, status) => sum + status.vm_count + status.ct_count,
@@ -40,11 +40,10 @@ export function buildDashboardSummary(
     0
   );
   const avgCpu = average(statuses.map((status) => status.cpu_usage));
-  const avgMemory = average(
-    statuses.map((status) =>
-      status.memory_total > 0 ? (status.memory_used / status.memory_total) * 100 : 0
-    )
-  );
+  const memoryUsageValues = statuses
+    .filter((status) => status.memory_total > 0)
+    .map((status) => (status.memory_used / status.memory_total) * 100);
+  const avgMemory = average(memoryUsageValues);
 
   const attentionItems = buildAttentionItems(nodes, statuses, offlineNodes, avgCpu, avgMemory);
   const criticalCount = attentionItems.filter((item) => item.severity === "critical").length;
