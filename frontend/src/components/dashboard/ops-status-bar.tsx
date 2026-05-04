@@ -31,18 +31,22 @@ export function OpsStatusBar({ summary }: OpsStatusBarProps) {
       <MetricCell
         label="Workloads"
         value={`${summary.runningWorkloads}/${summary.totalWorkloads}`}
-        helper="VMs und Container"
+        helper={
+          summary.pendingStatusNodes > 0
+            ? `${summary.pendingStatusNodes} Status ausstehend`
+            : "VMs und Container"
+        }
       />
       <MetricCell
         label="CPU"
         value={`${summary.avgCpu.toFixed(1)}%`}
-        helper="Durchschnitt"
+        helper={summary.pendingStatusNodes > 0 ? "Status lädt" : "Durchschnitt"}
         tone={summary.avgCpu >= 80 ? "warning" : "default"}
       />
       <MetricCell
         label="RAM"
         value={`${summary.avgMemory.toFixed(1)}%`}
-        helper="Durchschnitt"
+        helper={summary.pendingStatusNodes > 0 ? "Status lädt" : "Durchschnitt"}
         tone={summary.avgMemory >= 80 ? "warning" : "default"}
       />
     </OpsPanel>

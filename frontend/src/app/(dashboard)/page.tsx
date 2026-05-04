@@ -10,15 +10,25 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { useNodeStore } from "@/stores/node-store";
 
 export default function DashboardPage() {
-  const { nodes, fetchNodes } = useNodeStore();
+  const { nodes, nodeStatus, fetchNodes, fetchNodeStatus } = useNodeStore();
 
   useEffect(() => {
     fetchNodes();
   }, [fetchNodes]);
 
+  useEffect(() => {
+    nodes.forEach((node) => {
+      if (node.is_online && !nodeStatus[node.id]) {
+        fetchNodeStatus(node.id);
+      }
+    });
+  }, [nodes, nodeStatus, fetchNodeStatus]);
+
   const onlineNodes = nodes.filter((node) => node.is_online).length;
   const offlineNodes = nodes.length - onlineNodes;
-  const isHealthy = offlineNodes === 0;
+  const statusTone = nodes.length === 0 ? "muted" : offlineNodes === 0 ? "ok" : "warning";
+  const statusLabel =
+    nodes.length === 0 ? "Keine Nodes" : offlineNodes === 0 ? "Cluster operativ" : `${offlineNodes} offline`;
 
   return (
     <div className="flex flex-col gap-4">
@@ -31,9 +41,7 @@ export default function DashboardPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <StatusBadge tone={isHealthy ? "ok" : "warning"}>
-            {isHealthy ? "Cluster operativ" : `${offlineNodes} offline`}
-          </StatusBadge>
+          <StatusBadge tone={statusTone}>{statusLabel}</StatusBadge>
           <StatusBadge tone="muted" withIcon={false}>
             <span className="tabular">{onlineNodes}</span>/<span className="tabular">{nodes.length}</span> Nodes online
           </StatusBadge>

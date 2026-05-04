@@ -18,8 +18,9 @@ export interface DashboardSummary {
   runningWorkloads: number;
   avgCpu: number;
   avgMemory: number;
+  pendingStatusNodes: number;
   healthLabel: string;
-  healthTone: "ok" | "warning" | "critical";
+  healthTone: "ok" | "warning" | "critical" | "info" | "muted";
   attentionItems: AttentionItem[];
 }
 
@@ -27,9 +28,11 @@ export function buildDashboardSummary(
   nodes: Node[],
   nodeStatus: Record<string, NodeStatus | undefined>
 ): DashboardSummary {
-  const onlineNodes = nodes.filter((node) => node.is_online).length;
+  const onlineNodeList = nodes.filter((node) => node.is_online);
+  const onlineNodes = onlineNodeList.length;
   const offlineNodes = nodes.length - onlineNodes;
-  const statuses = nodes.map((node) => nodeStatus[node.id]).filter(Boolean) as NodeStatus[];
+  const statuses = onlineNodeList.map((node) => nodeStatus[node.id]).filter(Boolean) as NodeStatus[];
+  const pendingStatusNodes = onlineNodes - statuses.length;
 
   const totalWorkloads = statuses.reduce(
     (sum, status) => sum + status.vm_count + status.ct_count,
@@ -45,9 +48,17 @@ export function buildDashboardSummary(
     .map((status) => (status.memory_used / status.memory_total) * 100);
   const avgMemory = average(memoryUsageValues);
 
-  const attentionItems = buildAttentionItems(nodes, statuses, offlineNodes, avgCpu, avgMemory);
+  const attentionItems = buildAttentionItems(
+    nodes,
+    statuses,
+    offlineNodes,
+    pendingStatusNodes,
+    avgCpu,
+    avgMemory
+  );
   const criticalCount = attentionItems.filter((item) => item.severity === "critical").length;
   const warningCount = attentionItems.filter((item) => item.severity === "warning").length;
+  const isEmpty = nodes.length === 0;
 
   return {
     onlineNodes,
@@ -57,13 +68,26 @@ export function buildDashboardSummary(
     runningWorkloads,
     avgCpu,
     avgMemory,
+    pendingStatusNodes,
     healthLabel:
-      criticalCount > 0
+      isEmpty
+        ? "Keine Nodes konfiguriert"
+        : criticalCount > 0
         ? `${criticalCount} kritisch`
         : warningCount > 0
         ? `${warningCount} Hinweise`
+        : pendingStatusNodes > 0
+        ? "Status wird geladen"
         : "Cluster operativ",
-    healthTone: criticalCount > 0 ? "critical" : warningCount > 0 ? "warning" : "ok",
+    healthTone: isEmpty
+      ? "muted"
+      : criticalCount > 0
+      ? "critical"
+      : warningCount > 0
+      ? "warning"
+      : pendingStatusNodes > 0
+      ? "info"
+      : "ok",
     attentionItems,
   };
 }
@@ -72,6 +96,7 @@ function buildAttentionItems(
   nodes: Node[],
   statuses: NodeStatus[],
   offlineNodes: number,
+  pendingStatusNodes: number,
   avgCpu: number,
   avgMemory: number
 ): AttentionItem[] {
@@ -84,6 +109,16 @@ function buildAttentionItems(
       title: `${offlineNodes} Node${offlineNodes === 1 ? "" : "s"} offline`,
       description: "Prüfen Sie Erreichbarkeit, Token und Netzwerkpfad.",
       href: "/nodes",
+    });
+  }
+
+  if (pendingStatusNodes > 0) {
+    items.push({
+      id: "status-loading",
+      severity: "info",
+      title: `${pendingStatusNodes} Statusabfrage${pendingStatusNodes === 1 ? "" : "n"} ausstehend`,
+      description: "Metriken werden geladen, bevor die Lage als ruhig bewertet wird.",
+      href: "/monitoring",
     });
   }
 
