@@ -63,7 +63,7 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   return (
     <TooltipProvider>
-      <div className="flex h-screen overflow-hidden bg-background">
+      <div className="flex h-screen overflow-hidden bg-background ops-canvas">
         <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} />
         <div className="flex flex-1 flex-col overflow-hidden">
           <Header
@@ -71,7 +71,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
             onMobileMenuToggle={() => setMobileMenuOpen(!mobileMenuOpen)}
           />
-          <main className="flex-1 overflow-auto p-4 md:p-6">{children}</main>
+          <main className="flex-1 overflow-auto px-4 py-4 md:px-6 md:py-5">{children}</main>
         </div>
         <ChatPanel />
         <ChatToggle />

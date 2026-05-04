@@ -251,7 +251,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
         className={cn(
           "group relative flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] transition-colors",
           active
-            ? "bg-accent font-medium text-foreground"
+            ? "bg-primary/12 font-medium text-foreground"
             : "text-sidebar-muted hover:bg-accent/60 hover:text-foreground"
         )}
         onClick={() => onMobileClose?.()}
@@ -401,13 +401,13 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
 
   const sidebarContent = (
     <aside
-      className="flex h-screen w-64 flex-col border-r border-border bg-sidebar"
+      className="flex h-screen w-64 flex-col border-r ops-divider bg-sidebar"
       role="navigation"
       aria-label="Hauptnavigation"
     >
       {/* Brand */}
       <div className="flex h-14 items-center gap-2.5 border-b border-border px-4">
-        <div className="flex h-8 w-8 items-center justify-center rounded-md bg-gradient-to-br from-orange-500 to-rose-500 shadow-sm">
+        <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground shadow-sm">
           <Flame className="h-4 w-4 text-white" />
         </div>
         <div className="leading-tight">

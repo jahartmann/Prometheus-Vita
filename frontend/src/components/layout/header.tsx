@@ -110,7 +110,7 @@ export function Header({ onMobileMenuToggle }: HeaderProps) {
   const initials = user?.username ? user.username.slice(0, 2).toUpperCase() : "??";
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-3 border-b border-border bg-background/80 px-4 backdrop-blur-md">
+    <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-3 border-b ops-divider bg-background/88 px-4 backdrop-blur-md">
       {/* Mobile menu trigger */}
       <Button
         variant="ghost"
@@ -140,7 +140,7 @@ export function Header({ onMobileMenuToggle }: HeaderProps) {
           <TooltipTrigger asChild>
             <button
               type="button"
-              className="flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent"
+              className="ops-focus-ring flex items-center gap-1.5 rounded-md border border-border/70 bg-card/80 px-2.5 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent"
               onClick={() => router.push("/chat")}
             >
               <span
