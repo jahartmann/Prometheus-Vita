@@ -21,6 +21,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const router = useRouter();
   const pathname = usePathname();
   const { isAuthenticated, user } = useAuthStore();
+  const isChatPage = pathname === "/chat";
   const devAuthBypass =
     process.env.NODE_ENV === "development" &&
     process.env.NEXT_PUBLIC_DEV_AUTH_BYPASS === "true";
@@ -77,8 +78,12 @@ export function AppLayout({ children }: AppLayoutProps) {
           />
           <main className="flex-1 overflow-auto px-4 py-4 md:px-6 md:py-5">{children}</main>
         </div>
-        <ChatPanel />
-        <ChatToggle />
+        {!isChatPage && (
+          <>
+            <ChatPanel />
+            <ChatToggle />
+          </>
+        )}
         <SearchCommand />
       </div>
     </TooltipProvider>

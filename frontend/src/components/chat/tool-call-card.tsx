@@ -45,13 +45,13 @@ export function ToolCallCard({ toolCall }: ToolCallCardProps) {
   return (
     <div
       className={cn(
-        "mx-4 md:mx-6 my-1.5 rounded-lg border text-xs transition-colors",
+        "mx-4 my-2 rounded-lg border text-xs transition-colors md:mx-6",
         statusConfig.bg
       )}
     >
       <button
         onClick={() => setExpanded(!expanded)}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-muted/30 rounded-lg transition-colors"
+        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left transition-colors hover:bg-muted/30"
       >
         {expanded ? (
           <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
@@ -59,7 +59,8 @@ export function ToolCallCard({ toolCall }: ToolCallCardProps) {
           <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" />
         )}
         <Wrench className="h-3 w-3 shrink-0 text-muted-foreground" />
-        <span className="font-medium font-mono">{toolCall.tool_name}</span>
+        <span className="text-muted-foreground">Tool</span>
+        <span className="font-mono font-medium">{toolCall.tool_name}</span>
         {statusConfig.icon}
         {toolCall.duration_ms > 0 && (
           <span className="ml-auto text-muted-foreground tabular-nums">

@@ -58,7 +58,6 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       set({ conversations: toArray<ChatConversation>(convs), isLoading: false });
     } catch (err: unknown) {
       const message = getApiErrorMessage(err, "Konversationen konnten nicht geladen werden");
-      toast.error(message);
       set({ error: message, isLoading: false });
     }
   },
@@ -79,7 +78,6 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       });
     } catch (err: unknown) {
       const message = getApiErrorMessage(err, "Konversation konnte nicht geladen werden");
-      toast.error(message);
       set({ error: message, toolCalls: [], isLoading: false });
     }
   },
