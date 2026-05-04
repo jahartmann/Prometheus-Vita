@@ -14,6 +14,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { gatewayApi } from "@/lib/api";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import { toast } from "sonner";
 
 const permissionOptions = [
@@ -71,9 +72,13 @@ export function CreateTokenDialog({ open, onOpenChange, onSuccess }: CreateToken
     }
   };
 
-  const handleCopy = () => {
+  const handleCopy = async () => {
     if (createdToken) {
-      navigator.clipboard.writeText(createdToken);
+      const copiedToClipboard = await copyTextToClipboard(createdToken);
+      if (!copiedToClipboard) {
+        toast.error("Kopieren wurde vom Browser blockiert");
+        return;
+      }
       setCopied(true);
       toast.success("Token in Zwischenablage kopiert");
       setTimeout(() => setCopied(false), 2000);

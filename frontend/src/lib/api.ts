@@ -108,8 +108,23 @@ export function toArray<T>(data: unknown): T[] {
 
 export function getApiErrorMessage(error: unknown, fallback: string): string {
   if (error && typeof error === "object" && "response" in error) {
-    const response = (error as { response?: { data?: { message?: string; error?: string } } }).response;
-    return response?.data?.message ?? response?.data?.error ?? fallback;
+    const response = (error as { response?: { status?: number; data?: unknown } }).response;
+    const data = response?.data;
+
+    if (data && typeof data === "object") {
+      const payload = data as { message?: string; error?: string };
+      return payload.message ?? payload.error ?? fallback;
+    }
+
+    if (typeof data === "string" && data.trim() && data.trim() !== "Internal Server Error") {
+      return data;
+    }
+
+    if (response?.status === 500 && data === "Internal Server Error") {
+      return "API momentan nicht erreichbar. Bitte pruefen, ob das Backend auf Port 8080 laeuft.";
+    }
+
+    return fallback;
   }
   if (error instanceof Error) return error.message;
   return fallback;
@@ -436,6 +451,8 @@ export const chatApi = {
     api.get(`/chat/conversations/${id}`).then((r) => r.data),
   getMessages: (id: string) =>
     api.get(`/chat/conversations/${id}/messages`).then((r) => toArray(r.data)),
+  getToolCalls: (id: string) =>
+    api.get(`/chat/conversations/${id}/tool-calls`).then((r) => toArray(r.data)),
   deleteConversation: (id: string) =>
     api.delete(`/chat/conversations/${id}`),
   recentActivity: (limit?: number) =>

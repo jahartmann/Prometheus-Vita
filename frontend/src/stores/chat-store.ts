@@ -6,7 +6,7 @@ import type {
   ChatResponse,
   AgentToolCall,
 } from "@/types/api";
-import { chatApi, toArray } from "@/lib/api";
+import { chatApi, getApiErrorMessage, toArray } from "@/lib/api";
 
 // generateId() is unavailable in non-secure contexts (HTTP without TLS).
 function generateId(): string {
@@ -56,27 +56,29 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     try {
       const convs = await chatApi.listConversations();
       set({ conversations: toArray<ChatConversation>(convs), isLoading: false });
-    } catch {
-      toast.error("Konversationen konnten nicht geladen werden");
-      set({ error: "Konversationen konnten nicht geladen werden", isLoading: false });
+    } catch (err: unknown) {
+      const message = getApiErrorMessage(err, "Konversationen konnten nicht geladen werden");
+      set({ error: message, isLoading: false });
     }
   },
 
   selectConversation: async (id: string) => {
     set({ isLoading: true, error: null });
     try {
-      const [conv, msgs] = await Promise.all([
+      const [conv, msgs, calls] = await Promise.all([
         chatApi.getConversation(id),
         chatApi.getMessages(id),
+        chatApi.getToolCalls(id),
       ]);
       set({
         currentConversation: conv,
         messages: toArray<ChatMessage>(msgs),
+        toolCalls: toArray<AgentToolCall>(calls),
         isLoading: false,
       });
-    } catch {
-      toast.error("Konversation konnte nicht geladen werden");
-      set({ error: "Konversation konnte nicht geladen werden", isLoading: false });
+    } catch (err: unknown) {
+      const message = getApiErrorMessage(err, "Konversation konnte nicht geladen werden");
+      set({ error: message, toolCalls: [], isLoading: false });
     }
   },
 
@@ -136,14 +138,11 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       // Refresh conversation list
       get().fetchConversations();
     } catch (err: unknown) {
-      const apiError =
-        err && typeof err === "object" && "response" in err
-          ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
-          : null;
-      const errorMsg = apiError || "Nachricht konnte nicht gesendet werden";
+      const errorMsg = getApiErrorMessage(err, "Nachricht konnte nicht gesendet werden");
       toast.error(errorMsg);
       set((s) => ({
         messages: s.messages.filter((m) => m.id !== tempUserMsg.id),
+        toolCalls: currentConversation ? s.toolCalls : [],
         error: errorMsg,
         isSending: false,
       }));
@@ -169,9 +168,10 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       set((s) => ({
         conversations: s.conversations.filter((c) => c.id !== id),
       }));
-    } catch {
-      toast.error("Konversation konnte nicht gelöscht werden");
-      set({ error: "Konversation konnte nicht gelöscht werden" });
+    } catch (err: unknown) {
+      const message = getApiErrorMessage(err, "Konversation konnte nicht geloescht werden");
+      toast.error(message);
+      set({ error: message });
     }
   },
 }));

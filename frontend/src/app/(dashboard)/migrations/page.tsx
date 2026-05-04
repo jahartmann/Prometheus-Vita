@@ -39,6 +39,7 @@ import {
   Search,
   AlertTriangle,
   ChevronRight,
+  Globe2,
 } from "lucide-react";
 import api, { toArray } from "@/lib/api";
 import type { VM, VMMigration, MigrationMode } from "@/types/api";
@@ -169,7 +170,6 @@ export default function MigrationsPage() {
       })
       .catch((err) => {
         const msg = err?.response?.data?.error || err?.message || "Unbekannt";
-        console.error("[Migration] Storage load failed:", msg);
         setStorages([]);
         setStorageError(`Storage-Abfrage fehlgeschlagen: ${msg}`);
       })
@@ -823,9 +823,15 @@ export default function MigrationsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">VM-Migrationen</h1>
+        <div className="flex flex-wrap items-center gap-2">
+          <h1 className="text-2xl font-bold">VM-Migrationen</h1>
+          <Badge variant="outline" className="gap-1">
+            <Globe2 className="h-3 w-3" />
+            Global
+          </Badge>
+        </div>
         <p className="text-muted-foreground text-sm">
-          VMs zwischen Nodes migrieren und Fortschritt in Echtzeit verfolgen.
+          VMs zwischen allen Nodes migrieren, Fortschritt zentral verfolgen und bei Bedarf ueber den Scope gezielt auf einzelne Nodes wechseln.
         </p>
       </div>
 

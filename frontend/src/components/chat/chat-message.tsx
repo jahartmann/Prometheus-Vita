@@ -20,28 +20,28 @@ export function ChatMessage({ message }: ChatMessageProps) {
   return (
     <div
       className={cn(
-        "flex gap-3 px-4 py-3 md:px-6",
+        "flex gap-3 px-4 py-4 md:px-6",
         isUser ? "flex-row-reverse" : "flex-row"
       )}
     >
       <div
         className={cn(
-          "flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
+          "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border",
           isUser
-            ? "bg-primary text-primary-foreground"
-            : "bg-muted text-muted-foreground"
+            ? "border-primary bg-primary text-primary-foreground"
+            : "bg-card text-muted-foreground"
         )}
       >
         {isUser ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
       </div>
       <div
         className={cn(
-          "max-w-[85%] sm:max-w-[75%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed",
+          "max-w-[88%] text-sm leading-relaxed sm:max-w-[78%]",
           isUser
-            ? "bg-primary text-primary-foreground rounded-br-md"
+            ? "rounded-xl rounded-tr-sm bg-primary px-4 py-2.5 text-primary-foreground shadow-sm"
             : isAssistant
-            ? "bg-muted text-foreground rounded-bl-md"
-            : "bg-muted/50 text-foreground/70 text-xs"
+            ? "rounded-xl rounded-tl-sm border bg-card px-4 py-3 text-foreground"
+            : "rounded-lg bg-muted/50 px-3 py-2 text-xs text-foreground/70"
         )}
       >
         <div className="whitespace-pre-wrap break-words">
@@ -49,7 +49,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
         </div>
         <div
           className={cn(
-            "mt-1 text-[10px]",
+            "mt-2 text-[10px]",
             isUser ? "text-primary-foreground/60" : "text-muted-foreground/60"
           )}
         >

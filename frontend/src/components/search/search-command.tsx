@@ -135,7 +135,7 @@ export function SearchCommand() {
         category: "navigation" as SearchCategory,
         icon: LayoutDashboard,
         label: "Dashboard",
-        description: "Überblick über Nodes, Aufgaben und KPIs",
+        description: "Übersicht aller Nodes und KPIs",
         href: "/",
         tags: ["home", "start", "übersicht", "kpi"],
       },
@@ -171,7 +171,7 @@ export function SearchCommand() {
         category: "navigation" as SearchCategory,
         icon: Newspaper,
         label: "Lagebrief",
-        description: "Tägliche Infrastruktur-Zusammenfassung",
+        description: "Tägliche Zusammenfassung",
         href: "/briefing",
         tags: ["morgen", "zusammenfassung", "bericht", "daily"],
       },
@@ -180,7 +180,7 @@ export function SearchCommand() {
         category: "navigation" as SearchCategory,
         icon: Shield,
         label: "Notfallplanung",
-        description: "Recovery-Pläne, Runbooks und Readiness",
+        description: "Notfallpläne und Readiness",
         href: "/disaster-recovery",
         tags: ["notfall", "wiederherstellung", "recovery", "runbook"],
       },
@@ -199,7 +199,7 @@ export function SearchCommand() {
         icon: Package,
         label: "Updates",
         description: "Paket-Updates und Sicherheitsupdates",
-        href: "/updates",
+        href: "/settings/system",
         tags: ["pakete", "update", "sicherheit", "apt"],
       },
       {
@@ -225,10 +225,27 @@ export function SearchCommand() {
         category: "navigation" as SearchCategory,
         icon: MessageSquare,
         label: "KI-Chat",
-        description: "Assistent für Infrastrukturfragen",
+        description: "KI-Assistent für Infrastrukturfragen",
         href: "/chat",
         tags: ["ki", "ai", "assistent", "frage"],
       },
+      { id: "nav-alerts", category: "navigation" as SearchCategory, icon: AlertTriangle, label: "Alarme", description: "Warnungen und Bestätigungen", href: "/alerts", tags: ["alarm", "warnung"] },
+      { id: "nav-tasks", category: "navigation" as SearchCategory, icon: Clock, label: "Aufgaben", description: "Aufgaben und laufende Operationen", href: "/task-center", tags: ["task", "jobs", "aufgaben"] },
+      { id: "nav-cluster", category: "navigation" as SearchCategory, icon: Cpu, label: "Cluster", description: "Cluster-Zustand und Dienste", href: "/cluster", tags: ["cluster", "pve"] },
+      { id: "nav-storage", category: "navigation" as SearchCategory, icon: HardDrive, label: "Speicher", description: "Speicher und Kapazität", href: "/storage", tags: ["speicher", "disk"] },
+      { id: "nav-network", category: "navigation" as SearchCategory, icon: Network, label: "Netzwerk", description: "Ports, Geräte und Bandbreite", href: "/network", tags: ["ports", "scan", "bandbreite"] },
+      { id: "nav-isos", category: "navigation" as SearchCategory, icon: Package, label: "ISOs & Vorlagen", description: "ISO Images und Container Templates", href: "/isos", tags: ["iso", "template", "vorlagen"] },
+      { id: "nav-security", category: "navigation" as SearchCategory, icon: Shield, label: "Sicherheit", description: "Security-Befunde und Analyse", href: "/security", tags: ["security", "schutz"] },
+      { id: "nav-reports", category: "navigation" as SearchCategory, icon: BarChart3, label: "Berichte", description: "Berichte und Nachweise", href: "/reports", tags: ["bericht", "report"] },
+      { id: "nav-drift", category: "navigation" as SearchCategory, icon: ArrowLeftRight, label: "Drift", description: "Konfigurations-Drift erkennen", href: "/drift", tags: ["config", "änderung"] },
+      { id: "nav-root-cause", category: "navigation" as SearchCategory, icon: Sparkles, label: "Ursachenanalyse", description: "Ursachenanalyse", href: "/root-cause", tags: ["analyse", "incident"] },
+      { id: "nav-reflex", category: "navigation" as SearchCategory, icon: Zap, label: "Reflex-Regeln", description: "Automatische Regeln", href: "/reflex", tags: ["automation", "regel"] },
+      { id: "nav-knowledge", category: "navigation" as SearchCategory, icon: Hash, label: "Wissensgraph", description: "Wissensbasis und Beziehungen", href: "/knowledge-graph", tags: ["wissen", "brain", "graph"] },
+      { id: "nav-health", category: "navigation" as SearchCategory, icon: MemoryStick, label: "VM-Gesundheit", description: "VM-Health und Kapazität", href: "/health", tags: ["vm", "health"] },
+      { id: "nav-dependencies", category: "navigation" as SearchCategory, icon: FolderArchive, label: "Abhängigkeiten", description: "VM-Abhängigkeiten", href: "/dependencies", tags: ["dependency", "service"] },
+      { id: "nav-logs", category: "navigation" as SearchCategory, icon: Package, label: "Logs", description: "Logstream und Systemlogs", href: "/logs", tags: ["log", "journal", "syslog"] },
+      { id: "nav-flight", category: "navigation" as SearchCategory, icon: Command, label: "Flight Recorder", description: "Infrastruktur-Historie", href: "/flight-recorder", tags: ["history", "timeline"] },
+      { id: "nav-admin", category: "navigation" as SearchCategory, icon: Settings, label: "Admin-Hub", description: "System, Zugriff und Integrationen", href: "/settings", tags: ["admin", "einstellungen"] },
     ],
     []
   );
@@ -317,7 +334,7 @@ export function SearchCommand() {
         id: "settings-ssh",
         category: "settings" as SearchCategory,
         icon: Shield,
-        label: "SSH-Schlüssel",
+        label: "SSH-Keys",
         href: "/settings/ssh-keys",
         tags: ["ssh", "key", "schlüssel"],
       },
@@ -325,10 +342,22 @@ export function SearchCommand() {
         id: "settings-env",
         category: "settings" as SearchCategory,
         icon: Settings,
-        label: "Umgebungen",
+        label: "Environments",
         href: "/settings/environments",
         tags: ["environment", "umgebung", "env"],
       },
+      { id: "settings-overview", category: "settings" as SearchCategory, icon: Settings, label: "Admin-Hub", href: "/settings", tags: ["admin", "einstellungen"] },
+      { id: "settings-system", category: "settings" as SearchCategory, icon: Activity, label: "Systemstatus", href: "/settings/system", tags: ["health", "backend", "updates"] },
+      { id: "settings-security", category: "settings" as SearchCategory, icon: Shield, label: "Sicherheit", href: "/settings/security", tags: ["security", "modus"] },
+      { id: "settings-backups", category: "settings" as SearchCategory, icon: FolderArchive, label: "Backup & DR", href: "/settings/backups", tags: ["backup", "recovery"] },
+      { id: "settings-roles", category: "settings" as SearchCategory, icon: Settings, label: "Rollen & Rechte", href: "/settings/roles", tags: ["rollen", "rechte", "rbac"] },
+      { id: "settings-vm-permissions", category: "settings" as SearchCategory, icon: Shield, label: "VM-Berechtigungen", href: "/settings/vm-permissions", tags: ["vm", "rechte"] },
+      { id: "settings-vm-groups", category: "settings" as SearchCategory, icon: Monitor, label: "VM-Gruppen", href: "/settings/vm-groups", tags: ["vm", "gruppen"] },
+      { id: "settings-notifications", category: "settings" as SearchCategory, icon: AlertTriangle, label: "Benachrichtigungen", href: "/settings/notifications", tags: ["alerts", "mail"] },
+      { id: "settings-agent", category: "settings" as SearchCategory, icon: Sparkles, label: "KI-Assistent", href: "/settings/agent", tags: ["llm", "ollama", "openai"] },
+      { id: "settings-brain", category: "settings" as SearchCategory, icon: Hash, label: "Wissensbasis", href: "/settings/brain", tags: ["brain", "memory"] },
+      { id: "settings-password", category: "settings" as SearchCategory, icon: Shield, label: "Passwort-Richtlinie", href: "/settings/password-policy", tags: ["password", "policy"] },
+      { id: "settings-audit", category: "settings" as SearchCategory, icon: Package, label: "Audit-Log", href: "/settings/audit-log", tags: ["audit", "nachweis"] },
     ],
     []
   );
@@ -646,7 +675,7 @@ export function SearchTrigger() {
   return (
     <button
       onClick={handleClick}
-      className="flex h-9 w-64 items-center gap-2 rounded-lg border bg-muted/50 px-3 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+      className="flex h-8 w-44 items-center gap-2 rounded-md border bg-muted/40 px-2.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:w-52"
     >
       <Search className="h-4 w-4 shrink-0" />
       <span className="flex-1 text-left">Suchen...</span>

@@ -1,42 +1,51 @@
 "use client";
 
-import { useEffect } from "react";
-import { useNodeStore } from "@/stores/node-store";
-import { DashboardOverview } from "@/components/dashboard/dashboard-overview";
-import { BriefingWidget } from "@/components/dashboard/briefing-widget";
-import { SecurityWidget } from "@/components/dashboard/security-widget";
-import { AttentionBanner } from "@/components/dashboard/attention-banner";
+import { useEffect, useRef } from "react";
 import { AgentActivityFeed } from "@/components/dashboard/agent-activity-feed";
+import { AttentionBanner } from "@/components/dashboard/attention-banner";
+import { BriefingWidget } from "@/components/dashboard/briefing-widget";
+import { DashboardOverview } from "@/components/dashboard/dashboard-overview";
+import { SecurityWidget } from "@/components/dashboard/security-widget";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { useNodeStore } from "@/stores/node-store";
 
 export default function DashboardPage() {
-  const { nodes, fetchNodes } = useNodeStore();
+  const { nodes, nodeStatus, fetchNodes, fetchNodeStatus } = useNodeStore();
+  const requestedStatusRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     fetchNodes();
   }, [fetchNodes]);
 
+  useEffect(() => {
+    nodes.forEach((node) => {
+      if (node.is_online && !nodeStatus[node.id] && !requestedStatusRef.current.has(node.id)) {
+        requestedStatusRef.current.add(node.id);
+        void fetchNodeStatus(node.id).finally(() => {
+          requestedStatusRef.current.delete(node.id);
+        });
+      }
+    });
+  }, [nodes, nodeStatus, fetchNodeStatus]);
+
   const onlineNodes = nodes.filter((node) => node.is_online).length;
   const offlineNodes = nodes.length - onlineNodes;
-  const isHealthy = offlineNodes === 0;
-  const greeting = greetingFor(new Date());
+  const statusTone = nodes.length === 0 ? "muted" : offlineNodes === 0 ? "ok" : "warning";
+  const statusLabel =
+    nodes.length === 0 ? "Keine Nodes" : offlineNodes === 0 ? "Cluster operativ" : `${offlineNodes} offline`;
 
   return (
-    <div className="flex flex-col gap-6">
-      {/* Hero — quiet, single column. The status pills live to the right
-          so the eye scans title → data without crossing the page. */}
-      <section className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <div className="flex flex-col gap-4">
+      <section className="flex flex-col gap-3 border-b ops-divider pb-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="eyebrow">{greeting}</p>
-          <h1 className="mt-1 text-3xl font-semibold tracking-tight">Lagezentrum</h1>
+          <p className="eyebrow">{greetingFor(new Date())}</p>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight">Lagezentrum</h1>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Prioritäten, Clusterzustand und nächste Aktionen — auf einen Blick.
+            Prioritäten, Clusterzustand und nächste Aktionen - ohne Funktionslärm.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <StatusBadge tone={isHealthy ? "ok" : "warning"}>
-            {isHealthy ? "Cluster operativ" : `${offlineNodes} offline`}
-          </StatusBadge>
+          <StatusBadge tone={statusTone}>{statusLabel}</StatusBadge>
           <StatusBadge tone="muted" withIcon={false}>
             <span className="tabular">{onlineNodes}</span>/<span className="tabular">{nodes.length}</span> Nodes online
           </StatusBadge>
@@ -44,18 +53,14 @@ export default function DashboardPage() {
       </section>
 
       <AttentionBanner />
-
-      {/* KPIs */}
       <DashboardOverview />
 
-      {/* Two-column: briefing (the agent's voice) + security (its eyes). */}
       <section className="grid gap-4 xl:grid-cols-2">
         <BriefingWidget />
         <SecurityWidget />
       </section>
 
-      {/* What the agent has been doing — the "live admin" feed. */}
-      <AgentActivityFeed limit={20} pollInterval={15000} />
+      <AgentActivityFeed limit={12} pollInterval={15000} />
     </div>
   );
 }

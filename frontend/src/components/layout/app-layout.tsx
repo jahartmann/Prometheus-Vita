@@ -21,6 +21,11 @@ export function AppLayout({ children }: AppLayoutProps) {
   const router = useRouter();
   const pathname = usePathname();
   const { isAuthenticated, user } = useAuthStore();
+  const isChatPage = pathname === "/chat";
+  const devAuthBypass =
+    process.env.NODE_ENV === "development" &&
+    process.env.NEXT_PUBLIC_DEV_AUTH_BYPASS === "true";
+  const canAccessApp = isAuthenticated || devAuthBypass;
 
   useEffect(() => {
     if (useAuthStore.persist.hasHydrated()) {
@@ -34,10 +39,10 @@ export function AppLayout({ children }: AppLayoutProps) {
   }, []);
 
   useEffect(() => {
-    if (hydrated && !isAuthenticated) {
+    if (hydrated && !canAccessApp) {
       router.push("/login");
     }
-  }, [isAuthenticated, hydrated, router]);
+  }, [canAccessApp, hydrated, router]);
 
   // Redirect users who must change password
   useEffect(() => {
@@ -50,7 +55,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     }
   }, [isAuthenticated, user, pathname, router]);
 
-  if (!hydrated || !isAuthenticated) {
+  if (!hydrated || !canAccessApp) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-3">
@@ -63,7 +68,7 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   return (
     <TooltipProvider>
-      <div className="flex h-screen overflow-hidden bg-background">
+      <div className="flex h-screen overflow-hidden bg-background ops-canvas">
         <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} />
         <div className="flex flex-1 flex-col overflow-hidden">
           <Header
@@ -71,10 +76,14 @@ export function AppLayout({ children }: AppLayoutProps) {
             onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
             onMobileMenuToggle={() => setMobileMenuOpen(!mobileMenuOpen)}
           />
-          <main className="flex-1 overflow-auto p-4 md:p-6">{children}</main>
+          <main className="flex-1 overflow-auto px-4 py-4 md:px-6 md:py-5">{children}</main>
         </div>
-        <ChatPanel />
-        <ChatToggle />
+        {!isChatPage && (
+          <>
+            <ChatPanel />
+            <ChatToggle />
+          </>
+        )}
         <SearchCommand />
       </div>
     </TooltipProvider>
