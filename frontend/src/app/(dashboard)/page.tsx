@@ -21,7 +21,9 @@ export default function DashboardPage() {
     nodes.forEach((node) => {
       if (node.is_online && !nodeStatus[node.id] && !requestedStatusRef.current.has(node.id)) {
         requestedStatusRef.current.add(node.id);
-        void fetchNodeStatus(node.id);
+        void fetchNodeStatus(node.id).finally(() => {
+          requestedStatusRef.current.delete(node.id);
+        });
       }
     });
   }, [nodes, nodeStatus, fetchNodeStatus]);
