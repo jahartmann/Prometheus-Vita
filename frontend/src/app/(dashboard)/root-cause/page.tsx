@@ -3,11 +3,12 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, BrainCircuit, CheckCircle2, GitCompare, RefreshCw, SearchCheck, ShieldAlert, TrendingUp } from "lucide-react";
-import { agentConfigApi, operationsApi } from "@/lib/api";
+import { agentConfigApi, getApiErrorMessage, operationsApi } from "@/lib/api";
 import type { RCACandidate, RCAAnalyzeResponse } from "@/types/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -25,14 +26,17 @@ export default function RootCausePage() {
   const [model, setModel] = useState("llama3");
   const [modelOptions, setModelOptions] = useState<string[]>(["llama3", "mistral", "codellama"]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setIsLoading(true);
     try {
       const result = await operationsApi.analyzeRCA({ prompt: "Root-Cause-Analyse", limit: 20, use_llm: useLLM, model }) as RCAAnalyzeResponse;
       setAnalysis(result);
-    } catch {
+      setError(null);
+    } catch (err) {
       setAnalysis(null);
+      setError(getApiErrorMessage(err, "Ursachenanalyse konnte nicht geladen werden"));
     }
     setIsLoading(false);
   }, [model, useLLM]);
@@ -59,8 +63,8 @@ export default function RootCausePage() {
     <div className="space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Root-Cause-Analyse</h1>
-          <p className="text-sm text-muted-foreground">Korreliert Metriken, Security, Predictions, Backups, Migrationen und Changes zu konkreten Verdachtsmomenten.</p>
+          <h1 className="text-2xl font-bold tracking-tight">Ursachenanalyse</h1>
+          <p className="text-sm text-muted-foreground">Korreliert Metriken, Sicherheit, Vorhersagen, Backups, Migrationen und Änderungen zu konkreten Verdachtsmomenten.</p>
         </div>
         <Button variant="outline" size="sm" onClick={load} disabled={isLoading}>
           <RefreshCw className={cn("mr-2 h-4 w-4", isLoading && "animate-spin")} />
@@ -72,7 +76,7 @@ export default function RootCausePage() {
         <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Lage</CardTitle></CardHeader><CardContent className="text-2xl font-semibold">{healthLabel}</CardContent></Card>
         <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Timeline</CardTitle></CardHeader><CardContent className="text-2xl font-semibold">{analysis?.timeline.length ?? 0}</CardContent></Card>
         <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Modell</CardTitle></CardHeader><CardContent className="text-2xl font-semibold">{analysis?.model_used || "Regel"}</CardContent></Card>
-        <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Signals</CardTitle></CardHeader><CardContent className="text-2xl font-semibold">{candidates.length}</CardContent></Card>
+        <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Signale</CardTitle></CardHeader><CardContent className="text-2xl font-semibold">{candidates.length}</CardContent></Card>
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[1fr,340px]">
@@ -83,12 +87,23 @@ export default function RootCausePage() {
           </div>
           <div className="divide-y">
             {isLoading ? (
-              <div className="px-4 py-10 text-center text-sm text-muted-foreground">Analyse laeuft...</div>
+              <EmptyState icon={RefreshCw} title="Analyse läuft" description="Signale werden gesammelt und korreliert." variant="loading" className="m-4" />
+            ) : error ? (
+              <EmptyState
+                icon={AlertTriangle}
+                title="Ursachenanalyse nicht erreichbar"
+                description={error}
+                variant="error"
+                action={<Button variant="outline" size="sm" onClick={load}>Erneut versuchen</Button>}
+                className="m-4"
+              />
             ) : candidates.length === 0 ? (
-              <div className="flex items-center gap-2 px-4 py-10 text-sm text-muted-foreground">
-                <CheckCircle2 className="h-4 w-4 text-green-500" />
-                Keine offenen Ursachen-Kandidaten gefunden.
-              </div>
+              <EmptyState
+                icon={CheckCircle2}
+                title="Keine offenen Ursachen-Kandidaten"
+                description="Aktuell gibt es keine korrelierten Signale, die eine Untersuchung brauchen."
+                className="m-4"
+              />
             ) : (
               candidates.map((candidate) => (
                 <Link key={candidate.id} href={candidate.href} className="block px-4 py-4 transition-colors hover:bg-muted/50">
@@ -130,7 +145,7 @@ export default function RootCausePage() {
             <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-sm"><BrainCircuit className="h-4 w-4" /> Analyse-Logik</CardTitle></CardHeader>
             <CardContent className="space-y-2 text-sm text-muted-foreground">
               <p>1. Node-Erreichbarkeit und Kapazitaet zuerst.</p>
-              <p>2. Danach Security-Events, Anomalien und Predictions.</p>
+              <p>2. Danach Sicherheitsereignisse, Anomalien und Vorhersagen.</p>
               <p>3. Fehlgeschlagene Jobs werden mit letzten Schreibaktionen korreliert.</p>
               {analysis?.summary && <p>{analysis.summary}</p>}
             </CardContent>

@@ -76,7 +76,7 @@ export default function AlertsPage() {
       const data = resp.data;
       setIncidents(Array.isArray(data) ? data : []);
     } catch (err: unknown) {
-      const message = getApiErrorMessage(err, "Alerts konnten nicht geladen werden");
+      const message = getApiErrorMessage(err, "Alarme konnten nicht geladen werden");
       setError(message);
       setIncidents([]);
     } finally {
@@ -155,7 +155,7 @@ export default function AlertsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-bold">Alerts</h2>
+          <h2 className="text-xl font-bold">Alarme</h2>
           <p className="text-sm text-muted-foreground">
             Übersicht aller ausgelösten Alarme und Vorfälle.
           </p>

@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { KpiCard } from "@/components/ui/kpi-card";
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   Collapsible,
   CollapsibleContent,
@@ -146,7 +147,9 @@ export default function BriefingPage() {
   const [anomaliesOpen, setAnomaliesOpen] = useState(true);
   const [predictionsOpen, setPredictionsOpen] = useState(true);
 
-  useEffect(() => {
+  const loadBriefing = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
     Promise.all([
       briefingApi.getLive(),
       anomalyApi.listUnresolved().catch(() => []),
@@ -162,6 +165,10 @@ export default function BriefingPage() {
       .catch(() => setError("Briefing konnte nicht geladen werden"))
       .finally(() => setIsLoading(false));
   }, []);
+
+  useEffect(() => {
+    loadBriefing();
+  }, [loadBriefing]);
 
   const handleResolve = useCallback(async (id: string) => {
     setResolvingIds((prev) => new Set(prev).add(id));
@@ -204,13 +211,15 @@ export default function BriefingPage() {
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">{getGreeting()}</h1>
-          <p className="text-muted-foreground">Ihr Infrastruktur-Briefing</p>
+          <p className="text-muted-foreground">Infrastruktur-Lagebrief</p>
         </div>
-        <Card>
-          <CardContent className="py-8 text-center text-muted-foreground">
-            {error || "Keine Daten verfügbar"}
-          </CardContent>
-        </Card>
+        <EmptyState
+          icon={AlertTriangle}
+          title={error ? "Lagebrief nicht erreichbar" : "Noch keine Briefing-Daten"}
+          description={error || "Sobald Monitoring- und Inventardaten vorliegen, erscheint hier die verdichtete Tageslage."}
+          variant={error ? "error" : "default"}
+          action={<Button variant="outline" size="sm" onClick={loadBriefing}>Erneut laden</Button>}
+        />
       </div>
     );
   }

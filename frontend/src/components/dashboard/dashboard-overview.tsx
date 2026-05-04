@@ -36,7 +36,7 @@ export function DashboardOverview() {
     },
     {
       title: "Netzwerk",
-      description: "Ports, Devices, Anomalien",
+      description: "Ports, Geräte, Anomalien",
       icon: Network,
       href: "/network",
     },
@@ -47,7 +47,7 @@ export function DashboardOverview() {
       href: "/logs",
     },
     {
-      title: "Tasks",
+      title: "Aufgaben",
       description: "Migrationen, Backups, Incidents",
       icon: ListChecks,
       href: "/task-center",
@@ -91,7 +91,7 @@ export function DashboardOverview() {
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-base font-semibold">Server-Flotte</h2>
-            <p className="text-sm text-muted-foreground">Nodes und Workload-Zustand fuer den schnellen Drill-down.</p>
+            <p className="text-sm text-muted-foreground">Nodes und Workload-Zustand für den schnellen Drill-down.</p>
           </div>
           <Button variant="ghost" size="sm" asChild>
             <Link href="/health">

@@ -124,7 +124,7 @@ export default function MonitoringPage() {
         <TabsList>
           <TabsTrigger value="overview">Übersicht</TabsTrigger>
           <TabsTrigger value="traffic">Live Traffic</TabsTrigger>
-          <TabsTrigger value="alerts">Alerts</TabsTrigger>
+          <TabsTrigger value="alerts">Alarme</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview">

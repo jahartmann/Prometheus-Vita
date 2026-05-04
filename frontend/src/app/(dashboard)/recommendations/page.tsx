@@ -19,6 +19,7 @@ import {
   ArrowUp,
   Minus,
   Info,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,9 +28,10 @@ import { Badge } from "@/components/ui/badge";
 import {
   TooltipProvider,
 } from "@/components/ui/tooltip";
-import { rightsizingApi, toArray } from "@/lib/api";
+import { getApiErrorMessage, rightsizingApi, toArray } from "@/lib/api";
 import { useNodeStore } from "@/stores/node-store";
 import { KpiCard } from "@/components/ui/kpi-card";
+import { EmptyState } from "@/components/ui/empty-state";
 import type { ResourceRecommendation } from "@/types/api";
 
 const VM_CONTEXT_CONFIG: Record<
@@ -74,6 +76,7 @@ type FilterType = "all" | "action" | "optimal";
 export default function RecommendationsPage() {
   const [recommendations, setRecommendations] = useState<ResourceRecommendation[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterType>("all");
   const { nodes, fetchNodes } = useNodeStore();
 
@@ -82,8 +85,10 @@ export default function RecommendationsPage() {
     try {
       const resp = await rightsizingApi.listAll();
       setRecommendations(toArray<ResourceRecommendation>(resp.data));
-    } catch {
-      // Fehler
+      setError(null);
+    } catch (err) {
+      setRecommendations([]);
+      setError(getApiErrorMessage(err, "Empfehlungen konnten nicht geladen werden"));
     } finally {
       setIsLoading(false);
     }
@@ -166,7 +171,7 @@ export default function RecommendationsPage() {
           <div>
             <h2 className="text-xl font-bold">Empfehlungen</h2>
             <p className="text-sm text-muted-foreground">
-              Kontextbewusste Optimierungsvorschläge für Ihre VMs.
+              Kontextbewusste Optimierungsvorschläge für VMs und Container.
             </p>
           </div>
           <Button variant="outline" onClick={fetchData} disabled={isLoading}>
@@ -268,13 +273,20 @@ export default function RecommendationsPage() {
             ))}
           </Tabs>
         ) : (
-          <Card>
-            <CardContent className="py-12 text-center text-muted-foreground">
-              {isLoading
-                ? "Analyse läuft..."
-                : "Keine Empfehlungen vorhanden. Starten Sie eine Analyse."}
-            </CardContent>
-          </Card>
+          <EmptyState
+            icon={error ? AlertTriangle : isLoading ? RefreshCw : TrendingDown}
+            title={error ? "Empfehlungen nicht erreichbar" : isLoading ? "Analyse läuft" : "Keine Empfehlungen vorhanden"}
+            description={
+              error ||
+              (isLoading
+                ? "Die Ressourcenanalyse wird gerade geladen."
+                : filter === "all"
+                  ? "Wenn neue Messdaten verfügbar sind, erscheinen hier konkrete Optimierungen."
+                  : "Passe den Filter an, um weitere Empfehlungen zu sehen.")
+            }
+            variant={error ? "error" : isLoading ? "loading" : "default"}
+            action={<Button variant="outline" size="sm" onClick={fetchData}>Aktualisieren</Button>}
+          />
         )}
       </div>
     </TooltipProvider>

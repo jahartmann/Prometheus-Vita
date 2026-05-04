@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
 type DomainFilter = "all" | "security" | "capacity" | "operations";
 
 export default function ReportsPage() {
-  const [prompt, setPrompt] = useState("Erstelle einen kompakten Betriebsbericht fuer die letzten kritischen Ereignisse.");
+  const [prompt, setPrompt] = useState("Erstelle einen kompakten Betriebsbericht für die letzten kritischen Ereignisse.");
   const [domain, setDomain] = useState<DomainFilter>("all");
   const [severity, setSeverity] = useState("all");
   const [query, setQuery] = useState("");
@@ -77,7 +77,7 @@ export default function ReportsPage() {
     <div className="space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Reports</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Berichte</h1>
           <p className="text-sm text-muted-foreground">Promptbare Betriebsberichte mit Dashboard-Filtern aus Security, Kapazitaet und Operations.</p>
         </div>
         <Button variant="outline" size="sm" onClick={load} disabled={isLoading}>
@@ -95,7 +95,7 @@ export default function ReportsPage() {
         </CardHeader>
         <CardContent>
           {history.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Noch keine geplanten oder manuellen Log-Reports vorhanden.</p>
+            <p className="text-sm text-muted-foreground">Noch keine geplanten oder manuellen Log-Berichte vorhanden.</p>
           ) : (
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               {history.map((entry) => {
@@ -190,7 +190,7 @@ export default function ReportsPage() {
           <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-sm"><FileBarChart className="h-4 w-4" /> Generierter Bericht</CardTitle></CardHeader>
           <CardContent>
             <pre className="max-h-[680px] overflow-auto whitespace-pre-wrap rounded-md border bg-muted/30 p-4 text-sm leading-6">
-              {isLoading ? "Daten werden geladen..." : report?.text ?? "Kein Bericht verfuegbar."}
+              {isLoading ? "Daten werden geladen..." : report?.text ?? "Kein Bericht verfügbar."}
             </pre>
           </CardContent>
         </Card>
@@ -205,7 +205,7 @@ function formatDate(value?: string) {
 }
 
 function readReportSummary(report: unknown): string {
-  if (!report) return "Kein Summary verfuegbar.";
+  if (!report) return "Keine Zusammenfassung verfügbar.";
   if (typeof report === "string") {
     try {
       const parsed = JSON.parse(report) as { summary?: string };
@@ -215,7 +215,7 @@ function readReportSummary(report: unknown): string {
     }
   }
   if (typeof report === "object" && "summary" in report) {
-    return String((report as { summary?: unknown }).summary || "Kein Summary verfuegbar.");
+    return String((report as { summary?: unknown }).summary || "Keine Zusammenfassung verfügbar.");
   }
-  return "Kein Summary verfuegbar.";
+  return "Keine Zusammenfassung verfügbar.";
 }

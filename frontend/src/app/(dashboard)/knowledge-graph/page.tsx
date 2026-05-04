@@ -3,11 +3,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { GitBranch, HardDrive, Link2, Monitor, Network, RefreshCw, Server } from "lucide-react";
-import { operationsApi } from "@/lib/api";
+import { getApiErrorMessage, operationsApi } from "@/lib/api";
 import type { KnowledgeGraphEdge, KnowledgeGraphNode, KnowledgeGraphResponse } from "@/types/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/utils";
 
 function nodeIcon(type: string) {
@@ -20,14 +21,17 @@ function nodeIcon(type: string) {
 export default function KnowledgeGraphPage() {
   const [graph, setGraph] = useState<KnowledgeGraphResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setIsLoading(true);
     try {
       const result = await operationsApi.getKnowledgeGraph() as KnowledgeGraphResponse;
       setGraph(result);
-    } catch {
+      setError(null);
+    } catch (err) {
       setGraph(null);
+      setError(getApiErrorMessage(err, "Wissensgraph konnte nicht geladen werden"));
     }
     setIsLoading(false);
   }, []);
@@ -50,8 +54,8 @@ export default function KnowledgeGraphPage() {
     <div className="space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Knowledge Graph</h1>
-          <p className="text-sm text-muted-foreground">Serverseitig aggregierte Beziehungen zwischen Nodes, VMs, Diensten, Ports und Abhaengigkeiten.</p>
+          <h1 className="text-2xl font-bold tracking-tight">Wissensgraph</h1>
+          <p className="text-sm text-muted-foreground">Serverseitig aggregierte Beziehungen zwischen Nodes, VMs, Diensten, Ports und Abhängigkeiten.</p>
         </div>
         <Button variant="outline" size="sm" onClick={load} disabled={isLoading}>
           <RefreshCw className={cn("mr-2 h-4 w-4", isLoading && "animate-spin")} />
@@ -62,17 +66,30 @@ export default function KnowledgeGraphPage() {
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Nodes</CardTitle></CardHeader><CardContent className="text-2xl font-semibold">{graph?.stats.nodes ?? 0}</CardContent></Card>
         <Card><CardHeader className="pb-2"><CardTitle className="text-sm">VMs</CardTitle></CardHeader><CardContent className="text-2xl font-semibold">{graph?.stats.vms ?? 0}</CardContent></Card>
-        <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Devices</CardTitle></CardHeader><CardContent className="text-2xl font-semibold">{graph?.stats.devices ?? 0}</CardContent></Card>
-        <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Services</CardTitle></CardHeader><CardContent className="text-2xl font-semibold">{graph?.stats.services ?? 0}</CardContent></Card>
-        <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Dependencies</CardTitle></CardHeader><CardContent className="text-2xl font-semibold">{graph?.stats.dependencies ?? 0}</CardContent></Card>
+        <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Geräte</CardTitle></CardHeader><CardContent className="text-2xl font-semibold">{graph?.stats.devices ?? 0}</CardContent></Card>
+        <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Dienste</CardTitle></CardHeader><CardContent className="text-2xl font-semibold">{graph?.stats.services ?? 0}</CardContent></Card>
+        <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Abhängigkeiten</CardTitle></CardHeader><CardContent className="text-2xl font-semibold">{graph?.stats.dependencies ?? 0}</CardContent></Card>
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[1fr,360px]">
         <div className="space-y-4">
           {isLoading ? (
-            <div className="rounded-md border px-4 py-10 text-center text-sm text-muted-foreground">Knowledge Graph wird geladen...</div>
+            <EmptyState icon={RefreshCw} title="Wissensgraph wird geladen" description="Beziehungen und Metadaten werden gerade zusammengeführt." variant="loading" />
+          ) : error ? (
+            <EmptyState
+              icon={GitBranch}
+              title="Wissensgraph nicht erreichbar"
+              description={error}
+              variant="error"
+              action={<Button variant="outline" size="sm" onClick={load}>Erneut versuchen</Button>}
+            />
           ) : nodes.length === 0 ? (
-            <div className="rounded-md border px-4 py-10 text-center text-sm text-muted-foreground">Keine Graph-Daten verfuegbar.</div>
+            <EmptyState
+              icon={GitBranch}
+              title="Noch keine Graph-Daten"
+              description="Sobald Nodes, VMs, Dienste oder Abhängigkeiten erkannt wurden, erscheinen sie hier gesammelt."
+              action={<Button variant="outline" size="sm" onClick={load}>Aktualisieren</Button>}
+            />
           ) : (
             Object.entries(nodesByType).map(([type, group]) => (
               <Card key={type}>
@@ -111,7 +128,7 @@ export default function KnowledgeGraphPage() {
             <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-sm"><Link2 className="h-4 w-4" /> Beziehungen</CardTitle></CardHeader>
             <CardContent className="space-y-2">
               {edges.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Keine Beziehungen erfasst.</p>
+                <EmptyState icon={Link2} title="Keine Beziehungen erfasst" description="Der Graph kennt aktuell noch keine Verbindungen zwischen den Objekten." className="border-0 py-6" />
               ) : edges.slice(0, 40).map((edge: KnowledgeGraphEdge) => (
                 <div key={edge.id} className="rounded-md border px-3 py-2 text-sm">
                   <div className="flex items-center gap-2">
@@ -125,10 +142,10 @@ export default function KnowledgeGraphPage() {
             </CardContent>
           </Card>
           <Card>
-            <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-sm"><GitBranch className="h-4 w-4" /> VM-Abhaengigkeiten</CardTitle></CardHeader>
+            <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-sm"><GitBranch className="h-4 w-4" /> VM-Abhängigkeiten</CardTitle></CardHeader>
             <CardContent className="space-y-2">
               {dependencyEdges.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Keine VM-Abhaengigkeiten im Graph.</p>
+                <EmptyState icon={GitBranch} title="Keine VM-Abhängigkeiten" description="Globale Abhängigkeiten bleiben verfügbar, sobald der Scanner sie erkennt." className="border-0 py-6" />
               ) : dependencyEdges.slice(0, 12).map((edge) => (
                 <Link key={edge.id} href="/dependencies" className="block rounded-md border px-3 py-2 text-sm hover:bg-muted/50">
                   <span className="font-medium">{edge.label || edge.type}</span>

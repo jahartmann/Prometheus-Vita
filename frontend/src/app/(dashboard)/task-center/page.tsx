@@ -22,7 +22,7 @@ const statusLabel: Record<string, string> = {
   pending: "Wartet",
   failed: "Fehler",
   completed: "Fertig",
-  warning: "Pruefen",
+  warning: "Prüfen",
 };
 
 const statusClass: Record<string, string> = {
@@ -60,7 +60,7 @@ export default function TaskCenterPage() {
       setTasks(nextTasks);
     } catch (e) {
       if (requestSeqRef.current !== requestSeq) return;
-      setError(getApiErrorMessage(e, "Tasks konnten nicht geladen werden"));
+      setError(getApiErrorMessage(e, "Aufgaben konnten nicht geladen werden"));
       setTasks([]);
     } finally {
       if (requestSeqRef.current === requestSeq) {
@@ -129,7 +129,7 @@ export default function TaskCenterPage() {
 
   return (
     <PageShell
-      title="Task-Center"
+      title="Aufgaben"
       eyebrow="Operations"
       description="Lange Operationen, offene Incidents und fehlgeschlagene Benachrichtigungen in einer Arbeitsliste."
       actions={pageActions}
@@ -138,7 +138,7 @@ export default function TaskCenterPage() {
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard title="Aktiv" value={totals.active} subtitle="Laufend oder wartend" icon={Activity} color="blue" />
         <KpiCard title="Fehler" value={totals.failed} subtitle="Fehlgeschlagen" icon={ShieldAlert} color="red" />
-        <KpiCard title="Pruefen" value={totals.warning} subtitle="Benoetigen Aufmerksamkeit" icon={AlertCircle} color="orange" />
+        <KpiCard title="Prüfen" value={totals.warning} subtitle="Benötigen Aufmerksamkeit" icon={AlertCircle} color="orange" />
         <KpiCard title="Fertig" value={totals.done} subtitle="Abgeschlossen" icon={CheckCircle2} color="green" />
       </div>
 
@@ -165,7 +165,7 @@ export default function TaskCenterPage() {
             <Input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Task suchen..."
+              placeholder="Aufgabe suchen..."
               className="h-8 w-[180px]"
             />
             <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -176,7 +176,7 @@ export default function TaskCenterPage() {
                 <SelectItem value="all">Alle Status</SelectItem>
                 <SelectItem value="running">Aktiv</SelectItem>
                 <SelectItem value="pending">Wartet</SelectItem>
-                <SelectItem value="warning">Pruefen</SelectItem>
+                <SelectItem value="warning">Prüfen</SelectItem>
                 <SelectItem value="failed">Fehler</SelectItem>
                 <SelectItem value="completed">Fertig</SelectItem>
               </SelectContent>
@@ -203,14 +203,14 @@ export default function TaskCenterPage() {
             <EmptyState
               icon={ListChecks}
               title="Keine Operationen gefunden"
-              description="Aktuell gibt es keine laufenden, fehlgeschlagenen oder auffaelligen Tasks."
+              description="Aktuell gibt es keine laufenden, fehlgeschlagenen oder auffälligen Aufgaben."
               action={<Button variant="outline" size="sm" onClick={load}>Jetzt pruefen</Button>}
             />
           ) : visibleTasks.length === 0 ? (
             <EmptyState
               icon={ListChecks}
               title="Keine Treffer"
-              description="Passe Suche oder Statusfilter an, um weitere Tasks zu sehen."
+              description="Passe Suche oder Statusfilter an, um weitere Aufgaben zu sehen."
               action={<Button variant="outline" size="sm" onClick={() => { setQuery(""); setStatusFilter("all"); }}>Filter zuruecksetzen</Button>}
             />
           ) : (

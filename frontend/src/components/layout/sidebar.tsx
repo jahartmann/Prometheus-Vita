@@ -50,16 +50,8 @@ import { useNodeStore } from "@/stores/node-store";
 import { useAuthStore } from "@/stores/auth-store";
 import { OnboardNodeDialog } from "@/components/nodes/onboard-node-dialog";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// The sidebar's organizing principle:
-// Four sections, each one answering a different question the operator asks.
-//   1. Übersicht  → "Was ist gerade los?"
-//   2. Infrastruktur → "Was läuft auf welcher Node?"
-//   3. Intelligenz  → "Wer denkt für mich mit / Was sind Auffälligkeiten?"
-//   4. Verwaltung  → "Was ist konfiguriert / wer hat Zugriff?"
-// Settings stays as its own collapsed section at the bottom because it's both
-// rarely-used AND nested deeply.
-// ─────────────────────────────────────────────────────────────────────────────
+// Sidebar principle: global overview, node work, automation, analysis, admin.
+// Keep every feature reachable while avoiding one overloaded intelligence bucket.
 
 interface NavItem {
   label: string;
@@ -84,8 +76,8 @@ const sections: NavSection[] = [
     items: [
       { label: "Dashboard", href: "/", icon: LayoutDashboard, keywords: "lagezentrum start home" },
       { label: "Monitoring", href: "/monitoring", icon: Activity, matchPrefix: "/monitoring", keywords: "metriken graphs" },
-      { label: "Task-Center", href: "/task-center", icon: ListChecks, matchPrefix: "/task-center", keywords: "aufgaben todo timeline" },
-      { label: "Alerts", href: "/alerts", icon: AlertTriangle, matchPrefix: "/alerts" },
+      { label: "Aufgaben", href: "/task-center", icon: ListChecks, matchPrefix: "/task-center", keywords: "tasks todo timeline" },
+      { label: "Alarme", href: "/alerts", icon: AlertTriangle, matchPrefix: "/alerts", keywords: "alerts warnungen" },
     ],
   },
   {
@@ -97,23 +89,31 @@ const sections: NavSection[] = [
       { label: "Speicher", href: "/storage", icon: HardDrive, matchPrefix: "/storage" },
       { label: "Backups", href: "/backups", icon: Archive, matchPrefix: "/backups" },
       { label: "Migrationen", href: "/migrations", icon: ArrowRightLeft, matchPrefix: "/migrations" },
-      { label: "Disaster Recovery", href: "/disaster-recovery", icon: Shield, matchPrefix: "/disaster-recovery", keywords: "dr runbook" },
+      { label: "Notfallplanung", href: "/disaster-recovery", icon: Shield, matchPrefix: "/disaster-recovery", keywords: "dr disaster recovery runbook" },
       { label: "ISOs & Vorlagen", href: "/isos", icon: Disc, matchPrefix: "/isos" },
       { label: "Topologie", href: "/topology", icon: Workflow, matchPrefix: "/topology" },
     ],
   },
   {
-    label: "Intelligenz",
+    label: "KI & Regeln",
     defaultOpen: false,
     items: [
       { label: "KI-Chat", href: "/chat", icon: Bot, matchPrefix: "/chat" },
-      { label: "Sicherheit", href: "/security", icon: ShieldCheck, matchPrefix: "/security" },
-      { label: "Netzwerk-Analyse", href: "/network", icon: Network, matchPrefix: "/network", keywords: "ports scan bandbreite" },
-      { label: "VM-Gesundheit", href: "/health", icon: HeartPulse, matchPrefix: "/health" },
-      { label: "Drift-Erkennung", href: "/drift", icon: GitCompare, matchPrefix: "/drift" },
-      { label: "Root Cause", href: "/root-cause", icon: SearchCheck, matchPrefix: "/root-cause" },
       { label: "Reflex-Regeln", href: "/reflex", icon: Zap, matchPrefix: "/reflex" },
-      { label: "Knowledge Graph", href: "/knowledge-graph", icon: GitBranch, matchPrefix: "/knowledge-graph", keywords: "wissensbasis brain" },
+      { label: "Wissensgraph", href: "/knowledge-graph", icon: GitBranch, matchPrefix: "/knowledge-graph", keywords: "knowledge graph wissensbasis brain" },
+    ],
+  },
+  {
+    label: "Analyse",
+    defaultOpen: false,
+    items: [
+      { label: "Lagebrief", href: "/briefing", icon: Bell, matchPrefix: "/briefing", keywords: "briefing daily morning" },
+      { label: "Empfehlungen", href: "/recommendations", icon: HeartPulse, matchPrefix: "/recommendations" },
+      { label: "Drift-Erkennung", href: "/drift", icon: GitCompare, matchPrefix: "/drift" },
+      { label: "Ursachenanalyse", href: "/root-cause", icon: SearchCheck, matchPrefix: "/root-cause", keywords: "root cause rca" },
+      { label: "VM-Gesundheit", href: "/health", icon: HeartPulse, matchPrefix: "/health" },
+      { label: "Netzwerk-Analyse", href: "/network", icon: Network, matchPrefix: "/network", keywords: "ports scan bandbreite" },
+      { label: "Sicherheit", href: "/security", icon: ShieldCheck, matchPrefix: "/security" },
     ],
   },
   {
@@ -121,8 +121,8 @@ const sections: NavSection[] = [
     defaultOpen: false,
     items: [
       { label: "Logs", href: "/logs", icon: FileText, matchPrefix: "/logs" },
-      { label: "Reports", href: "/reports", icon: FileBarChart, matchPrefix: "/reports" },
-      { label: "Abhängigkeiten", href: "/dependencies", icon: Link2, matchPrefix: "/dependencies" },
+      { label: "Berichte", href: "/reports", icon: FileBarChart, matchPrefix: "/reports", keywords: "reports" },
+      { label: "Abhängigkeiten", href: "/dependencies", icon: Link2, matchPrefix: "/dependencies", keywords: "dependencies" },
       { label: "Tags", href: "/tags", icon: Tag, matchPrefix: "/tags" },
     ],
   },
@@ -331,7 +331,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
                       { label: "VMs & Container", path: "vms" },
                       { label: "Monitoring", path: "monitoring" },
                       { label: "Netzwerk", path: "network" },
-                      { label: "Storage", path: "storage" },
+                      { label: "Speicher", path: "storage" },
                       { label: "Backups", path: "backups" },
                       { label: "ISOs & Vorlagen", path: "iso-templates" },
                     ].map((sub) => {
@@ -435,7 +435,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
         {filteredSections.map(renderSection)}
         {filteredSections.length === 0 && (
           <p className="px-3 py-6 text-center text-[12px] text-sidebar-muted">
-            Keine Treffer für „{search}".
+            Keine Treffer für "{search}".
           </p>
         )}
       </nav>
@@ -468,7 +468,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
               className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-[13px] text-sidebar-muted transition-colors hover:bg-accent/60 hover:text-foreground"
             >
               {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-              <span>{theme === "dark" ? "Light Mode" : "Dark Mode"}</span>
+              <span>{theme === "dark" ? "Heller Modus" : "Dunkler Modus"}</span>
             </button>
             <button
               type="button"

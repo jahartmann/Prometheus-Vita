@@ -38,7 +38,7 @@ const kindMeta: Record<AttentionItem["kind"], { icon: LucideIcon; actionLabel: s
   error: { icon: AlertTriangle, actionLabel: "Signal pruefen" },
   cpu: { icon: Cpu, actionLabel: "Auslastung pruefen" },
   memory: { icon: MemoryStick, actionLabel: "Auslastung pruefen" },
-  info: { icon: Info, actionLabel: "Tasks oeffnen" },
+  info: { icon: Info, actionLabel: "Aufgaben öffnen" },
 };
 
 export function AttentionBanner() {
