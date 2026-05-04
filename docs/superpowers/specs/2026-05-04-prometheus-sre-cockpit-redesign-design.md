@@ -22,6 +22,32 @@ Gewählte Richtung: **Dunkles SRE-Cockpit**.
 4. **Weniger Karten, bessere Gruppen.** Keine Karten in Karten. Wiederholte Items dürfen Karten sein; Seitenbereiche sind flächige Layoutzonen.
 5. **Drill-down statt Informationswand.** Dashboard zeigt Zusammenfassung, Risiken und die wichtigsten Einstiege. Tiefe Tabellen, Logs und Diagramme bleiben auf Detailseiten.
 6. **Schnelles Scannen im Betrieb.** Kompakte Typografie, tabellarische Zahlen, klare Statuspunkte, stabile Abstände und keine dekorativen Flächen ohne Funktion.
+7. **Keine Funktionen streichen.** Der Redesign-Auftrag ist eine bessere Darstellung, kein Funktionsabbau. Funktionen dürfen umsortiert, gruppiert, eingeklappt, priorisiert oder in Detailansichten verlagert werden, bleiben aber auffindbar und erreichbar.
+
+## Informationsarchitektur gegen Überladung
+
+Die Anwendung hat viele wertvolle Funktionen. Das Problem ist nicht die Menge an Fähigkeiten, sondern dass zu viele davon gleichzeitig gleich laut sichtbar sind. Das Redesign reduziert deshalb die sichtbare Dichte, ohne Funktionalität zu entfernen.
+
+### Regeln für Sichtbarkeit
+
+- **Primär sichtbar:** Zustand, akute Aufmerksamkeit, laufende Vorgänge und die häufigsten Einstiege.
+- **Sekundär sichtbar:** Detailmetriken, historische Listen, lange Tabellen, seltene Einstellungen und Spezialwerkzeuge.
+- **Bei Bedarf sichtbar:** Erweiterte Aktionen, tiefe Diagnosefunktionen, Exporte, Rohdaten, selten genutzte Admin-Optionen.
+
+### Darstellungsmechaniken
+
+- Tabs werden genutzt, wenn mehrere gleichrangige Detailansichten existieren, zum Beispiel Metriken, Logs, Tasks und Empfehlungen.
+- Collapsible Sections werden genutzt, wenn Inhalte wichtig, aber nicht dauerhaft relevant sind.
+- Kontext-Aktionen erscheinen in Toolbars oder Zeilenaktionen, nicht als große Funktionskarten.
+- Detailseiten übernehmen die Tiefe. Das Dashboard bleibt die Lageübersicht.
+- Suche und Navigation bleiben zentrale Wege zu allen Funktionen, damit weniger auf dem Dashboard stehen muss.
+
+### Was ausdrücklich nicht passieren darf
+
+- Keine bestehenden Routen oder Features werden entfernt.
+- Keine bestehenden Workflows werden versteckt, ohne einen klaren alternativen Einstieg anzubieten.
+- Keine “schöne” Reduktion auf Kosten von Bedienbarkeit, Betriebssicherheit oder Admin-Funktionalität.
+- Keine Umwandlung operativer Tabellen in große Marketing-Karten, wenn Scannen und Vergleichen wichtiger ist.
 
 ## Visuelles System
 
@@ -130,7 +156,7 @@ Die Server-Flotte bleibt sichtbar, aber kompakter:
 - Status, CPU, Memory, Storage, VM/CT Count.
 - Klick führt zur Node-Detailseite.
 
-Funktionsbereiche werden reduziert. Statt vier großen Karten nur gezielte Schnellaktionen oder Links, abhängig vom Zustand.
+Funktionsbereiche werden visuell reduziert, aber nicht funktional gestrichen. Statt vier großen Karten erscheinen gezielte Schnellaktionen, kompakte Linkgruppen oder ein “Mehr”-Bereich, abhängig vom Zustand. Alle bisherigen Einstiege bleiben entweder direkt sichtbar, in der Navigation erreichbar oder über eine kompakte Funktionsgruppe auffindbar.
 
 ## Komponenten
 
@@ -207,6 +233,7 @@ Nicht Teil von Phase 1:
 - Vollständiger Umbau jeder Detailseite.
 - Neue Branding-Assets außer einer besseren Logo-/Brand-Behandlung mit bestehenden Icons.
 - Neue Charts oder neue Datenmodelle.
+- Entfernen bestehender Funktionen, Routen oder Workflows.
 
 ## Testing und Qualität
 
@@ -223,6 +250,8 @@ Nicht Teil von Phase 1:
   - Keine Karten in Karten.
   - Statusfarben haben Bedeutung und sind nicht rein dekorativ.
   - Primärer Dashboard-Blick beantwortet: Was braucht Aufmerksamkeit?
+  - Alle bisherigen zentralen Funktionsbereiche bleiben über Navigation, Suche, Schnellaktionen oder Detailseiten erreichbar.
+  - Erste Viewports wirken nicht wie eine vollständige Funktionsliste, sondern wie eine priorisierte Betriebsübersicht.
 
 ## Festlegung
 
