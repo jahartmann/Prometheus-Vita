@@ -48,3 +48,6 @@ docker-compose.override.yml
 coverage/
 *.coverprofile
 tsconfig.tsbuildinfo
+
+# Claude Code local settings (per-user agent permissions, never share)
+.claude/settings.local.json
