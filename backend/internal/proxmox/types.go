@@ -3,28 +3,28 @@ package proxmox
 import "strings"
 
 type NodeStatus struct {
-	Node        string    `json:"node"`
-	Status      string    `json:"status"`
-	Uptime      int64     `json:"uptime"`
-	CPUUsage    float64   `json:"cpu_usage"`
-	CPUCores    int       `json:"cpu_cores"`
-	CPUModel    string    `json:"cpu_model"`
-	MemTotal    int64     `json:"memory_total"`
-	MemUsed     int64     `json:"memory_used"`
-	MemFree     int64     `json:"memory_free"`
-	SwapTotal   int64     `json:"swap_total"`
-	SwapUsed    int64     `json:"swap_used"`
-	DiskTotal   int64     `json:"disk_total"`
-	DiskUsed    int64     `json:"disk_used"`
-	NetIn       int64     `json:"net_in"`
-	NetOut      int64     `json:"net_out"`
-	LoadAvg     []float64 `json:"load_average"`
-	KVersion    string    `json:"kernel_version"`
-	PVEVersion  string    `json:"pve_version"`
-	VMCount     int       `json:"vm_count"`
-	VMRunning   int       `json:"vm_running"`
-	CTCount     int       `json:"ct_count"`
-	CTRunning   int       `json:"ct_running"`
+	Node       string    `json:"node"`
+	Status     string    `json:"status"`
+	Uptime     int64     `json:"uptime"`
+	CPUUsage   float64   `json:"cpu_usage"`
+	CPUCores   int       `json:"cpu_cores"`
+	CPUModel   string    `json:"cpu_model"`
+	MemTotal   int64     `json:"memory_total"`
+	MemUsed    int64     `json:"memory_used"`
+	MemFree    int64     `json:"memory_free"`
+	SwapTotal  int64     `json:"swap_total"`
+	SwapUsed   int64     `json:"swap_used"`
+	DiskTotal  int64     `json:"disk_total"`
+	DiskUsed   int64     `json:"disk_used"`
+	NetIn      int64     `json:"net_in"`
+	NetOut     int64     `json:"net_out"`
+	LoadAvg    []float64 `json:"load_average"`
+	KVersion   string    `json:"kernel_version"`
+	PVEVersion string    `json:"pve_version"`
+	VMCount    int       `json:"vm_count"`
+	VMRunning  int       `json:"vm_running"`
+	CTCount    int       `json:"ct_count"`
+	CTRunning  int       `json:"ct_running"`
 }
 
 type VMInfo struct {
@@ -88,14 +88,14 @@ func (v VMInfo) ToResponse() VMResponse {
 
 // GuestOSInfo contains OS information from the QEMU guest agent.
 type GuestOSInfo struct {
-	ID             string `json:"id"`              // e.g. "debian", "ubuntu", "mswindows"
-	Name           string `json:"name"`            // e.g. "Debian GNU/Linux", "Microsoft Windows 10"
-	KernelRelease  string `json:"kernel-release"`
-	KernelVersion  string `json:"kernel-version"`
-	Machine        string `json:"machine"`
-	PrettyName     string `json:"pretty-name"`
-	Version        string `json:"version"`
-	VersionID      string `json:"version-id"`
+	ID            string `json:"id"`   // e.g. "debian", "ubuntu", "mswindows"
+	Name          string `json:"name"` // e.g. "Debian GNU/Linux", "Microsoft Windows 10"
+	KernelRelease string `json:"kernel-release"`
+	KernelVersion string `json:"kernel-version"`
+	Machine       string `json:"machine"`
+	PrettyName    string `json:"pretty-name"`
+	Version       string `json:"version"`
+	VersionID     string `json:"version-id"`
 }
 
 // OSFamily returns "windows" or "linux" based on the guest OS info.
@@ -187,14 +187,14 @@ type VzdumpOptions struct {
 }
 
 type VMRRDDataPoint struct {
-	Time   float64 `json:"time"`
-	CPU    float64 `json:"cpu"`
-	Mem    float64 `json:"mem"`
-	MaxMem float64 `json:"maxmem"`
-	Disk   float64 `json:"disk"`
+	Time    float64 `json:"time"`
+	CPU     float64 `json:"cpu"`
+	Mem     float64 `json:"mem"`
+	MaxMem  float64 `json:"maxmem"`
+	Disk    float64 `json:"disk"`
 	MaxDisk float64 `json:"maxdisk"`
-	NetIn  float64 `json:"netin"`
-	NetOut float64 `json:"netout"`
+	NetIn   float64 `json:"netin"`
+	NetOut  float64 `json:"netout"`
 }
 
 type RRDDataPoint struct {

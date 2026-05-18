@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 
-	apiPkg "github.com/antigravity/prometheus/internal/api/response"
 	"github.com/antigravity/prometheus/internal/api/middleware"
+	apiPkg "github.com/antigravity/prometheus/internal/api/response"
 	"github.com/antigravity/prometheus/internal/model"
 	"github.com/antigravity/prometheus/internal/repository"
 	telegramSvc "github.com/antigravity/prometheus/internal/service/telegram"
@@ -69,7 +69,7 @@ func (h *TelegramHandler) LinkTelegram(c echo.Context) error {
 
 	return apiPkg.Created(c, model.TelegramLinkResponse{
 		VerificationCode: code,
-		BotUsername:       botUsername,
+		BotUsername:      botUsername,
 		IsVerified:       false,
 	})
 }

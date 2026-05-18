@@ -58,9 +58,9 @@ type anthropicToolUseBlock struct {
 }
 
 type anthropicToolResultBlock struct {
-	Type       string `json:"type"`
-	ToolUseID  string `json:"tool_use_id"`
-	Content    string `json:"content"`
+	Type      string `json:"type"`
+	ToolUseID string `json:"tool_use_id"`
+	Content   string `json:"content"`
 }
 
 type anthropicTool struct {

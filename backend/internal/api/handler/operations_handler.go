@@ -93,14 +93,14 @@ func parseOperationsQuery(c echo.Context) operations.Query {
 		}
 	}
 	return operations.Query{
-		Limit: limit,
-		Source: c.QueryParam("source"),
+		Limit:    limit,
+		Source:   c.QueryParam("source"),
 		Severity: c.QueryParam("severity"),
-		Status: c.QueryParam("status"),
-		NodeID: nodeID,
-		UserID: userID,
-		From: from,
-		To: to,
-		Query: c.QueryParam("q"),
+		Status:   c.QueryParam("status"),
+		NodeID:   nodeID,
+		UserID:   userID,
+		From:     from,
+		To:       to,
+		Query:    c.QueryParam("q"),
 	}
 }

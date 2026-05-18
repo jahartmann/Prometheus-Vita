@@ -69,9 +69,9 @@ type ollamaMessage struct {
 }
 
 type ollamaToolCall struct {
-	ID       string               `json:"id,omitempty"`
-	Type     string               `json:"type,omitempty"`
-	Function ollamaToolCallFunc   `json:"function"`
+	ID       string             `json:"id,omitempty"`
+	Type     string             `json:"type,omitempty"`
+	Function ollamaToolCallFunc `json:"function"`
 }
 
 type ollamaToolCallFunc struct {
@@ -80,8 +80,8 @@ type ollamaToolCallFunc struct {
 }
 
 type ollamaTool struct {
-	Type     string          `json:"type"`
-	Function ollamaToolFunc  `json:"function"`
+	Type     string         `json:"type"`
+	Function ollamaToolFunc `json:"function"`
 }
 
 type ollamaToolFunc struct {
@@ -91,11 +91,11 @@ type ollamaToolFunc struct {
 }
 
 type ollamaChatResponse struct {
-	Message          ollamaMessage `json:"message"`
-	Done             bool          `json:"done"`
-	TotalDuration    int64         `json:"total_duration"`
-	PromptEvalCount  int           `json:"prompt_eval_count"`
-	EvalCount        int           `json:"eval_count"`
+	Message         ollamaMessage `json:"message"`
+	Done            bool          `json:"done"`
+	TotalDuration   int64         `json:"total_duration"`
+	PromptEvalCount int           `json:"prompt_eval_count"`
+	EvalCount       int           `json:"eval_count"`
 }
 
 func (p *OllamaProvider) Complete(ctx context.Context, req CompletionRequest) (*CompletionResponse, error) {

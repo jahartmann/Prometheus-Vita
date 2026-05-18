@@ -66,14 +66,22 @@ func (s *Service) Notify(ctx context.Context, eventType, subject, body string) {
 			}()
 			sendCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 			defer cancel()
-			s.sendToChannel(sendCtx, &ch, eventType, subject, body)
+			// Outcome is recorded in notification_history by sendToChannel;
+			// nothing else to do at the goroutine level.
+			_ = s.sendToChannel(sendCtx, &ch, eventType, subject, body)
 		}()
 	}
 	wg.Wait()
 }
 
 // NotifyChannels sends a notification to specific channels by ID.
-func (s *Service) NotifyChannels(ctx context.Context, channelIDs []uuid.UUID, eventType, subject, body string) {
+//
+// Returns (attempted, delivered) so callers (the escalation loop in
+// particular) can detect the case where ZERO channels actually received the
+// message — previously this was logged as a warning and silently treated as
+// success, leading to escalations advancing to step N+1 without ever paging
+// anyone at step N.
+func (s *Service) NotifyChannels(ctx context.Context, channelIDs []uuid.UUID, eventType, subject, body string) (attempted, delivered int) {
 	for _, id := range channelIDs {
 		ch, err := s.channelRepo.GetByID(ctx, id)
 		if err != nil {
@@ -86,8 +94,12 @@ func (s *Service) NotifyChannels(ctx context.Context, channelIDs []uuid.UUID, ev
 		if !ch.IsActive {
 			continue
 		}
-		s.sendToChannel(ctx, ch, eventType, subject, body)
+		attempted++
+		if err := s.sendToChannel(ctx, ch, eventType, subject, body); err == nil {
+			delivered++
+		}
 	}
+	return attempted, delivered
 }
 
 // TestChannel sends a test message to a specific channel.
@@ -255,7 +267,11 @@ func (s *Service) ListHistoryByChannel(ctx context.Context, channelID uuid.UUID)
 	return s.historyRepo.ListByChannel(ctx, channelID)
 }
 
-func (s *Service) sendToChannel(ctx context.Context, ch *model.NotificationChannel, eventType, subject, body string) {
+// sendToChannel attempts a single send. Returns nil on confirmed delivery
+// to the channel's sender; returns a non-nil error on any failure step
+// (decrypt, sender construction, dispatch). The history entry is updated
+// either way so the UI shows the outcome.
+func (s *Service) sendToChannel(ctx context.Context, ch *model.NotificationChannel, eventType, subject, body string) error {
 	entry := &model.NotificationHistoryEntry{
 		ChannelID: &ch.ID,
 		EventType: eventType,
@@ -266,6 +282,9 @@ func (s *Service) sendToChannel(ctx context.Context, ch *model.NotificationChann
 
 	if err := s.historyRepo.Create(ctx, entry); err != nil {
 		slog.Error("failed to create notification history entry", slog.Any("error", err))
+		// History persistence failed — still try to send, but the outcome
+		// won't appear in the UI. Treat as soft failure of bookkeeping;
+		// dispatch decides delivered/not.
 	}
 
 	decryptedConfig, err := s.decryptConfig(ch.Config)
@@ -275,7 +294,7 @@ func (s *Service) sendToChannel(ctx context.Context, ch *model.NotificationChann
 			slog.Any("error", err),
 		)
 		s.markFailed(ctx, entry.ID, fmt.Sprintf("decrypt config: %v", err))
-		return
+		return fmt.Errorf("decrypt config: %w", err)
 	}
 
 	sender, err := NewSender(ch.Type, decryptedConfig)
@@ -285,16 +304,17 @@ func (s *Service) sendToChannel(ctx context.Context, ch *model.NotificationChann
 			slog.Any("error", err),
 		)
 		s.markFailed(ctx, entry.ID, fmt.Sprintf("create sender: %v", err))
-		return
+		return fmt.Errorf("create sender: %w", err)
 	}
 
 	if err := Dispatch(ctx, sender, subject, body); err != nil {
 		s.markFailed(ctx, entry.ID, err.Error())
-		return
+		return err
 	}
 
 	now := time.Now()
 	_ = s.historyRepo.UpdateStatus(ctx, entry.ID, model.NotifStatusSent, "", &now)
+	return nil
 }
 
 func (s *Service) markFailed(ctx context.Context, id uuid.UUID, errMsg string) {

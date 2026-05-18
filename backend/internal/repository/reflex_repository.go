@@ -20,6 +20,12 @@ type ReflexRuleRepository interface {
 	Update(ctx context.Context, rule *model.ReflexRule) error
 	Delete(ctx context.Context, id uuid.UUID) error
 	UpdateLastTriggered(ctx context.Context, id uuid.UUID, t time.Time) error
+	// TryMarkTriggered atomically claims the right to fire the rule. Returns
+	// (true, nil) when the caller wins the race and must execute the action,
+	// (false, nil) when another evaluator already triggered within the
+	// cooldown window. This is the database-level guard against concurrent
+	// evaluators each firing the same action.
+	TryMarkTriggered(ctx context.Context, id uuid.UUID, now time.Time, cooldown time.Duration) (bool, error)
 }
 
 type pgReflexRuleRepository struct {
@@ -142,6 +148,27 @@ func (r *pgReflexRuleRepository) UpdateLastTriggered(ctx context.Context, id uui
 		return fmt.Errorf("update reflex rule last triggered: %w", err)
 	}
 	return nil
+}
+
+func (r *pgReflexRuleRepository) TryMarkTriggered(ctx context.Context, id uuid.UUID, now time.Time, cooldown time.Duration) (bool, error) {
+	// Atomic conditional update: succeed only when last_triggered_at is
+	// either null or older than the cooldown window. This is the canonical
+	// distributed-lock pattern in plain SQL — no extension required.
+	cmdTag, err := r.db.Exec(ctx,
+		`UPDATE reflex_rules
+		    SET last_triggered_at = $1,
+		        trigger_count    = trigger_count + 1,
+		        updated_at        = NOW()
+		  WHERE id = $2
+		    AND is_active = true
+		    AND (last_triggered_at IS NULL
+		         OR last_triggered_at < $1 - make_interval(secs => $3))`,
+		now, id, cooldown.Seconds(),
+	)
+	if err != nil {
+		return false, fmt.Errorf("try-mark reflex rule triggered: %w", err)
+	}
+	return cmdTag.RowsAffected() == 1, nil
 }
 
 func (r *pgReflexRuleRepository) scanRules(rows pgx.Rows) ([]model.ReflexRule, error) {

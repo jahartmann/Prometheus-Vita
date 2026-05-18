@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -15,12 +16,27 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// middlewareInvalidateActiveUserCache is wired up from cmd/server to the
+// middleware package's cache invalidator. Kept as a package-level variable
+// to avoid a service/user → api/middleware import dependency. A no-op by
+// default so this package stays usable in tests without wiring.
+var middlewareInvalidateActiveUserCache = func(uuid.UUID) {}
+
+// SetActiveUserCacheInvalidator lets cmd/server provide the middleware's
+// cache punch-through. Called once during startup.
+func SetActiveUserCacheInvalidator(fn func(uuid.UUID)) {
+	if fn == nil {
+		return
+	}
+	middlewareInvalidateActiveUserCache = fn
+}
+
 var (
-	ErrUsernameTaken    = errors.New("username already taken")
-	ErrSelfDelete       = errors.New("cannot delete own account")
-	ErrLastAdmin        = errors.New("cannot delete last admin")
-	ErrWrongPassword    = errors.New("current password is incorrect")
-	ErrPasswordRequired = errors.New("current password is required")
+	ErrUsernameTaken     = errors.New("username already taken")
+	ErrSelfDelete        = errors.New("cannot delete own account")
+	ErrLastAdmin         = errors.New("cannot delete last admin")
+	ErrWrongPassword     = errors.New("current password is incorrect")
+	ErrPasswordRequired  = errors.New("current password is required")
 	ErrInvitationInvalid = errors.New("invitation is invalid")
 	ErrInvitationExpired = errors.New("invitation is expired")
 )
@@ -146,6 +162,12 @@ func (s *Service) Update(ctx context.Context, id uuid.UUID, req model.UpdateUser
 
 	if err := s.userRepo.Update(ctx, user); err != nil {
 		return nil, fmt.Errorf("update user: %w", err)
+	}
+	// Invalidate the JWT middleware's IsActive cache so a deactivation
+	// takes effect immediately for any token already in flight, instead of
+	// waiting for the cache TTL.
+	if req.IsActive != nil {
+		middlewareInvalidateActiveUserCache(id)
 	}
 	if req.IsActive != nil && !*req.IsActive {
 		if err := s.revokeUserAccess(ctx, id); err != nil {
@@ -320,6 +342,19 @@ func (s *Service) AcceptInvitation(ctx context.Context, req model.AcceptUserInvi
 		return nil, ErrInvitationExpired
 	}
 
+	// Claim the invitation FIRST with an atomic conditional update. If two
+	// requests race on the same token, only one wins this step; the second
+	// gets ErrNotFound from the `WHERE accepted_at IS NULL` guard and we
+	// turn it into ErrInvitationInvalid. Without this the previous
+	// implementation would race past the AcceptedAt check above and create
+	// two users from a single invitation.
+	if err := s.invitationRepo.MarkAccepted(ctx, invitation.ID, time.Now()); err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, ErrInvitationInvalid
+		}
+		return nil, err
+	}
+
 	resp, err := s.Create(ctx, model.CreateUserRequest{
 		Username: invitation.Username,
 		Email:    invitation.Email,
@@ -327,9 +362,18 @@ func (s *Service) AcceptInvitation(ctx context.Context, req model.AcceptUserInvi
 		Role:     invitation.Role,
 	})
 	if err != nil {
-		return nil, err
-	}
-	if err := s.invitationRepo.MarkAccepted(ctx, invitation.ID, time.Now()); err != nil {
+		// User creation failed AFTER we claimed the invitation. Best-effort
+		// rollback: clear accepted_at so the invitation can be retried.
+		// The DB write may itself fail (e.g. ctx already cancelled); if it
+		// does we log loudly because the operator now has a "consumed but
+		// no user created" invitation that needs manual cleanup.
+		if rbErr := s.invitationRepo.ClearAccepted(ctx, invitation.ID); rbErr != nil {
+			slog.Error("invitation: user create failed AND rollback of acceptance failed — manual cleanup required",
+				slog.String("invitation_id", invitation.ID.String()),
+				slog.Any("create_error", err),
+				slog.Any("rollback_error", rbErr),
+			)
+		}
 		return nil, err
 	}
 	return resp, nil

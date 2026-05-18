@@ -90,11 +90,11 @@ func (s *PushService) pushThrottled(ctx context.Context, key, text string) {
 // a critical or emergency event. Keeping this struct local to the agent
 // package avoids a hard dependency on the model layer.
 type SecurityFinding struct {
-	ID          string
-	NodeName    string
-	Severity    string
-	Title       string
-	Description string
+	ID             string
+	NodeName       string
+	Severity       string
+	Title          string
+	Description    string
 	Recommendation string
 }
 
@@ -122,13 +122,13 @@ func (s *PushService) PushSecurity(ctx context.Context, f SecurityFinding) {
 
 // AnomalyAlert describes one anomaly that's important enough to push out.
 type AnomalyAlert struct {
-	ID         string
-	NodeName   string
-	Metric     string  // cpu, ram, disk, network…
-	Severity   string  // warning, critical
-	Value      float64 // current value
-	Threshold  float64 // breached threshold
-	Trend      string  // optional: "steigend seit 5 Min"
+	ID        string
+	NodeName  string
+	Metric    string  // cpu, ram, disk, network…
+	Severity  string  // warning, critical
+	Value     float64 // current value
+	Threshold float64 // breached threshold
+	Trend     string  // optional: "steigend seit 5 Min"
 }
 
 // PushAnomaly formats and sends an anomaly alert.

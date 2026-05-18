@@ -12,7 +12,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-
 type LogAnalysisRepository interface {
 	Create(ctx context.Context, analysis *model.LogAnalysis) error
 	GetByID(ctx context.Context, id uuid.UUID) (*model.LogAnalysis, error)

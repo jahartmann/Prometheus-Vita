@@ -38,18 +38,18 @@ func (p *OpenAIProvider) Models() []string {
 }
 
 type openAIChatRequest struct {
-	Model       string             `json:"model"`
-	Messages    []openAIMessage    `json:"messages"`
-	Tools       []openAITool       `json:"tools,omitempty"`
-	MaxTokens   int                `json:"max_tokens,omitempty"`
-	Temperature float64            `json:"temperature,omitempty"`
+	Model       string          `json:"model"`
+	Messages    []openAIMessage `json:"messages"`
+	Tools       []openAITool    `json:"tools,omitempty"`
+	MaxTokens   int             `json:"max_tokens,omitempty"`
+	Temperature float64         `json:"temperature,omitempty"`
 }
 
 type openAIMessage struct {
-	Role       string             `json:"role"`
-	Content    string             `json:"content"`
-	ToolCalls  []openAIToolCall   `json:"tool_calls,omitempty"`
-	ToolCallID string             `json:"tool_call_id,omitempty"`
+	Role       string           `json:"role"`
+	Content    string           `json:"content"`
+	ToolCalls  []openAIToolCall `json:"tool_calls,omitempty"`
+	ToolCallID string           `json:"tool_call_id,omitempty"`
 }
 
 type openAIToolCall struct {

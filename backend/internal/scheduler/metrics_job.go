@@ -10,8 +10,8 @@ import (
 	"github.com/antigravity/prometheus/internal/model"
 	"github.com/antigravity/prometheus/internal/proxmox"
 	"github.com/antigravity/prometheus/internal/repository"
-	nodeService "github.com/antigravity/prometheus/internal/service/node"
 	"github.com/antigravity/prometheus/internal/service/monitor"
+	nodeService "github.com/antigravity/prometheus/internal/service/node"
 	"github.com/google/uuid"
 )
 

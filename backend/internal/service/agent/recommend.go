@@ -32,10 +32,10 @@ type SystemSpec struct {
 
 // GPUInfo describes a single detected GPU.
 type GPUInfo struct {
-	Name    string  `json:"name"`
-	VRAMGB  float64 `json:"vram_gb"`
-	Driver  string  `json:"driver,omitempty"`
-	Vendor  string  `json:"vendor,omitempty"`
+	Name   string  `json:"name"`
+	VRAMGB float64 `json:"vram_gb"`
+	Driver string  `json:"driver,omitempty"`
+	Vendor string  `json:"vendor,omitempty"`
 }
 
 // ModelRecommendation describes a curated Ollama model suggestion.
@@ -46,10 +46,10 @@ type ModelRecommendation struct {
 	ToolCalling bool     `json:"tool_calling"` // true if model has stable tool/function calling
 	Reasoning   bool     `json:"reasoning"`    // chain-of-thought capable
 	Description string   `json:"description"`
-	BestFor     []string `json:"best_for"`     // ["agent","chat","coding","reasoning"]
-	Pulled      bool     `json:"pulled"`       // true if currently installed in Ollama
-	Recommended bool     `json:"recommended"`  // true for the primary suggestion
-	Default     bool     `json:"default"`      // true for the auto-selected default
+	BestFor     []string `json:"best_for"`    // ["agent","chat","coding","reasoning"]
+	Pulled      bool     `json:"pulled"`      // true if currently installed in Ollama
+	Recommended bool     `json:"recommended"` // true for the primary suggestion
+	Default     bool     `json:"default"`     // true for the auto-selected default
 }
 
 // SystemRecommendation bundles the detected spec, a sorted list of model

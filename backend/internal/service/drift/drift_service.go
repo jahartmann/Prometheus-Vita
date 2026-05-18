@@ -68,7 +68,7 @@ func (s *Service) CheckDrift(ctx context.Context, nodeID uuid.UUID) (*model.Drif
 		return nil, fmt.Errorf("create drift check: %w", err)
 	}
 
-	// Get latest backup for comparison
+	// Get latest backup for comparison.
 	latestBackup, err := s.backupRepo.GetLatestByNode(ctx, nodeID)
 	if err != nil {
 		check.Status = model.DriftStatusFailed
@@ -77,6 +77,25 @@ func (s *Service) CheckDrift(ctx context.Context, nodeID uuid.UUID) (*model.Drif
 			slog.Error("failed to update drift check status",
 				slog.String("check_id", check.ID.String()),
 				slog.String("status", string(check.Status)),
+				slog.Any("error", err),
+			)
+		}
+		return check, nil
+	}
+	// Reject baselines that are too old. A drift check against a 6-month-old
+	// backup is misleading: every "drift" reported is probably just normal
+	// system maintenance the operator already approved. Force the operator
+	// to take a fresh backup so subsequent checks are actionable.
+	const maxBaselineAge = 30 * 24 * time.Hour
+	if !latestBackup.CreatedAt.IsZero() && time.Since(latestBackup.CreatedAt) > maxBaselineAge {
+		check.Status = model.DriftStatusFailed
+		check.ErrorMessage = fmt.Sprintf("Letztes Backup ist %d Tage alt (>%d) — vor Drift-Check ein neues Backup erstellen",
+			int(time.Since(latestBackup.CreatedAt).Hours()/24),
+			int(maxBaselineAge.Hours()/24),
+		)
+		if err := s.driftRepo.Update(ctx, check); err != nil {
+			slog.Error("failed to update drift check status (stale baseline)",
+				slog.String("check_id", check.ID.String()),
 				slog.Any("error", err),
 			)
 		}
@@ -473,8 +492,8 @@ func (s *Service) CompareNodes(ctx context.Context, req model.CompareNodesReques
 
 	// Resolve nodes
 	type nodeInfo struct {
-		id   uuid.UUID
-		name string
+		id     uuid.UUID
+		name   string
 		client *ssh.Client
 	}
 

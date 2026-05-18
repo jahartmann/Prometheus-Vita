@@ -7,6 +7,10 @@ type ScanDiff struct {
 	DisappearedDevices []DeviceChange     `json:"disappeared_devices"`
 	ServiceChanges     []ServiceChange    `json:"service_changes"`
 	NewConnections     []ConnectionChange `json:"new_connections"`
+	// BaselineMissing is true when no previous scan exists to diff against;
+	// callers should prompt the operator to create a baseline rather than
+	// treat the (empty) diff as evidence of a clean state.
+	BaselineMissing bool `json:"baseline_missing,omitempty"`
 }
 
 type PortChange struct {

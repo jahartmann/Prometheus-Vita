@@ -2,6 +2,7 @@ package ssh
 
 import (
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 )
@@ -76,6 +77,12 @@ func (p *Pool) Get(nodeID string, sshCfg SSHConfig) (*Client, error) {
 // dead connections are discarded atomically.
 func (p *Pool) Return(nodeID string, client *Client) {
 	if client == nil {
+		// A nil return usually means the caller stored a failed Get() result
+		// and is now defensively returning whatever they have. Logging it
+		// makes the leak visible without crashing.
+		slog.Warn("ssh pool: nil client returned",
+			slog.String("node_id", nodeID),
+		)
 		return
 	}
 

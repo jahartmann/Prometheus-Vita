@@ -99,24 +99,32 @@ func (s *DiscoveryService) DiscoverSources(ctx context.Context, nodeID uuid.UUID
 	// Obtain a pooled SSH client for this node.
 	client, err := s.sshPool.Get(nodeID.String(), sshCfg)
 	if err != nil {
-		slog.Warn("logscan: cannot connect to node for discovery",
+		// Falling back to "what's in the DB" is the right thing for periodic
+		// discovery (don't crash the job because one node is offline), but
+		// we MUST log loudly so the operator notices that new log paths on
+		// this node are not being discovered. Audit B4 P0: a quiet failure
+		// here means an attacker who creates /var/log/evil.log on the node
+		// is never picked up for monitoring.
+		slog.Error("logscan: cannot connect to node for discovery — new log paths on this node will NOT be picked up until SSH recovers",
 			slog.String("node_id", nodeID.String()),
 			slog.Any("error", err),
 		)
-		// Return whatever is already in the DB rather than a hard error.
 		return s.sourceRepo.ListByNode(ctx, nodeID)
 	}
 	defer s.sshPool.Return(nodeID.String(), client)
 
-	// Discover log files modified within the last 60 minutes.
-	const findCmd = `find /var/log -type f \( -name "*.log" -o -name "syslog*" -o -name "auth.log*" \) -mmin -60 2>/dev/null`
+	// Discover log files modified within the last 24 hours. The previous
+	// 60-minute window missed log paths that existed before the last
+	// discovery run but had no recent writes, leaving them un-monitored
+	// indefinitely. 24h is wide enough to pick up real activity without
+	// flooding the index.
+	const findCmd = `find /var/log -type f \( -name "*.log" -o -name "syslog*" -o -name "auth.log*" \) -mmin -1440 2>/dev/null`
 	result, err := client.RunCommand(ctx, findCmd)
 	if err != nil {
-		slog.Warn("logscan: find command failed",
+		slog.Error("logscan: find command failed — new log paths NOT discovered this cycle",
 			slog.String("node_id", nodeID.String()),
 			slog.Any("error", err),
 		)
-		// Non-fatal — return existing DB sources.
 		return s.sourceRepo.ListByNode(ctx, nodeID)
 	}
 

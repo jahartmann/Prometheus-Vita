@@ -15,13 +15,13 @@ type MorningBriefing struct {
 }
 
 type BriefingData struct {
-	TotalNodes       int                     `json:"total_nodes"`
-	OnlineNodes      int                     `json:"online_nodes"`
-	OfflineNodes     int                     `json:"offline_nodes"`
-	ActiveAlerts     int                     `json:"active_alerts"`
-	UnresolvedAnomalies int                  `json:"unresolved_anomalies"`
-	CriticalPredictions int                  `json:"critical_predictions"`
-	NodeSummaries    []BriefingNodeSummary   `json:"node_summaries"`
+	TotalNodes          int                   `json:"total_nodes"`
+	OnlineNodes         int                   `json:"online_nodes"`
+	OfflineNodes        int                   `json:"offline_nodes"`
+	ActiveAlerts        int                   `json:"active_alerts"`
+	UnresolvedAnomalies int                   `json:"unresolved_anomalies"`
+	CriticalPredictions int                   `json:"critical_predictions"`
+	NodeSummaries       []BriefingNodeSummary `json:"node_summaries"`
 }
 
 type BriefingNodeSummary struct {

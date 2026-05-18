@@ -28,8 +28,8 @@ type BotService struct {
 	convRepo        repository.TelegramConversationRepository
 	agentConfigRepo repository.AgentConfigRepository
 	approvalRepo    repository.ApprovalRepository
-	lastOffset int64
-	offsetMu   sync.Mutex
+	lastOffset      int64
+	offsetMu        sync.Mutex
 	// pendingConfirmations tracks chatID -> pending action for autonomy level 1
 	confirmMu            sync.Mutex
 	pendingConfirmations map[int64]*pendingAction

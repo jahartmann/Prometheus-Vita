@@ -200,20 +200,20 @@ func (s *Service) SetNodeService(nodeSvc NodeServiceInterface) {
 }
 
 type LiveBriefingSummary struct {
-	NodesOnline      int                  `json:"nodes_online"`
-	NodesOffline     int                  `json:"nodes_offline"`
-	NodesTotal       int                  `json:"nodes_total"`
-	VMsRunning       int                  `json:"vms_running"`
-	VMsStopped       int                  `json:"vms_stopped"`
-	VMsTotal         int                  `json:"vms_total"`
-	AvgCPU           float64              `json:"avg_cpu"`
-	AvgRAM           float64              `json:"avg_ram"`
-	AvgDisk          float64              `json:"avg_disk"`
-	TopNodesByCPU    []NodeCPURank        `json:"top_nodes_by_cpu"`
-	TopVMsByRAM      []VMRAMRank          `json:"top_vms_by_ram"`
-	Anomalies        int                  `json:"unresolved_anomalies"`
-	Predictions      int                  `json:"critical_predictions"`
-	NodeDetails      []LiveNodeDetail     `json:"node_details"`
+	NodesOnline   int              `json:"nodes_online"`
+	NodesOffline  int              `json:"nodes_offline"`
+	NodesTotal    int              `json:"nodes_total"`
+	VMsRunning    int              `json:"vms_running"`
+	VMsStopped    int              `json:"vms_stopped"`
+	VMsTotal      int              `json:"vms_total"`
+	AvgCPU        float64          `json:"avg_cpu"`
+	AvgRAM        float64          `json:"avg_ram"`
+	AvgDisk       float64          `json:"avg_disk"`
+	TopNodesByCPU []NodeCPURank    `json:"top_nodes_by_cpu"`
+	TopVMsByRAM   []VMRAMRank      `json:"top_vms_by_ram"`
+	Anomalies     int              `json:"unresolved_anomalies"`
+	Predictions   int              `json:"critical_predictions"`
+	NodeDetails   []LiveNodeDetail `json:"node_details"`
 }
 
 type NodeCPURank struct {

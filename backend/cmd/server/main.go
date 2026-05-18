@@ -14,6 +14,7 @@ import (
 
 	"github.com/antigravity/prometheus/internal/api"
 	"github.com/antigravity/prometheus/internal/api/handler"
+	"github.com/antigravity/prometheus/internal/api/middleware"
 	"github.com/antigravity/prometheus/internal/config"
 	"github.com/antigravity/prometheus/internal/llm"
 	"github.com/antigravity/prometheus/internal/proxmox"
@@ -30,8 +31,12 @@ import (
 	"github.com/antigravity/prometheus/internal/service/environment"
 	"github.com/antigravity/prometheus/internal/service/gateway"
 	"github.com/antigravity/prometheus/internal/service/intelligence"
+	"github.com/antigravity/prometheus/internal/service/loganalyzer"
+	"github.com/antigravity/prometheus/internal/service/logscan"
+	"github.com/antigravity/prometheus/internal/service/logstream"
 	migrationService "github.com/antigravity/prometheus/internal/service/migration"
 	"github.com/antigravity/prometheus/internal/service/monitor"
+	"github.com/antigravity/prometheus/internal/service/netscan"
 	nodeService "github.com/antigravity/prometheus/internal/service/node"
 	"github.com/antigravity/prometheus/internal/service/notification"
 	operationsService "github.com/antigravity/prometheus/internal/service/operations"
@@ -39,13 +44,9 @@ import (
 	"github.com/antigravity/prometheus/internal/service/recovery"
 	"github.com/antigravity/prometheus/internal/service/reflex"
 	"github.com/antigravity/prometheus/internal/service/rightsizing"
-	topologyService "github.com/antigravity/prometheus/internal/service/topology"
 	"github.com/antigravity/prometheus/internal/service/sshkeys"
 	telegramService "github.com/antigravity/prometheus/internal/service/telegram"
-	"github.com/antigravity/prometheus/internal/service/loganalyzer"
-	"github.com/antigravity/prometheus/internal/service/logscan"
-	"github.com/antigravity/prometheus/internal/service/logstream"
-	"github.com/antigravity/prometheus/internal/service/netscan"
+	topologyService "github.com/antigravity/prometheus/internal/service/topology"
 	"github.com/antigravity/prometheus/internal/service/updates"
 	userService "github.com/antigravity/prometheus/internal/service/user"
 	vmService "github.com/antigravity/prometheus/internal/service/vm"
@@ -54,11 +55,13 @@ import (
 )
 
 func main() {
-	// Structured logging
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+	// Bootstrap logger with a sensible default so that any error during
+	// config loading is still captured before we switch to the configured
+	// level/format.
+	bootstrapLogger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))
-	slog.SetDefault(logger)
+	slog.SetDefault(bootstrapLogger)
 
 	slog.Info("starting Prometheus server")
 
@@ -68,6 +71,20 @@ func main() {
 		slog.Error("failed to load config", slog.Any("error", err))
 		os.Exit(1)
 	}
+
+	// Re-init the logger with values from config (LOG_LEVEL / LOG_FORMAT).
+	logHandlerOpts := &slog.HandlerOptions{Level: cfg.Log.SlogLevel()}
+	var logHandler slog.Handler
+	if cfg.Log.Format == "text" {
+		logHandler = slog.NewTextHandler(os.Stdout, logHandlerOpts)
+	} else {
+		logHandler = slog.NewJSONHandler(os.Stdout, logHandlerOpts)
+	}
+	slog.SetDefault(slog.New(logHandler))
+	slog.Info("logger configured",
+		slog.String("level", cfg.Log.Level),
+		slog.String("format", cfg.Log.Format),
+	)
 
 	// Context with signal handling
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -110,6 +127,17 @@ func main() {
 	backupRepo := repository.NewBackupRepository(dbPool)
 	backupFileRepo := repository.NewBackupFileRepository(dbPool)
 	scheduleRepo := repository.NewScheduleRepository(dbPool)
+
+	// Sweep backups left in PENDING/RUNNING after a crash. Anything older
+	// than 1h with no completion is by definition dead — the process that
+	// owned it is gone. Marking them FAILED stops them showing as
+	// "in progress" in the UI forever and frees the version slot.
+	if cleaned, err := backupRepo.MarkStuckRunningAsFailed(ctx, 3600,
+		"Server wurde während des Backups beendet — Eintrag automatisch als fehlgeschlagen markiert"); err != nil {
+		slog.Warn("startup backup-sweep failed", slog.Any("error", err))
+	} else if cleaned > 0 {
+		slog.Info("startup backup-sweep marked stuck backups as failed", slog.Int("count", cleaned))
+	}
 	metricsRepo := repository.NewMetricsRepository(dbPool)
 	aliasRepo := repository.NewNetworkAliasRepository(dbPool)
 	tagRepo := repository.NewTagRepository(dbPool)
@@ -206,6 +234,9 @@ func main() {
 	// User Service
 	pwValidator := userService.NewPasswordValidator(policyRepo)
 	userSvc := userService.NewService(userRepo, pwValidator).WithAccessRepositories(tokenRepo, apiTokenRepo, userInvitationRepo)
+	// Wire user-deactivation events through to the JWT-middleware cache so
+	// admin actions take effect for in-flight tokens immediately.
+	userService.SetActiveUserCacheInvalidator(middleware.InvalidateActiveUserCache)
 
 	// Notification Service
 	notifSvc := notification.NewService(channelRepo, historyRepo, encryptor)
@@ -484,32 +515,32 @@ func main() {
 
 	// Handlers
 	handlers := api.Handlers{
-		Health:       handler.NewHealthHandler(dbPool, redisClient),
-		Auth:         handler.NewAuthHandler(authService, userRepo, redisClient),
-		Node:         handler.NewNodeHandler(nodeSvc),
-		WS:           handler.NewWSHandler(wsHub, jwtSvc, cfg.CORS.AllowOrigins),
-		Backup:       handler.NewBackupHandler(backupSvc, restoreSvc, nodeSvc),
-		Schedule:     handler.NewScheduleHandler(scheduleRepo),
-		Metrics:      handler.NewMetricsHandler(monitorSvc, nodeSvc),
-		Tag:          handler.NewTagHandler(tagRepo),
-		PBS:          handler.NewPBSHandler(nodeRepo, encryptor),
-		User:         handler.NewUserHandler(userSvc),
-		Notification: handler.NewNotificationHandler(notifSvc, alertSvc),
-		DR:           handler.NewDRHandler(profileSvc, readinessSvc, runbookSvc),
-		Chat:         handler.NewChatHandler(agentSvc),
-		Migration:    handler.NewMigrationHandler(migrationSvc),
-		Escalation:   handler.NewEscalationHandler(escalationSvc),
-		Telegram:     handler.NewTelegramHandler(telegramLinkRepo, telegramBotSvc, telegramBotEnabled),
-		Cluster:      handler.NewClusterHandler(monitorSvc),
-		Anomaly:      handler.NewAnomalyHandler(anomalySvc),
-		Prediction:   handler.NewPredictionHandler(predictionSvc),
-		Briefing:     handler.NewBriefingHandler(briefingSvc),
-		Approval:     handler.NewApprovalHandler(approvalRepo, agentSvc),
-		Drift:        handler.NewDriftHandler(driftSvc),
-		Environment:  handler.NewEnvironmentHandler(envSvc),
-		Update:       handler.NewUpdateHandler(updateSvc),
-		Rightsizing:  handler.NewRightsizingHandler(rightsizingSvc),
-		SSHKey:       handler.NewSSHKeyHandler(sshkeySvc),
+		Health:         handler.NewHealthHandler(dbPool, redisClient),
+		Auth:           handler.NewAuthHandler(authService, userRepo, redisClient),
+		Node:           handler.NewNodeHandler(nodeSvc),
+		WS:             handler.NewWSHandler(wsHub, jwtSvc, cfg.CORS.AllowOrigins),
+		Backup:         handler.NewBackupHandler(backupSvc, restoreSvc, nodeSvc),
+		Schedule:       handler.NewScheduleHandler(scheduleRepo),
+		Metrics:        handler.NewMetricsHandler(monitorSvc, nodeSvc),
+		Tag:            handler.NewTagHandler(tagRepo),
+		PBS:            handler.NewPBSHandler(nodeRepo, encryptor),
+		User:           handler.NewUserHandler(userSvc),
+		Notification:   handler.NewNotificationHandler(notifSvc, alertSvc),
+		DR:             handler.NewDRHandler(profileSvc, readinessSvc, runbookSvc),
+		Chat:           handler.NewChatHandler(agentSvc),
+		Migration:      handler.NewMigrationHandler(migrationSvc),
+		Escalation:     handler.NewEscalationHandler(escalationSvc),
+		Telegram:       handler.NewTelegramHandler(telegramLinkRepo, telegramBotSvc, telegramBotEnabled),
+		Cluster:        handler.NewClusterHandler(monitorSvc),
+		Anomaly:        handler.NewAnomalyHandler(anomalySvc),
+		Prediction:     handler.NewPredictionHandler(predictionSvc),
+		Briefing:       handler.NewBriefingHandler(briefingSvc),
+		Approval:       handler.NewApprovalHandler(approvalRepo, agentSvc),
+		Drift:          handler.NewDriftHandler(driftSvc),
+		Environment:    handler.NewEnvironmentHandler(envSvc),
+		Update:         handler.NewUpdateHandler(updateSvc),
+		Rightsizing:    handler.NewRightsizingHandler(rightsizingSvc),
+		SSHKey:         handler.NewSSHKeyHandler(sshkeySvc),
 		Gateway:        handler.NewGatewayHandler(gatewaySvc, auditRepo),
 		Log:            handler.NewLogHandler(nodeSvc),
 		Topology:       handler.NewTopologyHandler(topologySvc),
@@ -577,6 +608,9 @@ func main() {
 	}
 	if err := netScanner.Shutdown(shutdownCtx); err != nil {
 		slog.Error("network scanner shutdown error", slog.Any("error", err))
+	}
+	if err := wsHub.Shutdown(shutdownCtx); err != nil {
+		slog.Error("ws hub shutdown error", slog.Any("error", err))
 	}
 
 	if err := e.Shutdown(shutdownCtx); err != nil {

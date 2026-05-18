@@ -1,8 +1,8 @@
 package handler
 
 import (
-	apiPkg "github.com/antigravity/prometheus/internal/api/response"
 	"github.com/antigravity/prometheus/internal/api/middleware"
+	apiPkg "github.com/antigravity/prometheus/internal/api/response"
 	"github.com/antigravity/prometheus/internal/model"
 	vmService "github.com/antigravity/prometheus/internal/service/vm"
 	"github.com/google/uuid"

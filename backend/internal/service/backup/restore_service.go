@@ -256,10 +256,29 @@ func (rs *RestoreService) RestoreFiles(ctx context.Context, backupID uuid.UUID, 
 // stripped) and permission mode. Streaming avoids buffering the entire archive
 // in memory, preventing OOM for large backups.
 func (rs *RestoreService) GenerateArchive(ctx context.Context, backupID uuid.UUID, w io.Writer) error {
-	// Get all backup files with content
 	fileList, err := rs.fileRepo.GetByBackupID(ctx, backupID)
 	if err != nil {
 		return fmt.Errorf("get backup files: %w", err)
+	}
+	if len(fileList) == 0 {
+		return fmt.Errorf("backup %s enthält keine Dateien", backupID)
+	}
+
+	// PRE-FLIGHT: validate every file BEFORE we write a single byte to the
+	// caller's io.Writer. Without this, a missing/undecryptable file partway
+	// through would leave the HTTP response with status 200 + a truncated
+	// tar.gz that the client treats as success. Pre-flight guarantees we
+	// either send a complete archive or never start writing at all.
+	for _, f := range fileList {
+		if f.IsEncrypted && rs.encryptor == nil {
+			return fmt.Errorf("Backup-Datei %s ist verschlüsselt, aber kein Entschlüsselungskey konfiguriert", f.FilePath)
+		}
+		if f.FileSize == 0 && len(f.Content) == 0 {
+			// File exists in the index but has no content (collected as
+			// metadata-only or content was pruned). Surfacing as error is
+			// safer than silently producing a partial archive.
+			return fmt.Errorf("Backup-Datei %s ist im Index aber hat keinen Inhalt", f.FilePath)
+		}
 	}
 
 	gzWriter := gzip.NewWriter(w)
@@ -268,16 +287,14 @@ func (rs *RestoreService) GenerateArchive(ctx context.Context, backupID uuid.UUI
 	defer tarWriter.Close()
 
 	for _, f := range fileList {
-		// Fetch full file content
 		fullFile, err := rs.fileRepo.GetSingleFile(ctx, backupID, f.FilePath)
 		if err != nil {
-			slog.Warn("failed to get file content for archive",
-				slog.String("file_path", f.FilePath),
-				slog.Any("error", err),
-			)
-			continue
+			// Pre-flight passed but the file vanished between then and now —
+			// extremely unlikely under normal load, but if it happens we
+			// must NOT silently skip (would produce a truncated archive
+			// that the user treats as authoritative).
+			return fmt.Errorf("get file content for %s: %w", f.FilePath, err)
 		}
-		// Decrypt content if encrypted
 		if fullFile.IsEncrypted && len(fullFile.Content) > 0 {
 			if rs.encryptor == nil {
 				return fmt.Errorf("Backup-Datei %s ist verschlüsselt, aber kein Entschlüsselungskey konfiguriert", f.FilePath)
@@ -289,7 +306,6 @@ func (rs *RestoreService) GenerateArchive(ctx context.Context, backupID uuid.UUI
 			fullFile.Content = []byte(decrypted)
 		}
 
-		// Parse permissions to file mode
 		mode := int64(0644)
 		if fullFile.FilePermissions != "" {
 			if parsed, err := strconv.ParseInt(fullFile.FilePermissions, 8, 64); err == nil {
@@ -297,7 +313,6 @@ func (rs *RestoreService) GenerateArchive(ctx context.Context, backupID uuid.UUI
 			}
 		}
 
-		// Strip leading "/" for tar path
 		tarPath := strings.TrimPrefix(fullFile.FilePath, "/")
 
 		header := &tar.Header{
@@ -305,11 +320,9 @@ func (rs *RestoreService) GenerateArchive(ctx context.Context, backupID uuid.UUI
 			Size: int64(len(fullFile.Content)),
 			Mode: mode,
 		}
-
 		if err := tarWriter.WriteHeader(header); err != nil {
 			return fmt.Errorf("write tar header for %s: %w", fullFile.FilePath, err)
 		}
-
 		if _, err := tarWriter.Write(fullFile.Content); err != nil {
 			return fmt.Errorf("write tar content for %s: %w", fullFile.FilePath, err)
 		}

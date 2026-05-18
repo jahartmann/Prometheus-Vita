@@ -90,8 +90,12 @@ func SetupRouter(e *echo.Echo, cfg *config.Config, jwtSvc *auth.JWTService, h Ha
 		e.Use(middleware.AuditLog(auditRepo))
 	}
 
-	// Health check (no auth)
+	// Health checks (no auth).
+	// /health is the legacy combined endpoint. /live and /ready follow the
+	// k8s convention: /live = process is alive, /ready = downstream deps ok.
 	e.GET("/health", h.Health.Check)
+	e.GET("/live", h.Health.Live)
+	e.GET("/ready", h.Health.Ready)
 
 	// API v1
 	v1 := e.Group("/api/v1")
@@ -110,7 +114,7 @@ func SetupRouter(e *echo.Echo, cfg *config.Config, jwtSvc *auth.JWTService, h Ha
 
 	// Protected routes
 	protected := v1.Group("")
-	protected.Use(middleware.JWTAuth(jwtSvc))
+	protected.Use(middleware.JWTAuth(jwtSvc, userRepo))
 	if userRepo != nil {
 		protected.Use(middleware.MustChangePassword(userRepo))
 	}

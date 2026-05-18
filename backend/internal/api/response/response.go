@@ -28,10 +28,10 @@ type PaginatedResponse[T any] struct {
 }
 
 type Meta struct {
-	Total  int `json:"total"`
-	Page   int `json:"page"`
-	Limit  int `json:"limit"`
-	Pages  int `json:"pages"`
+	Total int `json:"total"`
+	Page  int `json:"page"`
+	Limit int `json:"limit"`
+	Pages int `json:"pages"`
 }
 
 func Success[T any](c echo.Context, data T) error {

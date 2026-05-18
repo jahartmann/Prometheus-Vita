@@ -420,10 +420,33 @@ func (s *Service) Chat(ctx context.Context, userID uuid.UUID, req model.ChatRequ
 	}, nil
 }
 
+// toolExecutionTimeout caps how long a single tool call may run before we
+// give up and return an error to the LLM. SSH-heavy tools occasionally take
+// 30+s, so 2 min is the headroom; if a real workload needs more it should be
+// chunked into multiple tool calls.
+const toolExecutionTimeout = 2 * time.Minute
+
 func (s *Service) executeTool(ctx context.Context, userID uuid.UUID, convID uuid.UUID, msgID uuid.UUID, tc llm.ToolCall, allToolCalls *[]model.AgentToolCall) string {
+	// Validate the tool name up front. An LLM that hallucinates a name
+	// like `migrate_vm_quick` would otherwise reach executeTool and waste a
+	// round-trip before returning the "tool not found" error. The earlier
+	// it's rejected, the cheaper.
+	if strings.TrimSpace(tc.Function.Name) == "" {
+		return `{"error": "Tool-Name ist leer"}`
+	}
 	tool, ok := s.toolRegistry.Get(tc.Function.Name)
 	if !ok {
 		return fmt.Sprintf(`{"error": "Tool '%s' nicht gefunden"}`, tc.Function.Name)
+	}
+	// Quick structural sanity check on the arguments — must be valid JSON
+	// even if it's just an empty object. Without this a malformed `{` from
+	// the LLM would reach the tool's own Execute() and produce confusing
+	// errors.
+	if len(tc.Function.Arguments) > 0 {
+		var probe map[string]any
+		if err := json.Unmarshal([]byte(tc.Function.Arguments), &probe); err != nil {
+			return fmt.Sprintf(`{"error": "Tool-Argumente sind kein gültiges JSON: %s"}`, err.Error())
+		}
 	}
 
 	user, err := s.userRepo.GetByID(ctx, userID)
@@ -452,7 +475,14 @@ func (s *Service) executeTool(ctx context.Context, userID uuid.UUID, convID uuid
 		return string(raw)
 	}
 
-	if s.toolRequiresApproval(ctx, user.AutonomyLevel, tool, security) {
+	// Tools marked RequiresDryRun=true are destructive (migrate_vm,
+	// restore_config, run_ssh_command, vm_exec, vm_file_write). For these,
+	// any non-dry-run invocation MUST go through approval — even when the
+	// user is in AutonomyFullAuto. Without this an LLM could bypass the
+	// approval gate by hallucinating `dry_run: false` in its tool call.
+	forceApproval := argsAreRealRun(security, json.RawMessage(tc.Function.Arguments))
+
+	if forceApproval || s.toolRequiresApproval(ctx, user.AutonomyLevel, tool, security) {
 		approval := &model.AgentPendingApproval{
 			UserID:         userID,
 			ConversationID: convID,
@@ -512,9 +542,16 @@ func (s *Service) ExecuteApprovedTool(ctx context.Context, userID uuid.UUID, app
 	if err != nil {
 		return nil, err
 	}
+	// Re-validate permission and autonomy AT THE MOMENT OF EXECUTION rather
+	// than trusting the snapshot from when the approval was created. The
+	// admin may have downgraded this user's role or autonomy between the
+	// approval being raised and the approver clicking "Approve".
 	security := securityForTool(tool)
 	if !s.userAllowsTool(ctx, user, security.Permission) {
 		return nil, fmt.Errorf("required permission missing: %s", security.Permission)
+	}
+	if !tool.ReadOnly() && user.AutonomyLevel == model.AutonomyReadOnly {
+		return nil, fmt.Errorf("user autonomy is read-only; write tool %q cannot execute", approval.ToolName)
 	}
 	resultStr, _ := s.executeToolDirect(ctx, approval.MessageID, approval.ToolName, tool, approval.Arguments)
 	return json.RawMessage(resultStr), nil
@@ -531,8 +568,26 @@ func (s *Service) executeToolDirect(ctx context.Context, msgID uuid.UUID, toolNa
 		slog.Warn("failed to create tool call record", slog.Any("error", err))
 	}
 
+	// Bound the per-tool execution time. A tool that hangs (SSH timeout,
+	// LLM-internal call that never returns) would otherwise pin the chat
+	// loop indefinitely.
+	toolCtx, cancel := context.WithTimeout(ctx, toolExecutionTimeout)
+	defer cancel()
+
 	start := time.Now()
-	result, err := tool.Execute(ctx, args)
+	// Isolate panics: a buggy tool that panics on bad args must not crash
+	// the chat goroutine. The result is converted to a structured error so
+	// the LLM can see "the tool errored" and continue.
+	var result json.RawMessage
+	var err error
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				err = fmt.Errorf("tool %q panicked: %v", toolName, r)
+			}
+		}()
+		result, err = tool.Execute(toolCtx, args)
+	}()
 	duration := time.Since(start)
 	durationMs := int(duration.Milliseconds())
 

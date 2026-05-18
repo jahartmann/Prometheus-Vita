@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"time"
 
-	apiPkg "github.com/antigravity/prometheus/internal/api/response"
 	"github.com/antigravity/prometheus/internal/api/middleware"
+	apiPkg "github.com/antigravity/prometheus/internal/api/response"
 	"github.com/antigravity/prometheus/internal/model"
 	"github.com/antigravity/prometheus/internal/repository"
 	"github.com/antigravity/prometheus/internal/service/auth"
@@ -19,8 +19,8 @@ import (
 )
 
 const (
-	maxUsernameLength = 255
-	maxPasswordLength = 1000
+	maxUsernameLength       = 255
+	maxPasswordLength       = 1000
 	loginRateLimitPerMinute = 10
 )
 

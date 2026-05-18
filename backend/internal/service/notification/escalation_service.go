@@ -124,7 +124,32 @@ func (s *EscalationService) processIncident(ctx context.Context, incident *model
 		)
 
 		if len(step.ChannelIDs) > 0 {
-			s.notifSvc.NotifyChannels(ctx, step.ChannelIDs, "escalation", subject, body)
+			attempted, delivered := s.notifSvc.NotifyChannels(ctx, step.ChannelIDs, "escalation", subject, body)
+			if delivered == 0 {
+				// NOT a single channel actually received this step. Don't
+				// mark the step "executed" — that would advance the
+				// incident to step N+1 and the user never gets paged at
+				// step N. Leave it for the next ProcessEscalations tick.
+				slog.Warn("escalation: step had zero successful deliveries — retrying next cycle",
+					slog.String("incident_id", incident.ID.String()),
+					slog.Int("step", step.StepOrder),
+					slog.String("rule", rule.Name),
+					slog.Int("attempted", attempted),
+				)
+				break
+			}
+			slog.Info("escalation step executed",
+				slog.String("incident_id", incident.ID.String()),
+				slog.Int("step", step.StepOrder),
+				slog.String("rule", rule.Name),
+				slog.Int("attempted", attempted),
+				slog.Int("delivered", delivered),
+			)
+		} else {
+			slog.Info("escalation step had no channels configured — marking executed anyway",
+				slog.String("incident_id", incident.ID.String()),
+				slog.Int("step", step.StepOrder),
+			)
 		}
 
 		now := time.Now()
@@ -133,11 +158,6 @@ func (s *EscalationService) processIncident(ctx context.Context, incident *model
 				slog.String("incident_id", incident.ID.String()),
 				slog.Any("error", err))
 		}
-
-		slog.Info("escalation step executed",
-			slog.String("incident_id", incident.ID.String()),
-			slog.Int("step", step.StepOrder),
-			slog.String("rule", rule.Name))
 
 		stepsExecuted++
 	}

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/antigravity/prometheus/internal/apierror"
 	apiPkg "github.com/antigravity/prometheus/internal/api/response"
+	"github.com/antigravity/prometheus/internal/apierror"
 	nodeService "github.com/antigravity/prometheus/internal/service/node"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"

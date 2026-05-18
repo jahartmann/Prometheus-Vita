@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/antigravity/prometheus/internal/model"
@@ -36,6 +37,11 @@ type StreamManager struct {
 	workers     map[string]*Worker
 	subscribers map[string][]chan model.LogEntry // nodeID -> subscriber channels
 	mu          sync.RWMutex
+
+	// droppedEntries is incremented every time a subscriber's buffer was
+	// full and we had to drop an entry. Exposed via DroppedEntries() so
+	// dashboards can alert on it. Without this the drops are silent.
+	droppedEntries atomic.Uint64
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -288,9 +294,19 @@ func (m *StreamManager) notifySubscribers(nodeID string, entry model.LogEntry) {
 		select {
 		case ch <- entry:
 		default:
-			// Drop the entry rather than blocking — slow consumers miss data.
+			// Drop the entry rather than blocking — slow consumers miss
+			// data. Count it so operators can see "X log entries dropped"
+			// in metrics; without this the drops are silent and a
+			// security-critical log line could disappear without trace.
+			m.droppedEntries.Add(1)
 		}
 	}
+}
+
+// DroppedEntries returns the cumulative number of log entries dropped due to
+// slow subscribers. Useful to expose on a /metrics endpoint.
+func (m *StreamManager) DroppedEntries() uint64 {
+	return m.droppedEntries.Load()
 }
 
 // writeToRedis persists a log entry to the Redis Stream `logs:{nodeID}`.

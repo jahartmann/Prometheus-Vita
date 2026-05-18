@@ -32,25 +32,25 @@ type Query struct {
 }
 
 type Service struct {
-	nodeRepo         repository.NodeRepository
-	backupRepo       repository.BackupRepository
-	migrationRepo    repository.MigrationRepository
-	auditRepo        repository.AuditRepository
-	securityRepo     repository.SecurityEventRepository
-	anomalyRepo      repository.AnomalyRepository
-	predictionRepo   repository.PredictionRepository
-	incidentRepo     repository.AlertIncidentRepository
-	approvalRepo     repository.ApprovalRepository
-	notificationRepo repository.NotificationHistoryRepository
-	backupScheduleRepo repository.ScheduleRepository
+	nodeRepo              repository.NodeRepository
+	backupRepo            repository.BackupRepository
+	migrationRepo         repository.MigrationRepository
+	auditRepo             repository.AuditRepository
+	securityRepo          repository.SecurityEventRepository
+	anomalyRepo           repository.AnomalyRepository
+	predictionRepo        repository.PredictionRepository
+	incidentRepo          repository.AlertIncidentRepository
+	approvalRepo          repository.ApprovalRepository
+	notificationRepo      repository.NotificationHistoryRepository
+	backupScheduleRepo    repository.ScheduleRepository
 	logReportScheduleRepo repository.LogReportScheduleRepository
-	snapshotPolicyRepo repository.SnapshotPolicyRepository
-	vmDependencyRepo repository.VMDependencyRepository
-	scheduledActionRepo repository.ScheduledActionRepository
-	networkDeviceRepo repository.NetworkDeviceRepository
-	networkPortRepo repository.NetworkPortRepository
-	nodeVMService    NodeVMService
-	llmRegistry      *llm.Registry
+	snapshotPolicyRepo    repository.SnapshotPolicyRepository
+	vmDependencyRepo      repository.VMDependencyRepository
+	scheduledActionRepo   repository.ScheduledActionRepository
+	networkDeviceRepo     repository.NetworkDeviceRepository
+	networkPortRepo       repository.NetworkPortRepository
+	nodeVMService         NodeVMService
+	llmRegistry           *llm.Registry
 }
 
 func NewService(
@@ -75,25 +75,25 @@ func NewService(
 	llmRegistry *llm.Registry,
 ) *Service {
 	return &Service{
-		nodeRepo: nodeRepo,
-		backupRepo: backupRepo,
-		migrationRepo: migrationRepo,
-		auditRepo: auditRepo,
-		securityRepo: securityRepo,
-		anomalyRepo: anomalyRepo,
-		predictionRepo: predictionRepo,
-		incidentRepo: incidentRepo,
-		approvalRepo: approvalRepo,
-		notificationRepo: notificationRepo,
-		backupScheduleRepo: backupScheduleRepo,
+		nodeRepo:              nodeRepo,
+		backupRepo:            backupRepo,
+		migrationRepo:         migrationRepo,
+		auditRepo:             auditRepo,
+		securityRepo:          securityRepo,
+		anomalyRepo:           anomalyRepo,
+		predictionRepo:        predictionRepo,
+		incidentRepo:          incidentRepo,
+		approvalRepo:          approvalRepo,
+		notificationRepo:      notificationRepo,
+		backupScheduleRepo:    backupScheduleRepo,
 		logReportScheduleRepo: logReportScheduleRepo,
-		snapshotPolicyRepo: snapshotPolicyRepo,
-		vmDependencyRepo: vmDependencyRepo,
-		scheduledActionRepo: scheduledActionRepo,
-		networkDeviceRepo: networkDeviceRepo,
-		networkPortRepo: networkPortRepo,
-		nodeVMService: nodeVMService,
-		llmRegistry: llmRegistry,
+		snapshotPolicyRepo:    snapshotPolicyRepo,
+		vmDependencyRepo:      vmDependencyRepo,
+		scheduledActionRepo:   scheduledActionRepo,
+		networkDeviceRepo:     networkDeviceRepo,
+		networkPortRepo:       networkPortRepo,
+		nodeVMService:         nodeVMService,
+		llmRegistry:           llmRegistry,
 	}
 }
 
@@ -111,16 +111,16 @@ func (s *Service) ListTasks(ctx context.Context, q Query) ([]model.OperationTask
 		for _, m := range migrations {
 			status, severity := taskStatusForMigration(m.Status)
 			task := model.OperationTask{
-				ID: fmt.Sprintf("migration-%s", m.ID),
-				Type: "migration",
-				Title: fmt.Sprintf("%s migrieren", fallback(m.VMName, fmt.Sprintf("VM %d", m.VMID))),
-				Detail: fmt.Sprintf("%s -> %s · %s", m.SourceNodeID, m.TargetNodeID, fallback(m.CurrentStep, string(m.Status))),
-				Status: status,
-				Severity: severity,
-				Progress: m.Progress,
-				EntityID: m.ID.String(),
-				NodeID: &m.SourceNodeID,
-				Href: "/migrations",
+				ID:        fmt.Sprintf("migration-%s", m.ID),
+				Type:      "migration",
+				Title:     fmt.Sprintf("%s migrieren", fallback(m.VMName, fmt.Sprintf("VM %d", m.VMID))),
+				Detail:    fmt.Sprintf("%s -> %s · %s", m.SourceNodeID, m.TargetNodeID, fallback(m.CurrentStep, string(m.Status))),
+				Status:    status,
+				Severity:  severity,
+				Progress:  m.Progress,
+				EntityID:  m.ID.String(),
+				NodeID:    &m.SourceNodeID,
+				Href:      "/migrations",
 				CreatedAt: m.CreatedAt,
 			}
 			if includeTask(task, q) {
@@ -144,16 +144,16 @@ func (s *Service) ListTasks(ctx context.Context, q Query) ([]model.OperationTask
 				progress = 100
 			}
 			task := model.OperationTask{
-				ID: fmt.Sprintf("backup-%s", b.ID),
-				Type: "backup",
-				Title: fmt.Sprintf("Backup %d auf %s", b.Version, b.NodeID),
-				Detail: fmt.Sprintf("%s · %d Dateien%s", b.BackupType, b.FileCount, suffix(b.ErrorMessage)),
-				Status: status,
-				Severity: severity,
-				Progress: progress,
-				EntityID: b.ID.String(),
-				NodeID: &b.NodeID,
-				Href: "/backups",
+				ID:        fmt.Sprintf("backup-%s", b.ID),
+				Type:      "backup",
+				Title:     fmt.Sprintf("Backup %d auf %s", b.Version, b.NodeID),
+				Detail:    fmt.Sprintf("%s · %d Dateien%s", b.BackupType, b.FileCount, suffix(b.ErrorMessage)),
+				Status:    status,
+				Severity:  severity,
+				Progress:  progress,
+				EntityID:  b.ID.String(),
+				NodeID:    &b.NodeID,
+				Href:      "/backups",
 				CreatedAt: b.CreatedAt,
 			}
 			if includeTask(task, q) {
@@ -177,15 +177,15 @@ func (s *Service) ListTasks(ctx context.Context, q Query) ([]model.OperationTask
 				status = "warning"
 			}
 			task := model.OperationTask{
-				ID: fmt.Sprintf("incident-%s", inc.ID),
-				Type: "incident",
-				Title: fmt.Sprintf("Incident %s", inc.Status),
-				Detail: fmt.Sprintf("Stufe %d · Regel %s", inc.CurrentStep, inc.AlertRuleID),
-				Status: status,
-				Severity: severity,
-				Progress: 25,
-				EntityID: inc.ID.String(),
-				Href: "/alerts",
+				ID:        fmt.Sprintf("incident-%s", inc.ID),
+				Type:      "incident",
+				Title:     fmt.Sprintf("Incident %s", inc.Status),
+				Detail:    fmt.Sprintf("Stufe %d · Regel %s", inc.CurrentStep, inc.AlertRuleID),
+				Status:    status,
+				Severity:  severity,
+				Progress:  25,
+				EntityID:  inc.ID.String(),
+				Href:      "/alerts",
 				CreatedAt: inc.TriggeredAt,
 			}
 			if inc.Status == model.IncidentStatusAcknowledged {
@@ -204,15 +204,15 @@ func (s *Service) ListTasks(ctx context.Context, q Query) ([]model.OperationTask
 		}
 		for _, approval := range approvals {
 			task := model.OperationTask{
-				ID: "approval-" + approval.ID.String(),
-				Type: "approval",
-				Title: "Agent-Approval: " + approval.ToolName,
-				Detail: "Konversation " + approval.ConversationID.String(),
-				Status: "pending",
-				Severity: "warning",
-				Progress: 10,
-				EntityID: approval.ID.String(),
-				Href: "/chat",
+				ID:        "approval-" + approval.ID.String(),
+				Type:      "approval",
+				Title:     "Agent-Approval: " + approval.ToolName,
+				Detail:    "Konversation " + approval.ConversationID.String(),
+				Status:    "pending",
+				Severity:  "warning",
+				Progress:  10,
+				EntityID:  approval.ID.String(),
+				Href:      "/chat",
 				CreatedAt: approval.CreatedAt,
 			}
 			if includeTask(task, q) {
@@ -232,16 +232,16 @@ func (s *Service) ListTasks(ctx context.Context, q Query) ([]model.OperationTask
 				detail += " · " + action.Description
 			}
 			task := model.OperationTask{
-				ID: "scheduled-action-" + action.ID.String(),
-				Type: "scheduled_action",
-				Title: "Geplante Aktion: " + action.Action,
-				Detail: detail,
-				Status: "pending",
-				Severity: "info",
-				Progress: 0,
-				EntityID: action.ID.String(),
-				NodeID: &action.NodeID,
-				Href: fmt.Sprintf("/nodes/%s/vms", action.NodeID),
+				ID:        "scheduled-action-" + action.ID.String(),
+				Type:      "scheduled_action",
+				Title:     "Geplante Aktion: " + action.Action,
+				Detail:    detail,
+				Status:    "pending",
+				Severity:  "info",
+				Progress:  0,
+				EntityID:  action.ID.String(),
+				NodeID:    &action.NodeID,
+				Href:      fmt.Sprintf("/nodes/%s/vms", action.NodeID),
 				CreatedAt: action.CreatedAt,
 			}
 			if includeTask(task, q) {
@@ -272,15 +272,15 @@ func (s *Service) ListTasks(ctx context.Context, q Query) ([]model.OperationTask
 				progress = 100
 			}
 			task := model.OperationTask{
-				ID: fmt.Sprintf("notification-%s", entry.ID),
-				Type: "notification",
-				Title: fallback(entry.Subject, "Benachrichtigung"),
-				Detail: fmt.Sprintf("%s · %s", entry.EventType, fallback(entry.ErrorMessage, string(entry.Status))),
-				Status: status,
-				Severity: severity,
-				Progress: progress,
-				EntityID: entry.ID.String(),
-				Href: "/settings/notifications",
+				ID:        fmt.Sprintf("notification-%s", entry.ID),
+				Type:      "notification",
+				Title:     fallback(entry.Subject, "Benachrichtigung"),
+				Detail:    fmt.Sprintf("%s · %s", entry.EventType, fallback(entry.ErrorMessage, string(entry.Status))),
+				Status:    status,
+				Severity:  severity,
+				Progress:  progress,
+				EntityID:  entry.ID.String(),
+				Href:      "/settings/notifications",
 				CreatedAt: entry.CreatedAt,
 			}
 			if includeTask(task, q) {
@@ -309,17 +309,17 @@ func (s *Service) appendScheduledJobTasks(ctx context.Context, tasks *[]model.Op
 					continue
 				}
 				task := model.OperationTask{
-					ID: "backup-schedule-" + schedule.ID.String(),
-					Type: "scheduled_job",
-					Title: "Backup-Job: " + node.Name,
-					Detail: fmt.Sprintf("%s - Retention %d", schedule.CronExpression, schedule.RetentionCount),
-					Status: scheduledStatus(schedule.NextRunAt),
-					Severity: "info",
-					Progress: 0,
-					EntityID: schedule.ID.String(),
-					NodeID: &node.ID,
-					Href: "/backups",
-					DueAt: schedule.NextRunAt,
+					ID:        "backup-schedule-" + schedule.ID.String(),
+					Type:      "scheduled_job",
+					Title:     "Backup-Job: " + node.Name,
+					Detail:    fmt.Sprintf("%s - Retention %d", schedule.CronExpression, schedule.RetentionCount),
+					Status:    scheduledStatus(schedule.NextRunAt),
+					Severity:  "info",
+					Progress:  0,
+					EntityID:  schedule.ID.String(),
+					NodeID:    &node.ID,
+					Href:      "/backups",
+					DueAt:     schedule.NextRunAt,
 					CreatedAt: schedule.CreatedAt,
 				}
 				if includeTask(task, q) {
@@ -339,16 +339,16 @@ func (s *Service) appendScheduledJobTasks(ctx context.Context, tasks *[]model.Op
 				continue
 			}
 			task := model.OperationTask{
-				ID: "log-report-schedule-" + schedule.ID.String(),
-				Type: "scheduled_report",
-				Title: "Geplanter Log-Report",
-				Detail: fmt.Sprintf("%s - %d Nodes - %dh Fenster", schedule.CronExpression, len(schedule.NodeIDs), schedule.TimeWindowHours),
-				Status: scheduledStatus(schedule.NextRunAt),
-				Severity: "info",
-				Progress: 0,
-				EntityID: schedule.ID.String(),
-				Href: "/reports",
-				DueAt: schedule.NextRunAt,
+				ID:        "log-report-schedule-" + schedule.ID.String(),
+				Type:      "scheduled_report",
+				Title:     "Geplanter Log-Report",
+				Detail:    fmt.Sprintf("%s - %d Nodes - %dh Fenster", schedule.CronExpression, len(schedule.NodeIDs), schedule.TimeWindowHours),
+				Status:    scheduledStatus(schedule.NextRunAt),
+				Severity:  "info",
+				Progress:  0,
+				EntityID:  schedule.ID.String(),
+				Href:      "/reports",
+				DueAt:     schedule.NextRunAt,
 				CreatedAt: schedule.CreatedAt,
 			}
 			if includeTask(task, q) {
@@ -364,16 +364,16 @@ func (s *Service) appendScheduledJobTasks(ctx context.Context, tasks *[]model.Op
 		}
 		for _, policy := range policies {
 			task := model.OperationTask{
-				ID: "snapshot-policy-" + policy.ID.String(),
-				Type: "scheduled_job",
-				Title: fmt.Sprintf("Snapshot-Policy: %s", policy.Name),
-				Detail: fmt.Sprintf("VM %d - %s", policy.VMID, policy.ScheduleCron),
-				Status: "pending",
-				Severity: "info",
-				Progress: 0,
-				EntityID: policy.ID.String(),
-				NodeID: &policy.NodeID,
-				Href: fmt.Sprintf("/nodes/%s/vms", policy.NodeID),
+				ID:        "snapshot-policy-" + policy.ID.String(),
+				Type:      "scheduled_job",
+				Title:     fmt.Sprintf("Snapshot-Policy: %s", policy.Name),
+				Detail:    fmt.Sprintf("VM %d - %s", policy.VMID, policy.ScheduleCron),
+				Status:    "pending",
+				Severity:  "info",
+				Progress:  0,
+				EntityID:  policy.ID.String(),
+				NodeID:    &policy.NodeID,
+				Href:      fmt.Sprintf("/nodes/%s/vms", policy.NodeID),
 				CreatedAt: policy.CreatedAt,
 			}
 			if includeTask(task, q) {
@@ -397,14 +397,14 @@ func (s *Service) Timeline(ctx context.Context, q Query) ([]model.TimelineEvent,
 		}
 		for _, entry := range entries {
 			event := model.TimelineEvent{
-				ID: fmt.Sprintf("audit-%s", entry.ID),
-				Source: "audit",
-				Severity: severityForAudit(entry),
-				Title: fmt.Sprintf("%s %d", entry.Method, entry.StatusCode),
-				Detail: entry.Path,
-				Actor: fallback(entry.Username, "System"),
-				EntityID: entry.ID.String(),
-				Href: "/settings/audit-log",
+				ID:        fmt.Sprintf("audit-%s", entry.ID),
+				Source:    "audit",
+				Severity:  severityForAudit(entry),
+				Title:     fmt.Sprintf("%s %d", entry.Method, entry.StatusCode),
+				Detail:    entry.Path,
+				Actor:     fallback(entry.Username, "System"),
+				EntityID:  entry.ID.String(),
+				Href:      "/settings/audit-log",
 				CreatedAt: entry.CreatedAt,
 			}
 			if entry.APITokenID != nil && event.Actor == "System" {
@@ -423,15 +423,15 @@ func (s *Service) Timeline(ctx context.Context, q Query) ([]model.TimelineEvent,
 		}
 		for _, sec := range securityEvents {
 			event := model.TimelineEvent{
-				ID: fmt.Sprintf("security-%s", sec.ID),
-				Source: "security",
-				Severity: normalizeSeverity(sec.Severity),
-				Title: sec.Title,
-				Detail: fmt.Sprintf("%s · %s", fallback(sec.NodeName, sec.NodeID.String()), sec.Category),
-				Actor: fallback(sec.AnalysisModel, "Security Engine"),
-				EntityID: sec.ID.String(),
-				NodeID: &sec.NodeID,
-				Href: "/security",
+				ID:        fmt.Sprintf("security-%s", sec.ID),
+				Source:    "security",
+				Severity:  normalizeSeverity(sec.Severity),
+				Title:     sec.Title,
+				Detail:    fmt.Sprintf("%s · %s", fallback(sec.NodeName, sec.NodeID.String()), sec.Category),
+				Actor:     fallback(sec.AnalysisModel, "Security Engine"),
+				EntityID:  sec.ID.String(),
+				NodeID:    &sec.NodeID,
+				Href:      "/security",
 				CreatedAt: sec.DetectedAt,
 			}
 			if includeTimeline(event, q) {
@@ -450,15 +450,15 @@ func (s *Service) Timeline(ctx context.Context, q Query) ([]model.TimelineEvent,
 			source = "alert"
 		}
 		event := model.TimelineEvent{
-			ID: fmt.Sprintf("task-%s", task.ID),
-			Source: source,
-			Severity: task.Severity,
-			Title: task.Title,
-			Detail: task.Detail,
-			Actor: "Prometheus",
-			EntityID: task.EntityID,
-			NodeID: task.NodeID,
-			Href: task.Href,
+			ID:        fmt.Sprintf("task-%s", task.ID),
+			Source:    source,
+			Severity:  task.Severity,
+			Title:     task.Title,
+			Detail:    task.Detail,
+			Actor:     "Prometheus",
+			EntityID:  task.EntityID,
+			NodeID:    task.NodeID,
+			Href:      task.Href,
 			CreatedAt: task.CreatedAt,
 		}
 		if includeTimeline(event, q) {
@@ -496,10 +496,10 @@ func (s *Service) AnalyzeRCA(ctx context.Context, req model.RCAAnalyzeRequest) (
 		}
 	}
 	return &model.RCAAnalyzeResponse{
-		Summary: summary,
-		ModelUsed: modelUsed,
-		Candidates: candidates,
-		Timeline: timeline,
+		Summary:     summary,
+		ModelUsed:   modelUsed,
+		Candidates:  candidates,
+		Timeline:    timeline,
 		GeneratedAt: time.Now(),
 	}, nil
 }
@@ -521,11 +521,11 @@ func (s *Service) KnowledgeGraph(ctx context.Context) (*model.KnowledgeGraphResp
 			status = "online"
 		}
 		graphNodes = append(graphNodes, model.KnowledgeGraphNode{
-			ID: "node:" + n.ID.String(),
-			Type: "node",
-			Label: n.Name,
-			Status: status,
-			NodeID: &nodeID,
+			ID:       "node:" + n.ID.String(),
+			Type:     "node",
+			Label:    n.Name,
+			Status:   status,
+			NodeID:   &nodeID,
 			Metadata: map[string]string{"hostname": n.Hostname, "type": string(n.Type)},
 		})
 		stats.Nodes++
@@ -535,18 +535,18 @@ func (s *Service) KnowledgeGraph(ctx context.Context) (*model.KnowledgeGraphResp
 				for _, vm := range vms {
 					vmNodeID := fmt.Sprintf("vm:%s:%d", n.ID, vm.VMID)
 					graphNodes = append(graphNodes, model.KnowledgeGraphNode{
-						ID: vmNodeID,
-						Type: "vm",
-						Label: fallback(vm.Name, fmt.Sprintf("VM %d", vm.VMID)),
-						Status: vm.Status,
-						NodeID: &nodeID,
+						ID:       vmNodeID,
+						Type:     "vm",
+						Label:    fallback(vm.Name, fmt.Sprintf("VM %d", vm.VMID)),
+						Status:   vm.Status,
+						NodeID:   &nodeID,
 						Metadata: map[string]string{"vmid": fmt.Sprintf("%d", vm.VMID), "type": vm.Type},
 					})
 					edges = append(edges, model.KnowledgeGraphEdge{
-						ID: "hosts:" + n.ID.String() + ":" + fmt.Sprintf("%d", vm.VMID),
-						From: "node:" + n.ID.String(),
-						To: vmNodeID,
-						Type: "hosts",
+						ID:    "hosts:" + n.ID.String() + ":" + fmt.Sprintf("%d", vm.VMID),
+						From:  "node:" + n.ID.String(),
+						To:    vmNodeID,
+						Type:  "hosts",
 						Label: "hostet",
 					})
 					stats.VMs++
@@ -559,18 +559,18 @@ func (s *Service) KnowledgeGraph(ctx context.Context) (*model.KnowledgeGraphResp
 			for _, device := range devices {
 				deviceID := "device:" + device.ID.String()
 				graphNodes = append(graphNodes, model.KnowledgeGraphNode{
-					ID: deviceID,
-					Type: "device",
-					Label: fallback(device.Hostname, device.IP),
-					Status: knownStatus(device.IsKnown),
-					NodeID: &nodeID,
+					ID:       deviceID,
+					Type:     "device",
+					Label:    fallback(device.Hostname, device.IP),
+					Status:   knownStatus(device.IsKnown),
+					NodeID:   &nodeID,
 					Metadata: map[string]string{"ip": device.IP, "mac": device.MAC},
 				})
 				edges = append(edges, model.KnowledgeGraphEdge{
-					ID: "sees:" + n.ID.String() + ":" + device.ID.String(),
-					From: "node:" + n.ID.String(),
-					To: deviceID,
-					Type: "sees",
+					ID:    "sees:" + n.ID.String() + ":" + device.ID.String(),
+					From:  "node:" + n.ID.String(),
+					To:    deviceID,
+					Type:  "sees",
 					Label: "sieht",
 				})
 				stats.Devices++
@@ -578,19 +578,19 @@ func (s *Service) KnowledgeGraph(ctx context.Context) (*model.KnowledgeGraphResp
 				for _, port := range ports {
 					serviceID := fmt.Sprintf("service:%s:%d:%s", device.ID, port.Port, port.Protocol)
 					graphNodes = append(graphNodes, model.KnowledgeGraphNode{
-						ID: serviceID,
-						Type: "service",
-						Label: fallback(port.ServiceName, fmt.Sprintf("%s/%d", port.Protocol, port.Port)),
-						Status: port.State,
-						NodeID: &nodeID,
+						ID:       serviceID,
+						Type:     "service",
+						Label:    fallback(port.ServiceName, fmt.Sprintf("%s/%d", port.Protocol, port.Port)),
+						Status:   port.State,
+						NodeID:   &nodeID,
 						Metadata: map[string]string{"port": fmt.Sprintf("%d", port.Port), "protocol": port.Protocol, "version": port.ServiceVersion},
 					})
 					edges = append(edges, model.KnowledgeGraphEdge{
-						ID: "exposes:" + device.ID.String() + ":" + fmt.Sprintf("%d", port.Port) + ":" + port.Protocol,
-						From: deviceID,
-						To: serviceID,
-						Type: "exposes",
-						Label: "exponiert",
+						ID:     "exposes:" + device.ID.String() + ":" + fmt.Sprintf("%d", port.Port) + ":" + port.Protocol,
+						From:   deviceID,
+						To:     serviceID,
+						Type:   "exposes",
+						Label:  "exponiert",
 						Status: port.State,
 					})
 					stats.Services++
@@ -606,10 +606,10 @@ func (s *Service) KnowledgeGraph(ctx context.Context) (*model.KnowledgeGraphResp
 		}
 		for _, dep := range deps {
 			edges = append(edges, model.KnowledgeGraphEdge{
-				ID: "depends:" + dep.ID.String(),
-				From: fmt.Sprintf("vm:%s:%d", dep.SourceNodeID, dep.SourceVMID),
-				To: fmt.Sprintf("vm:%s:%d", dep.TargetNodeID, dep.TargetVMID),
-				Type: "depends_on",
+				ID:    "depends:" + dep.ID.String(),
+				From:  fmt.Sprintf("vm:%s:%d", dep.SourceNodeID, dep.SourceVMID),
+				To:    fmt.Sprintf("vm:%s:%d", dep.TargetNodeID, dep.TargetVMID),
+				Type:  "depends_on",
 				Label: fallback(dep.DependencyType, "depends_on"),
 			})
 			stats.Dependencies++
@@ -617,9 +617,9 @@ func (s *Service) KnowledgeGraph(ctx context.Context) (*model.KnowledgeGraphResp
 	}
 
 	return &model.KnowledgeGraphResponse{
-		Nodes: graphNodes,
-		Edges: edges,
-		Stats: stats,
+		Nodes:       graphNodes,
+		Edges:       edges,
+		Stats:       stats,
 		GeneratedAt: time.Now(),
 	}, nil
 }
@@ -675,13 +675,13 @@ func (s *Service) buildCandidates(ctx context.Context, nodeID *uuid.UUID) ([]mod
 		if !node.IsOnline {
 			nid := node.ID
 			candidates = append(candidates, model.RCACandidate{
-				ID: "offline-" + node.ID.String(),
-				Title: node.Name + " ist offline",
-				Severity: "critical",
-				NodeID: &nid,
-				Evidence: []string{"Node meldet sich nicht online", "Letzter Kontakt: " + timeString(node.LastSeen)},
+				ID:             "offline-" + node.ID.String(),
+				Title:          node.Name + " ist offline",
+				Severity:       "critical",
+				NodeID:         &nid,
+				Evidence:       []string{"Node meldet sich nicht online", "Letzter Kontakt: " + timeString(node.LastSeen)},
 				Recommendation: "Node-Verbindung, API-Token, Netzwerkpfad und Proxmox-Service pruefen.",
-				Href: "/nodes/" + node.ID.String(),
+				Href:           "/nodes/" + node.ID.String(),
 			})
 		}
 	}
@@ -703,13 +703,13 @@ func (s *Service) buildCandidates(ctx context.Context, nodeID *uuid.UUID) ([]mod
 			}
 			nid := event.NodeID
 			candidates = append(candidates, model.RCACandidate{
-				ID: "security-" + event.ID.String(),
-				Title: event.Title,
-				Severity: normalizeSeverity(event.Severity),
-				NodeID: &nid,
-				Evidence: compactEvidence(event.Description, event.Impact),
+				ID:             "security-" + event.ID.String(),
+				Title:          event.Title,
+				Severity:       normalizeSeverity(event.Severity),
+				NodeID:         &nid,
+				Evidence:       compactEvidence(event.Description, event.Impact),
 				Recommendation: fallback(event.Recommendation, "Security-Ereignis validieren und bestaetigen."),
-				Href: "/security",
+				Href:           "/security",
 			})
 		}
 	}
@@ -725,13 +725,13 @@ func (s *Service) buildCandidates(ctx context.Context, nodeID *uuid.UUID) ([]mod
 			}
 			nid := anomaly.NodeID
 			candidates = append(candidates, model.RCACandidate{
-				ID: "anomaly-" + anomaly.ID.String(),
-				Title: fmt.Sprintf("%s Anomalie", anomaly.Metric),
-				Severity: normalizeSeverity(anomaly.Severity),
-				NodeID: &nid,
-				Evidence: compactEvidence(fmt.Sprintf("Wert %.2f", anomaly.Value), fmt.Sprintf("Z-Score %.2f", anomaly.ZScore)),
+				ID:             "anomaly-" + anomaly.ID.String(),
+				Title:          fmt.Sprintf("%s Anomalie", anomaly.Metric),
+				Severity:       normalizeSeverity(anomaly.Severity),
+				NodeID:         &nid,
+				Evidence:       compactEvidence(fmt.Sprintf("Wert %.2f", anomaly.Value), fmt.Sprintf("Z-Score %.2f", anomaly.ZScore)),
 				Recommendation: fallback(anomaly.Recommendation, "Metriken mit Flight Recorder und aktuellen Changes korrelieren."),
-				Href: "/monitoring",
+				Href:           "/monitoring",
 			})
 		}
 	}
@@ -751,13 +751,13 @@ func (s *Service) buildCandidates(ctx context.Context, nodeID *uuid.UUID) ([]mod
 				evidence = append(evidence, fmt.Sprintf("%.0f Tage bis Schwelle", *prediction.DaysUntilThreshold))
 			}
 			candidates = append(candidates, model.RCACandidate{
-				ID: "prediction-" + prediction.ID.String(),
-				Title: prediction.Metric + " erreicht Schwelle",
-				Severity: normalizeSeverity(prediction.Severity),
-				NodeID: &nid,
-				Evidence: evidence,
+				ID:             "prediction-" + prediction.ID.String(),
+				Title:          prediction.Metric + " erreicht Schwelle",
+				Severity:       normalizeSeverity(prediction.Severity),
+				NodeID:         &nid,
+				Evidence:       evidence,
 				Recommendation: fallback(prediction.Recommendation, "Kapazitaetsplanung ausloesen und betroffene VMs pruefen."),
-				Href: "/recommendations",
+				Href:           "/recommendations",
 			})
 		}
 	}
@@ -810,13 +810,13 @@ func (s *Service) generateLLMSummary(ctx context.Context, modelName, title strin
 		return "", ""
 	}
 	payload, _ := json.Marshal(struct {
-		Candidates []model.RCACandidate `json:"candidates"`
-		Timeline []model.TimelineEvent `json:"timeline"`
+		Candidates []model.RCACandidate  `json:"candidates"`
+		Timeline   []model.TimelineEvent `json:"timeline"`
 	}{Candidates: firstCandidates(candidates, 12), Timeline: firstEvents(timeline, 12)})
 	resp, err := provider.Complete(ctx, llm.CompletionRequest{
-		Model: modelName,
-		Messages: []llm.Message{{Role: "user", Content: fmt.Sprintf("Erstelle eine knappe deutsche %s mit Ursache, Evidenz und naechsten Schritten. Daten: %s", title, string(payload))}},
-		MaxTokens: 500,
+		Model:       modelName,
+		Messages:    []llm.Message{{Role: "user", Content: fmt.Sprintf("Erstelle eine knappe deutsche %s mit Ursache, Evidenz und naechsten Schritten. Daten: %s", title, string(payload))}},
+		MaxTokens:   500,
 		Temperature: 0.2,
 	})
 	if err != nil {
@@ -834,15 +834,15 @@ func (s *Service) generateReportWithLLM(ctx context.Context, modelName, prompt s
 		return "", ""
 	}
 	payload, _ := json.Marshal(struct {
-		Prompt string `json:"prompt"`
-		Counts map[string]int `json:"counts"`
-		Events []model.TimelineEvent `json:"events"`
-		Candidates []model.RCACandidate `json:"candidates"`
+		Prompt     string                `json:"prompt"`
+		Counts     map[string]int        `json:"counts"`
+		Events     []model.TimelineEvent `json:"events"`
+		Candidates []model.RCACandidate  `json:"candidates"`
 	}{Prompt: prompt, Counts: counts, Events: firstEvents(events, 16), Candidates: firstCandidates(candidates, 12)})
 	resp, err := provider.Complete(ctx, llm.CompletionRequest{
-		Model: modelName,
-		Messages: []llm.Message{{Role: "user", Content: "Erstelle einen strukturierten deutschen Infrastruktur-Report mit Lage, Risiken und naechsten Schritten. Daten: " + string(payload)}},
-		MaxTokens: 700,
+		Model:       modelName,
+		Messages:    []llm.Message{{Role: "user", Content: "Erstelle einen strukturierten deutschen Infrastruktur-Report mit Lage, Risiken und naechsten Schritten. Daten: " + string(payload)}},
+		MaxTokens:   700,
 		Temperature: 0.2,
 	})
 	if err != nil {

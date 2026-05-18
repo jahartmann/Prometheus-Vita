@@ -18,6 +18,9 @@ type UserInvitationRepository interface {
 	GetByTokenHash(ctx context.Context, tokenHash string) (*model.UserInvitation, error)
 	List(ctx context.Context) ([]model.UserInvitation, error)
 	MarkAccepted(ctx context.Context, id uuid.UUID, acceptedAt time.Time) error
+	// ClearAccepted rolls back a MarkAccepted, used when post-acceptance
+	// user creation fails so the invitation can be retried.
+	ClearAccepted(ctx context.Context, id uuid.UUID) error
 	Delete(ctx context.Context, id uuid.UUID) error
 }
 
@@ -127,6 +130,17 @@ func (r *pgUserInvitationRepository) MarkAccepted(ctx context.Context, id uuid.U
 	}
 	if tag.RowsAffected() == 0 {
 		return ErrNotFound
+	}
+	return nil
+}
+
+func (r *pgUserInvitationRepository) ClearAccepted(ctx context.Context, id uuid.UUID) error {
+	_, err := r.db.Exec(ctx,
+		`UPDATE user_invitations SET accepted_at = NULL WHERE id = $1`,
+		id,
+	)
+	if err != nil {
+		return fmt.Errorf("clear invitation acceptance: %w", err)
 	}
 	return nil
 }

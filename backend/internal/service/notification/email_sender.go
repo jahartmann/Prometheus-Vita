@@ -45,6 +45,11 @@ func (s *EmailSender) Type() model.NotificationChannelType {
 }
 
 func (s *EmailSender) Send(ctx context.Context, subject, body string) error {
+	// Strip CR/LF from the subject to prevent SMTP header injection. An
+	// attacker who can craft an alert subject could otherwise inject
+	// additional headers (Bcc, MIME boundaries) by embedding "\r\n".
+	subject = sanitiseSubject(subject)
+
 	addr := fmt.Sprintf("%s:%d", s.config.SMTPHost, s.config.SMTPPort)
 
 	msg := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n%s",
@@ -54,8 +59,7 @@ func (s *EmailSender) Send(ctx context.Context, subject, body string) error {
 		body,
 	)
 
-	// Use context-aware dialer instead of smtp.SendMail
-	d := &net.Dialer{Timeout: 15 * time.Second}
+	d := &net.Dialer{Timeout: 30 * time.Second}
 	conn, err := d.DialContext(ctx, "tcp", addr)
 	if err != nil {
 		return fmt.Errorf("dial smtp: %w", err)
@@ -68,14 +72,20 @@ func (s *EmailSender) Send(ctx context.Context, subject, body string) error {
 	}
 	defer c.Close()
 
-	// STARTTLS if available
-	if ok, _ := c.Extension("STARTTLS"); ok {
+	tlsAvailable, _ := c.Extension("STARTTLS")
+	if tlsAvailable {
 		if err := c.StartTLS(&tls.Config{ServerName: s.config.SMTPHost}); err != nil {
 			return fmt.Errorf("starttls: %w", err)
 		}
+	} else if s.config.SMTPUser != "" {
+		// Hard-fail: if auth is configured but the server refuses STARTTLS,
+		// we would otherwise transmit username + password in cleartext on
+		// the open network. That's an unacceptable default. Operators who
+		// genuinely need plain-auth (test/staging) can use a no-auth
+		// channel.
+		return fmt.Errorf("smtp server does not advertise STARTTLS but auth is configured — refusing to send credentials in plaintext")
 	}
 
-	// Auth
 	if s.config.SMTPUser != "" {
 		auth := smtp.PlainAuth("", s.config.SMTPUser, s.config.SMTPPass, s.config.SMTPHost)
 		if err := c.Auth(auth); err != nil {
@@ -83,14 +93,20 @@ func (s *EmailSender) Send(ctx context.Context, subject, body string) error {
 		}
 	}
 
-	// Send
 	if err := c.Mail(s.config.FromAddress); err != nil {
 		return fmt.Errorf("smtp mail: %w", err)
 	}
+	var rcptErrors []string
+	var anyAccepted bool
 	for _, to := range s.config.ToAddresses {
 		if err := c.Rcpt(to); err != nil {
-			return fmt.Errorf("smtp rcpt: %w", err)
+			rcptErrors = append(rcptErrors, fmt.Sprintf("%s: %v", to, err))
+			continue
 		}
+		anyAccepted = true
+	}
+	if !anyAccepted {
+		return fmt.Errorf("smtp rcpt: no recipient accepted (%s)", strings.Join(rcptErrors, "; "))
 	}
 	w, err := c.Data()
 	if err != nil {
@@ -103,4 +119,17 @@ func (s *EmailSender) Send(ctx context.Context, subject, body string) error {
 		return fmt.Errorf("smtp close data: %w", err)
 	}
 	return c.Quit()
+}
+
+// sanitiseSubject removes carriage returns and line feeds from a subject
+// line to prevent SMTP header injection (CVE-class issue where an attacker
+// who controls subject text could inject Bcc:, additional MIME parts, or
+// terminate headers early).
+func sanitiseSubject(s string) string {
+	s = strings.ReplaceAll(s, "\r", " ")
+	s = strings.ReplaceAll(s, "\n", " ")
+	if len(s) > 200 {
+		s = s[:200]
+	}
+	return s
 }

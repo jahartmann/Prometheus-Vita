@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
 	"net/url"
 	"os"
 	"strconv"
@@ -21,6 +22,12 @@ type Config struct {
 	Briefing   BriefingConfig
 	RateLimit  RateLimitConfig
 	Proxmox    ProxmoxConfig
+	Log        LogConfig
+}
+
+type LogConfig struct {
+	Level  string // debug, info, warn, error
+	Format string // json, text
 }
 
 type ProxmoxConfig struct {
@@ -56,7 +63,7 @@ type SMTPConfig struct {
 
 type TelegramConfig struct {
 	BotToken     string
-	PollInterval int  // seconds
+	PollInterval int // seconds
 	Enabled      bool
 }
 
@@ -136,8 +143,8 @@ func Load() (*Config, error) {
 		},
 		JWT: JWTConfig{
 			Secret:             getEnv("JWT_SECRET", ""),
-			AccessTokenExpiry:  getEnvIntAny([]string{"JWT_ACCESS_EXPIRY_MINUTES", "JWT_ACCESS_TOKEN_EXPIRY"}, 15), // 15 minutes
-			RefreshTokenExpiry: getEnvIntAny([]string{"JWT_REFRESH_EXPIRY_HOURS", "JWT_REFRESH_TOKEN_EXPIRY"}, 168),  // 7 days
+			AccessTokenExpiry:  getEnvIntAny([]string{"JWT_ACCESS_EXPIRY_MINUTES", "JWT_ACCESS_TOKEN_EXPIRY"}, 15),  // 15 minutes
+			RefreshTokenExpiry: getEnvIntAny([]string{"JWT_REFRESH_EXPIRY_HOURS", "JWT_REFRESH_TOKEN_EXPIRY"}, 168), // 7 days
 		},
 		Encryption: EncryptionConfig{
 			Key: getEnv("ENCRYPTION_KEY", ""),
@@ -178,6 +185,10 @@ func Load() (*Config, error) {
 			TLSInsecure: getEnv("PROXMOX_TLS_INSECURE", "true") == "true",
 			TLSCACert:   getEnv("PROXMOX_TLS_CA_CERT", ""),
 		},
+		Log: LogConfig{
+			Level:  strings.ToLower(getEnv("LOG_LEVEL", "info")),
+			Format: strings.ToLower(getEnv("LOG_FORMAT", "json")),
+		},
 	}
 
 	if err := cfg.validate(); err != nil {
@@ -209,7 +220,57 @@ func (c *Config) validate() error {
 	if c.Encryption.Key == "changeme_encryption_key_exactly_64_hex_characters_long_here" {
 		return fmt.Errorf("ENCRYPTION_KEY is using the default placeholder value — change this for production")
 	}
+	if len(c.Encryption.Key) != 64 {
+		return fmt.Errorf("ENCRYPTION_KEY must be exactly 64 hex characters (32 bytes for AES-256), got %d", len(c.Encryption.Key))
+	}
+	if !isHexString(c.Encryption.Key) {
+		return fmt.Errorf("ENCRYPTION_KEY must be hex-encoded (0-9, a-f)")
+	}
+	if c.Database.Password == "changeme_db_password" {
+		return fmt.Errorf("POSTGRES_PASSWORD is using the default placeholder value — change this for production")
+	}
+	if c.Redis.Password == "changeme_redis_password" {
+		return fmt.Errorf("REDIS_PASSWORD is using the default placeholder value — change this for production")
+	}
+	switch c.Log.Level {
+	case "", "debug", "info", "warn", "warning", "error":
+	default:
+		return fmt.Errorf("LOG_LEVEL must be one of: debug, info, warn, error (got %q)", c.Log.Level)
+	}
+	switch c.Log.Format {
+	case "", "json", "text":
+	default:
+		return fmt.Errorf("LOG_FORMAT must be one of: json, text (got %q)", c.Log.Format)
+	}
 	return nil
+}
+
+func isHexString(s string) bool {
+	for _, r := range s {
+		switch {
+		case r >= '0' && r <= '9':
+		case r >= 'a' && r <= 'f':
+		case r >= 'A' && r <= 'F':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// SlogLevel converts the configured log level string into a slog.Level.
+// Used by main to set up the structured logger.
+func (l LogConfig) SlogLevel() slog.Level {
+	switch l.Level {
+	case "debug":
+		return slog.LevelDebug
+	case "warn", "warning":
+		return slog.LevelWarn
+	case "error":
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
+	}
 }
 
 func getEnv(key, fallback string) string {

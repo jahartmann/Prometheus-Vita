@@ -69,11 +69,11 @@ type DRSimulationRequest struct {
 }
 
 type DRSimulationResult struct {
-	NodeID       uuid.UUID              `json:"node_id"`
-	Scenario     string                 `json:"scenario"`
-	Ready        bool                   `json:"ready"`
-	Checks       []DRSimulationCheck    `json:"checks"`
-	Summary      string                 `json:"summary"`
+	NodeID   uuid.UUID           `json:"node_id"`
+	Scenario string              `json:"scenario"`
+	Ready    bool                `json:"ready"`
+	Checks   []DRSimulationCheck `json:"checks"`
+	Summary  string              `json:"summary"`
 }
 
 type DRSimulationCheck struct {

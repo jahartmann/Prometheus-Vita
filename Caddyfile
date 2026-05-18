@@ -1,0 +1,75 @@
+# Prometheus reverse-proxy configuration.
+#
+# Two deployment modes, selected via the PROMETHEUS_TLS_SNIPPET env var on the
+# caddy service:
+#
+#   * Local / LAN (no public DNS):
+#       PROMETHEUS_HOSTNAME=prometheus.lan
+#       PROMETHEUS_TLS_SNIPPET=tls_internal   # Caddy issues a local cert
+#
+#   * Production (public domain + Let's Encrypt):
+#       PROMETHEUS_HOSTNAME=prometheus.example.com
+#       PROMETHEUS_TLS_SNIPPET=tls_public     # ACME via Let's Encrypt
+#       CADDY_ACME_EMAIL=admin@example.com
+#
+# `tls_internal` is the default so the stack works out-of-the-box.
+
+{
+	email {$CADDY_ACME_EMAIL:admin@localhost}
+}
+
+(tls_internal) {
+	tls internal
+}
+
+(tls_public) {
+	# Empty snippet — Caddy auto-provisions Let's Encrypt for public
+	# hostnames as long as port 80 is reachable for the HTTP challenge.
+}
+
+(security_headers) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "geolocation=(), microphone=(), camera=()"
+		-Server
+	}
+}
+
+(proxy_headers) {
+	header_up Host {host}
+	header_up X-Real-IP {remote_host}
+	header_up X-Forwarded-For {remote_host}
+	header_up X-Forwarded-Proto {scheme}
+}
+
+{$PROMETHEUS_HOSTNAME:localhost} {
+	import {$PROMETHEUS_TLS_SNIPPET:tls_internal}
+
+	encode zstd gzip
+	import security_headers
+
+	# WebSocket endpoints — must come before /api/* because Caddy matches in
+	# order and these need a long-lived transport.
+	@ws path /api/v1/ws*
+	reverse_proxy @ws backend:8080 {
+		import proxy_headers
+		transport http {
+			read_timeout 12h
+			write_timeout 12h
+		}
+	}
+
+	# REST API and health endpoints.
+	@api path /api/* /health /live /ready
+	reverse_proxy @api backend:8080 {
+		import proxy_headers
+	}
+
+	# Everything else → the Next.js frontend (also serves /_next, /static, …).
+	reverse_proxy frontend:3000 {
+		import proxy_headers
+	}
+}

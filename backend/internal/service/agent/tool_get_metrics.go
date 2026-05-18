@@ -78,14 +78,14 @@ func (t *GetMetricsTool) Execute(ctx context.Context, args json.RawMessage) (jso
 	}
 
 	type metricsSummary struct {
-		RecordCount int     `json:"record_count"`
-		AvgCPU      float64 `json:"avg_cpu_percent"`
-		MaxCPU      float64 `json:"max_cpu_percent"`
-		AvgMemPct   float64 `json:"avg_memory_percent"`
-		MaxMemPct   float64 `json:"max_memory_percent"`
-		AvgDiskPct  float64 `json:"avg_disk_percent"`
-		LatestNetIn int64   `json:"latest_net_in_bytes"`
-		LatestNetOut int64  `json:"latest_net_out_bytes"`
+		RecordCount  int     `json:"record_count"`
+		AvgCPU       float64 `json:"avg_cpu_percent"`
+		MaxCPU       float64 `json:"max_cpu_percent"`
+		AvgMemPct    float64 `json:"avg_memory_percent"`
+		MaxMemPct    float64 `json:"max_memory_percent"`
+		AvgDiskPct   float64 `json:"avg_disk_percent"`
+		LatestNetIn  int64   `json:"latest_net_in_bytes"`
+		LatestNetOut int64   `json:"latest_net_out_bytes"`
 	}
 
 	var totalCPU, maxCPU float64

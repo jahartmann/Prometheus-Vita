@@ -24,15 +24,15 @@ type AgentConfigHandler struct {
 }
 
 var allowedAgentConfigKeys = map[string]struct{}{
-	"llm_provider":  {},
-	"llm_model":     {},
-	"ollama_url":    {},
-	"openai_key":    {},
-	"anthropic_key": {},
-	"agent_approval_low_risk":      {},
-	"agent_approval_medium_risk":   {},
-	"agent_approval_high_risk":     {},
-	"agent_approval_critical_risk": {},
+	"llm_provider":                   {},
+	"llm_model":                      {},
+	"ollama_url":                     {},
+	"openai_key":                     {},
+	"anthropic_key":                  {},
+	"agent_approval_low_risk":        {},
+	"agent_approval_medium_risk":     {},
+	"agent_approval_high_risk":       {},
+	"agent_approval_critical_risk":   {},
 	"agent_full_auto_allow_low_risk": {},
 }
 

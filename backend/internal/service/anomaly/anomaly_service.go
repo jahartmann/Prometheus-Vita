@@ -21,9 +21,9 @@ const (
 	minDataPoints  = 30 // Need at least 30 data points (30+ minutes of data)
 
 	// Minimum absolute value thresholds — don't flag low-usage anomalies
-	minCPUForAnomaly  = 70.0  // CPU must be >70% to be flagged
-	minRAMForAnomaly  = 75.0  // RAM must be >75% to be flagged
-	minDiskForAnomaly = 80.0  // Disk must be >80% to be flagged
+	minCPUForAnomaly  = 70.0 // CPU must be >70% to be flagged
+	minRAMForAnomaly  = 75.0 // RAM must be >75% to be flagged
+	minDiskForAnomaly = 80.0 // Disk must be >80% to be flagged
 )
 
 // NodeServiceInterface allows fetching VMs for context enrichment.
@@ -99,9 +99,34 @@ func (s *Service) DetectAnomalies(ctx context.Context) error {
 }
 
 func (s *Service) checkMetric(ctx context.Context, nodeID uuid.UUID, metric string, records []model.MetricsRecord, extract func(model.MetricsRecord) float64) {
-	values := make([]float64, len(records))
-	for i, r := range records {
-		values[i] = extract(r)
+	// Build the values slice while dropping NaN/Inf — these are upstream
+	// metric-collection bugs (division-by-zero in collectors, uninitialised
+	// fields) and letting them through silently poisons the entire
+	// statistical window: a single NaN makes mean/stddev NaN, then the
+	// final z-score comparison `< zScoreWarning` is always false and the
+	// anomaly is dropped without anyone noticing. We log the drop so the
+	// upstream bug is visible.
+	values := make([]float64, 0, len(records))
+	dropped := 0
+	for _, r := range records {
+		v := extract(r)
+		if math.IsNaN(v) || math.IsInf(v, 0) {
+			dropped++
+			continue
+		}
+		values = append(values, v)
+	}
+	if dropped > 0 {
+		slog.Warn("anomaly: dropped non-finite metric samples",
+			slog.String("metric", metric),
+			slog.String("node_id", nodeID.String()),
+			slog.Int("dropped", dropped),
+			slog.Int("kept", len(values)),
+		)
+	}
+	if len(values) < 5 {
+		// Not enough data after filtering to draw a sound conclusion.
+		return
 	}
 
 	mean, stddev := meanStdDev(values)
@@ -122,6 +147,17 @@ func (s *Service) checkMetric(ctx context.Context, nodeID uuid.UUID, metric stri
 	recentMean /= float64(len(recentValues))
 
 	zScore := (recentMean - mean) / stddev
+
+	// Guard the final comparison too: if mean or stddev ended up non-finite
+	// despite our input filtering (e.g. extreme float64 ranges), bail loudly
+	// instead of silently dropping.
+	if math.IsNaN(zScore) || math.IsInf(zScore, 0) {
+		slog.Warn("anomaly: z-score is non-finite, skipping",
+			slog.String("metric", metric),
+			slog.String("node_id", nodeID.String()),
+		)
+		return
+	}
 
 	if math.Abs(zScore) < zScoreWarning {
 		return

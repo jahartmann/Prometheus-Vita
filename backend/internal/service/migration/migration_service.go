@@ -15,10 +15,10 @@ import (
 	"github.com/antigravity/prometheus/internal/model"
 	"github.com/antigravity/prometheus/internal/proxmox"
 	"github.com/antigravity/prometheus/internal/repository"
-	"github.com/antigravity/prometheus/internal/util"
 	"github.com/antigravity/prometheus/internal/service/crypto"
 	"github.com/antigravity/prometheus/internal/service/monitor"
 	"github.com/antigravity/prometheus/internal/ssh"
+	"github.com/antigravity/prometheus/internal/util"
 	"github.com/google/uuid"
 )
 
@@ -53,8 +53,8 @@ type Service struct {
 	wsHub         *monitor.WSHub
 	logRepo       repository.MigrationLogRepository
 
-	mu        sync.Mutex
-	cancels   map[uuid.UUID]context.CancelFunc
+	mu      sync.Mutex
+	cancels map[uuid.UUID]context.CancelFunc
 	// activeVMs tracks VMIDs that are currently being migrated to prevent parallel migrations
 	// of the same VM (which would cause VMID conflicts in Proxmox clusters).
 	activeVMs map[int]uuid.UUID
@@ -215,15 +215,15 @@ func (s *Service) StartMigration(ctx context.Context, req model.StartMigrationRe
 	}
 
 	m := &model.VMMigration{
-		SourceNodeID:  req.SourceNodeID,
-		TargetNodeID:  req.TargetNodeID,
-		VMID:          req.VMID,
-		VMName:        vmInfo.Name,
-		VMType:        vmInfo.Type,
-		Status:        model.MigrationStatusPending,
-		Mode:          req.Mode,
-		TargetStorage: req.TargetStorage,
-		NewVMID:       &vmid,
+		SourceNodeID:         req.SourceNodeID,
+		TargetNodeID:         req.TargetNodeID,
+		VMID:                 req.VMID,
+		VMName:               vmInfo.Name,
+		VMType:               vmInfo.Type,
+		Status:               model.MigrationStatusPending,
+		Mode:                 req.Mode,
+		TargetStorage:        req.TargetStorage,
+		NewVMID:              &vmid,
 		CleanupSource:        req.CleanupSource,
 		CleanupTarget:        req.CleanupTarget,
 		OverrideStorageCheck: req.OverrideStorageCheck,
@@ -346,23 +346,29 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 		_ = s.migrationRepo.Update(context.Background(), m)
 		s.broadcastProgress(m, nil)
 
-		// If we stopped/suspended the VM and migration failed, restore it
+		// If we stopped/suspended the VM and migration failed, restore it.
+		// Any failure here is critical: the source VM is unavailable to its
+		// users until an operator manually fixes it. We surface the error in
+		// the migration record and the live log instead of silently warning.
 		if vmWasStopped {
 			switch m.Mode {
 			case model.MigrationModeStop:
 				s.tryRestartSourceVM(context.Background(), m)
 			case model.MigrationModeSuspend:
-				// Resume the suspended VM
-				srcNode, nodeErr := s.nodeRepo.GetByID(context.Background(), m.SourceNodeID)
-				if nodeErr == nil {
-					srcClient, clientErr := s.clientFactory.CreateClient(srcNode)
-					if clientErr == nil {
-						pveNode, pveErr := s.resolvePVENodeName(context.Background(), srcClient, srcNode)
-						if pveErr == nil {
-							_, _ = srcClient.ResumeVM(context.Background(), pveNode, m.VMID)
-							slog.Info("migration: resumed suspended VM after failure", slog.Int("vmid", m.VMID))
-						}
+				if resumeErr := s.resumeSourceVMForRollback(context.Background(), m); resumeErr != nil {
+					criticalMsg := fmt.Sprintf("✗ KRITISCH: Source-VM %d konnte nicht aus Suspend fortgesetzt werden — manueller Eingriff nötig: %v", m.VMID, resumeErr)
+					s.broadcastLog(m.ID, criticalMsg)
+					slog.Error("migration: source VM resume after failure failed",
+						slog.String("migration_id", m.ID.String()),
+						slog.Int("vmid", m.VMID),
+						slog.Any("error", resumeErr),
+					)
+					if m.ErrorMessage != "" {
+						m.ErrorMessage = m.ErrorMessage + "\n" + criticalMsg
+					} else {
+						m.ErrorMessage = criticalMsg
 					}
+					_ = s.migrationRepo.Update(context.Background(), m)
 				}
 			}
 		}
@@ -953,25 +959,48 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 		}
 	}
 
-	// Verify file integrity via checksum
+	// Verify file integrity via checksum. Mandatory — a "successful" transfer
+	// without checksum verification is a silent-corruption hazard: scp can
+	// return ok while the file is truncated by a buggy kernel, a flaky NIC,
+	// or a storage layer. If sha256sum is missing on either side we abort
+	// the migration rather than continue blind. Operators can install
+	// coreutils (it's a default on every Debian/Proxmox node) — making this
+	// loud is the right tradeoff.
 	s.broadcastLog(m.ID, "Prüfe Datei-Integrität via SHA256...")
 	srcShaResult, srcShaErr := srcSSHClient.RunCommand(ctx, "sha256sum "+shellQuote(vzdumpPath)+" | awk '{print $1}'")
 	tgtShaResult, tgtShaErr := tgtSSHClient.RunCommand(ctx, "sha256sum "+shellQuote(targetVzdumpPath)+" | awk '{print $1}'")
 
-	if srcShaErr == nil && tgtShaErr == nil && srcShaResult != nil && tgtShaResult != nil {
-		srcHash := strings.TrimSpace(srcShaResult.Stdout)
-		tgtHash := strings.TrimSpace(tgtShaResult.Stdout)
-		if srcHash != "" && tgtHash != "" && srcHash != tgtHash {
-			// Checksum mismatch — file corrupted during transfer
-			_, _ = tgtSSHClient.RunCommand(ctx, "rm -f "+shellQuote(targetVzdumpPath))
-			handleError("transferring", fmt.Errorf("Prüfsummenfehler! Source: %s, Target: %s. Datei wurde während des Transfers beschädigt", srcHash[:16]+"...", tgtHash[:16]+"..."))
-			return
+	srcOk := srcShaErr == nil && srcShaResult != nil && srcShaResult.ExitCode == 0
+	tgtOk := tgtShaErr == nil && tgtShaResult != nil && tgtShaResult.ExitCode == 0
+	if !srcOk || !tgtOk {
+		_, _ = tgtSSHClient.RunCommand(ctx, "rm -f "+shellQuote(targetVzdumpPath))
+		var detail string
+		switch {
+		case !srcOk && !tgtOk:
+			detail = "sha256sum auf Source UND Target nicht verfügbar"
+		case !srcOk:
+			detail = "sha256sum auf Source nicht verfügbar"
+		default:
+			detail = "sha256sum auf Target nicht verfügbar"
 		}
-		s.broadcastLog(m.ID, fmt.Sprintf("✓ Prüfsumme stimmt überein (SHA256: %s...)", srcHash[:16]))
-	} else {
-		// Checksum couldn't be verified — warn but continue (sha256sum might not be available)
-		s.broadcastLog(m.ID, "⚠ Prüfsummenverifikation nicht möglich — sha256sum nicht verfügbar")
+		handleError("transferring", fmt.Errorf("Datei-Integrität konnte nicht verifiziert werden (%s). Migration abgebrochen — coreutils auf beiden Nodes installieren", detail))
+		return
 	}
+
+	srcHash := strings.TrimSpace(srcShaResult.Stdout)
+	tgtHash := strings.TrimSpace(tgtShaResult.Stdout)
+	if srcHash == "" || tgtHash == "" {
+		_, _ = tgtSSHClient.RunCommand(ctx, "rm -f "+shellQuote(targetVzdumpPath))
+		handleError("transferring", fmt.Errorf("sha256sum lieferte leere Ausgabe (src=%q tgt=%q) — Datei-Integrität nicht verifiziert", srcHash, tgtHash))
+		return
+	}
+	if srcHash != tgtHash {
+		// Checksum mismatch — file corrupted during transfer
+		_, _ = tgtSSHClient.RunCommand(ctx, "rm -f "+shellQuote(targetVzdumpPath))
+		handleError("transferring", fmt.Errorf("Prüfsummenfehler! Source: %s..., Target: %s.... Datei wurde während des Transfers beschädigt", srcHash[:16], tgtHash[:16]))
+		return
+	}
+	s.broadcastLog(m.ID, fmt.Sprintf("✓ Prüfsumme stimmt überein (SHA256: %s...)", srcHash[:16]))
 
 	s.broadcastLog(m.ID, fmt.Sprintf("✓ Transfer abgeschlossen: %s übertragen", formatBytesLog(m.TransferBytesSent)))
 	s.updatePhase(ctx, m, model.MigrationStatusTransferring, "Transfer abgeschlossen", 80)
@@ -1028,10 +1057,21 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 
 	restoreUPID, err := tgtClient.RestoreVM(ctx, tgtPVENode, restoreArchive, m.TargetStorage, restoreVMID, m.VMType)
 	if err != nil {
-		// Restore source config on failure
-		s.rollbackSourceConfig(ctx, srcSSHClient, srcPVENode, m.VMID, m.VMType, sourceConfigBackup)
+		rbErr := s.rollbackSourceConfig(ctx, srcSSHClient, srcPVENode, m.VMID, m.VMType, sourceConfigBackup)
 		_, _ = tgtSSHClient.RunCommand(ctx, "rm -f "+shellQuote(targetVzdumpPath))
-		handleError("restoring", fmt.Errorf("restore konnte nicht gestartet werden: %w", err))
+		finalErr := fmt.Errorf("restore konnte nicht gestartet werden: %w", err)
+		if rbErr != nil {
+			// Source rollback also failed — the VM is orphaned. This MUST be
+			// surfaced to the operator, not lost in the logs.
+			s.broadcastLog(m.ID, fmt.Sprintf("✗ KRITISCH: Source-Config-Rollback fehlgeschlagen: %v", rbErr))
+			slog.Error("migration: source config rollback failed after restore failure",
+				slog.String("migration_id", m.ID.String()),
+				slog.Int("vmid", m.VMID),
+				slog.Any("rollback_error", rbErr),
+			)
+			finalErr = fmt.Errorf("%w; ZUSÄTZLICH Source-Rollback fehlgeschlagen: %v", finalErr, rbErr)
+		}
+		handleError("restoring", finalErr)
 		return
 	}
 	m.RestoreTaskUPID = &restoreUPID
@@ -1040,10 +1080,19 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 
 	if err := s.pollTaskWithProgress(ctx, tgtClient, tgtPVENode, restoreUPID, m, 81, 94); err != nil {
 		taskLog := s.getTaskLogForError(ctx, tgtClient, tgtPVENode, restoreUPID)
-		// Restore source config on failure
-		s.rollbackSourceConfig(ctx, srcSSHClient, srcPVENode, m.VMID, m.VMType, sourceConfigBackup)
+		rbErr := s.rollbackSourceConfig(ctx, srcSSHClient, srcPVENode, m.VMID, m.VMType, sourceConfigBackup)
 		_, _ = tgtSSHClient.RunCommand(ctx, "rm -f "+shellQuote(targetVzdumpPath))
-		handleError("restoring", fmt.Errorf("restore fehlgeschlagen: %w\n\nTask-Log:\n%s", err, taskLog))
+		finalErr := fmt.Errorf("restore fehlgeschlagen: %w\n\nTask-Log:\n%s", err, taskLog)
+		if rbErr != nil {
+			s.broadcastLog(m.ID, fmt.Sprintf("✗ KRITISCH: Source-Config-Rollback fehlgeschlagen: %v", rbErr))
+			slog.Error("migration: source config rollback failed after restore failure",
+				slog.String("migration_id", m.ID.String()),
+				slog.Int("vmid", m.VMID),
+				slog.Any("rollback_error", rbErr),
+			)
+			finalErr = fmt.Errorf("%w; ZUSÄTZLICH Source-Rollback fehlgeschlagen: %v", finalErr, rbErr)
+		}
+		handleError("restoring", finalErr)
 		return
 	}
 
@@ -1091,12 +1140,25 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 
 	// Resume source VM if suspended — but only if a different VMID was used on target.
 	// If same VMID: the source config was unregistered (moved to target), so there's nothing to resume.
+	// Failure here is a degraded-but-completed migration: target VM is fine,
+	// source is left suspended. We persist this on the migration record so
+	// the operator can find it later instead of having to scan logs.
 	if m.Mode == model.MigrationModeSuspend && m.NewVMID != nil && *m.NewVMID != m.VMID {
 		s.broadcastLog(m.ID, "Setze Source-VM fort (neues VMID auf Target, Source bleibt bestehen)...")
 		if _, err := srcClient.ResumeVM(ctx, srcPVENode, m.VMID); err != nil {
-			slog.Warn("migration: konnte Source-VM nach Migration nicht fortsetzen",
-				slog.Int("vmid", m.VMID), slog.Any("error", err))
-			s.broadcastLog(m.ID, fmt.Sprintf("⚠ Source-VM konnte nicht fortgesetzt werden: %v", err))
+			degraded := fmt.Sprintf("Source-VM %d konnte nach Migration nicht fortgesetzt werden — bleibt im Suspend-Zustand: %v", m.VMID, err)
+			slog.Error("migration: failed to resume source VM after successful target restore",
+				slog.String("migration_id", m.ID.String()),
+				slog.Int("vmid", m.VMID),
+				slog.Any("error", err),
+			)
+			s.broadcastLog(m.ID, "⚠ "+degraded)
+			// Record on the migration so operators see it on the detail page.
+			if m.ErrorMessage != "" {
+				m.ErrorMessage = m.ErrorMessage + "\n" + degraded
+			} else {
+				m.ErrorMessage = degraded
+			}
 		} else {
 			s.broadcastLog(m.ID, "✓ Source-VM fortgesetzt")
 		}
@@ -1320,9 +1382,9 @@ func (s *Service) findVzdumpStorageWithDiskCheck(ctx context.Context, client *pr
 
 	// Collect all backup-capable storages
 	type candidate struct {
-		name      string
-		apiAvail  int64
-		diskFree  int64
+		name     string
+		apiAvail int64
+		diskFree int64
 	}
 	var candidates []candidate
 
@@ -1626,25 +1688,66 @@ func configDir(vmType string) string {
 	return "qemu-server"
 }
 
-// rollbackSourceConfig restores the VM config on the source node if restore on target failed.
-func (s *Service) rollbackSourceConfig(ctx context.Context, srcSSHClient *ssh.Client, srcPVENode string, vmid int, vmType string, configBackup string) {
+// resumeSourceVMForRollback resumes a suspended source VM after a failed
+// migration. Returns a wrapped error describing exactly which step failed so
+// the operator can act (re-deploy the node, fix permissions, etc.).
+func (s *Service) resumeSourceVMForRollback(ctx context.Context, m *model.VMMigration) error {
+	srcNode, err := s.nodeRepo.GetByID(ctx, m.SourceNodeID)
+	if err != nil {
+		return fmt.Errorf("source node lookup: %w", err)
+	}
+	srcClient, err := s.clientFactory.CreateClient(srcNode)
+	if err != nil {
+		return fmt.Errorf("create proxmox client: %w", err)
+	}
+	pveNode, err := s.resolvePVENodeName(ctx, srcClient, srcNode)
+	if err != nil {
+		return fmt.Errorf("resolve pve node name: %w", err)
+	}
+	if _, err := srcClient.ResumeVM(ctx, pveNode, m.VMID); err != nil {
+		return fmt.Errorf("ResumeVM: %w", err)
+	}
+	slog.Info("migration: resumed suspended VM after failure", slog.Int("vmid", m.VMID))
+	return nil
+}
+
+// rollbackSourceConfig restores the VM config on the source node if restore on
+// target failed. Returns nil on success and a wrapped error describing what
+// state the source node is in when rollback failed — this is critical
+// information for an operator because a failed rollback after a failed restore
+// means the VM is orphaned: not registered on source, not registered on
+// target. The caller must surface this error to the user.
+func (s *Service) rollbackSourceConfig(ctx context.Context, srcSSHClient *ssh.Client, srcPVENode string, vmid int, vmType string, configBackup string) error {
 	cfgDir := configDir(vmType)
-	if configBackup == "" {
-		// Try to restore from .mig-backup file
-		_, _ = srcSSHClient.RunCommand(ctx, fmt.Sprintf(
-			"mv /etc/pve/nodes/%s/%s/%d.conf.mig-backup /etc/pve/nodes/%s/%s/%d.conf 2>/dev/null",
-			srcPVENode, cfgDir, vmid, srcPVENode, cfgDir, vmid))
-		return
-	}
-	// Write back the saved config using CopyTo to avoid heredoc data corruption
 	path := fmt.Sprintf("/etc/pve/nodes/%s/%s/%d.conf", srcPVENode, cfgDir, vmid)
-	if err := srcSSHClient.CopyTo(ctx, []byte(configBackup), path); err != nil {
-		slog.Warn("migration: rollback source config failed", slog.Any("error", err))
-		return
+
+	if configBackup == "" {
+		// We never captured the original config text — try to move the
+		// .mig-backup file back to .conf. If even that fails, the VM is
+		// effectively orphaned: the operator must restore the config by hand.
+		res, err := srcSSHClient.RunCommand(ctx, fmt.Sprintf(
+			"mv /etc/pve/nodes/%s/%s/%d.conf.mig-backup /etc/pve/nodes/%s/%s/%d.conf",
+			srcPVENode, cfgDir, vmid, srcPVENode, cfgDir, vmid))
+		if err != nil {
+			return fmt.Errorf("VM %d ist auf Source nicht registriert und Rollback der .mig-backup-Datei schlug fehl: %w", vmid, err)
+		}
+		if res != nil && res.ExitCode != 0 {
+			return fmt.Errorf("VM %d ist auf Source nicht registriert und Rollback fehlgeschlagen (exit %d): %s", vmid, res.ExitCode, res.Stderr)
+		}
+		slog.Info("migration: source config restored from .mig-backup", slog.Int("vmid", vmid))
+		return nil
 	}
-	// Remove backup
-	_, _ = srcSSHClient.RunCommand(ctx, fmt.Sprintf("rm -f %s.mig-backup", path))
+
+	// We have the original config text in memory — write it back atomically.
+	if err := srcSSHClient.CopyTo(ctx, []byte(configBackup), path); err != nil {
+		return fmt.Errorf("VM %d ist auf Source nicht registriert und Rollback (CopyTo) schlug fehl: %w", vmid, err)
+	}
+	// Best-effort cleanup of the .mig-backup file; not critical if it fails.
+	if _, err := srcSSHClient.RunCommand(ctx, fmt.Sprintf("rm -f %s.mig-backup", path)); err != nil {
+		slog.Warn("migration: cleanup of .mig-backup failed (non-fatal)", slog.Any("error", err))
+	}
 	slog.Info("migration: source config restored", slog.Int("vmid", vmid))
+	return nil
 }
 
 func (s *Service) tryRestartSourceVM(ctx context.Context, m *model.VMMigration) {

@@ -17,14 +17,14 @@ func NewClusterHandler(monitorSvc *monitor.Service) *ClusterHandler {
 }
 
 type ClusterSummary struct {
-	TotalNodes   int                          `json:"total_nodes"`
-	OnlineNodes  int                          `json:"online_nodes"`
-	TotalCPU     float64                      `json:"total_cpu_usage"`
-	TotalMemUsed int64                        `json:"total_mem_used"`
-	TotalMemMax  int64                        `json:"total_mem_total"`
+	TotalNodes    int                         `json:"total_nodes"`
+	OnlineNodes   int                         `json:"online_nodes"`
+	TotalCPU      float64                     `json:"total_cpu_usage"`
+	TotalMemUsed  int64                       `json:"total_mem_used"`
+	TotalMemMax   int64                       `json:"total_mem_total"`
 	TotalDiskUsed int64                       `json:"total_disk_used"`
 	TotalDiskMax  int64                       `json:"total_disk_total"`
-	Nodes        []monitor.NodeStatusSummary  `json:"nodes"`
+	Nodes         []monitor.NodeStatusSummary `json:"nodes"`
 }
 
 func (h *ClusterHandler) GetSummary(c echo.Context) error {
@@ -55,12 +55,12 @@ func (h *ClusterHandler) GetSummary(c echo.Context) error {
 }
 
 type ClusterHistoryPoint struct {
-	Time     time.Time `json:"time"`
-	CPUAvg   float64   `json:"cpu_avg"`
-	MemPct   float64   `json:"mem_pct"`
-	DiskPct  float64   `json:"disk_pct"`
-	NetIn    int64     `json:"net_in"`
-	NetOut   int64     `json:"net_out"`
+	Time    time.Time `json:"time"`
+	CPUAvg  float64   `json:"cpu_avg"`
+	MemPct  float64   `json:"mem_pct"`
+	DiskPct float64   `json:"disk_pct"`
+	NetIn   int64     `json:"net_in"`
+	NetOut  int64     `json:"net_out"`
 }
 
 func (h *ClusterHandler) GetHistory(c echo.Context) error {

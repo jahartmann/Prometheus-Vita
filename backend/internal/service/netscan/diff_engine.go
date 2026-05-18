@@ -28,7 +28,12 @@ func ComputeDiff(current, previous *QuickScanResult) model.ScanDiff {
 	diff := model.ScanDiff{}
 
 	if previous == nil {
-		// No baseline to compare — everything is "new" but we don't flag it.
+		// No baseline to compare. We deliberately don't flag every port as
+		// "new" — that would flood alerts on the first scan of a fresh
+		// node. But we DO mark the diff as baseline-less so callers can
+		// surface a "create a baseline" prompt to the operator instead of
+		// silently treating no-changes as a clean state.
+		diff.BaselineMissing = true
 		return diff
 	}
 
@@ -126,10 +131,10 @@ func indexByConn(ports []PortInfo) map[connKey]PortInfo {
 
 // Risk score weights.
 const (
-	weightNewPort        = 0.40 // new unknown open port is most suspicious
-	weightServiceChange  = 0.25 // service on an existing port changed
-	weightNewConnection  = 0.20 // new outbound established connection
-	weightClosedPort     = 0.05 // disappearing port is low-risk (service stopped)
+	weightNewPort       = 0.40 // new unknown open port is most suspicious
+	weightServiceChange = 0.25 // service on an existing port changed
+	weightNewConnection = 0.20 // new outbound established connection
+	weightClosedPort    = 0.05 // disappearing port is low-risk (service stopped)
 )
 
 // ComputeRiskScore returns a [0.0, 1.0] risk score for a given diff.

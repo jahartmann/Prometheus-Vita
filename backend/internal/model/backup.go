@@ -36,13 +36,13 @@ const (
 // Domain models
 
 type ConfigBackup struct {
-	ID           uuid.UUID    `json:"id"`
-	NodeID       uuid.UUID    `json:"node_id"`
-	Version      int          `json:"version"`
-	BackupType   BackupType   `json:"backup_type"`
-	FileCount    int          `json:"file_count"`
-	TotalSize    int64        `json:"total_size"`
-	Status       BackupStatus `json:"status"`
+	ID            uuid.UUID    `json:"id"`
+	NodeID        uuid.UUID    `json:"node_id"`
+	Version       int          `json:"version"`
+	BackupType    BackupType   `json:"backup_type"`
+	FileCount     int          `json:"file_count"`
+	TotalSize     int64        `json:"total_size"`
+	Status        BackupStatus `json:"status"`
 	ErrorMessage  string       `json:"error_message,omitempty"`
 	Notes         string       `json:"notes,omitempty"`
 	RecoveryGuide string       `json:"recovery_guide,omitempty"`

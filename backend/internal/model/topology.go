@@ -2,9 +2,9 @@ package model
 
 type TopologyNode struct {
 	ID       string                 `json:"id"`
-	Type     string                 `json:"type"`     // host, vm, ct, storage, network
+	Type     string                 `json:"type"` // host, vm, ct, storage, network
 	Label    string                 `json:"label"`
-	Status   string                 `json:"status"`   // online, offline, running, stopped
+	Status   string                 `json:"status"` // online, offline, running, stopped
 	Metadata map[string]interface{} `json:"metadata,omitempty"`
 }
 

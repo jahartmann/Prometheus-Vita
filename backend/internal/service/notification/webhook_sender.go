@@ -8,13 +8,14 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
 	"github.com/antigravity/prometheus/internal/model"
 )
 
-var webhookHTTPClient = &http.Client{Timeout: 15 * time.Second}
+var webhookHTTPClient = &http.Client{Timeout: 30 * time.Second}
 
 type webhookConfig struct {
 	URL     string            `json:"url"`
@@ -73,14 +74,40 @@ func (s *WebhookSender) Send(ctx context.Context, subject, body string) error {
 		req.Header.Set("X-Signature", signature)
 	}
 
-	resp, err := webhookHTTPClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("send webhook: %w", err)
-	}
-	defer resp.Body.Close()
+	// Retry transient failures (network errors, 5xx). 4xx is permanent
+	// (bad URL, auth failure) — surface it immediately without backoff.
+	const maxAttempts = 3
+	backoff := 1 * time.Second
+	var lastErr error
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		// Rewind the body for retry.
+		req.Body = io.NopCloser(bytes.NewReader(data))
 
-	if resp.StatusCode >= 400 {
-		return fmt.Errorf("webhook returned status %d", resp.StatusCode)
+		resp, err := webhookHTTPClient.Do(req)
+		if err != nil {
+			lastErr = fmt.Errorf("send webhook: %w", err)
+			if !sleepWithCtx(ctx, backoff) {
+				return lastErr
+			}
+			backoff *= 2
+			continue
+		}
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+		_ = resp.Body.Close()
+
+		if resp.StatusCode < 400 {
+			return nil
+		}
+		if resp.StatusCode >= 500 {
+			lastErr = fmt.Errorf("webhook returned status %d", resp.StatusCode)
+			if !sleepWithCtx(ctx, backoff) {
+				return lastErr
+			}
+			backoff *= 2
+			continue
+		}
+		// Permanent failure (4xx).
+		return fmt.Errorf("webhook returned status %d (permanent)", resp.StatusCode)
 	}
-	return nil
+	return lastErr
 }

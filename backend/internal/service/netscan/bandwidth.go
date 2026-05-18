@@ -11,12 +11,12 @@ import (
 // BandwidthTestResult is what /nodes/:id/bandwidth-test returns to the
 // frontend. All bit rates are bits per second; bytes are bytes total.
 type BandwidthTestResult struct {
-	SourceNodeID string  `json:"source_node_id"`
-	TargetNodeID string  `json:"target_node_id"`
-	TargetHost   string  `json:"target_host"`
-	DurationSec  int     `json:"duration_sec"`
-	Protocol     string  `json:"protocol"` // "tcp" or "udp"
-	Direction    string  `json:"direction"` // "send" (source→target) or "reverse"
+	SourceNodeID string `json:"source_node_id"`
+	TargetNodeID string `json:"target_node_id"`
+	TargetHost   string `json:"target_host"`
+	DurationSec  int    `json:"duration_sec"`
+	Protocol     string `json:"protocol"`  // "tcp" or "udp"
+	Direction    string `json:"direction"` // "send" (source→target) or "reverse"
 
 	BitsPerSecond float64 `json:"bits_per_second"`
 	BytesTotal    int64   `json:"bytes_total"`

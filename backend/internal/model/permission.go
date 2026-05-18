@@ -48,7 +48,7 @@ const (
 	PermissionNodesDelete Permission = "nodes.delete"
 
 	PermissionVMsRead  Permission = "vms.read"
-	PermissionVMPower Permission = "vms.power"
+	PermissionVMPower  Permission = "vms.power"
 	PermissionVMsWrite Permission = "vms.write"
 
 	PermissionBackupsRead    Permission = "backups.read"

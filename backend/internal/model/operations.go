@@ -7,49 +7,49 @@ import (
 )
 
 type OperationTask struct {
-	ID        string    `json:"id"`
-	Type      string    `json:"type"`
-	Title     string    `json:"title"`
-	Detail    string    `json:"detail"`
-	Status    string    `json:"status"`
-	Severity  string    `json:"severity"`
-	Progress  int       `json:"progress"`
-	EntityID  string    `json:"entity_id,omitempty"`
+	ID        string     `json:"id"`
+	Type      string     `json:"type"`
+	Title     string     `json:"title"`
+	Detail    string     `json:"detail"`
+	Status    string     `json:"status"`
+	Severity  string     `json:"severity"`
+	Progress  int        `json:"progress"`
+	EntityID  string     `json:"entity_id,omitempty"`
 	NodeID    *uuid.UUID `json:"node_id,omitempty"`
-	Href      string    `json:"href"`
+	Href      string     `json:"href"`
 	DueAt     *time.Time `json:"due_at,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
+	CreatedAt time.Time  `json:"created_at"`
 }
 
 type TimelineEvent struct {
-	ID        string    `json:"id"`
-	Source    string    `json:"source"`
-	Severity  string    `json:"severity"`
-	Title     string    `json:"title"`
-	Detail    string    `json:"detail"`
-	Actor     string    `json:"actor"`
-	EntityID  string    `json:"entity_id,omitempty"`
+	ID        string     `json:"id"`
+	Source    string     `json:"source"`
+	Severity  string     `json:"severity"`
+	Title     string     `json:"title"`
+	Detail    string     `json:"detail"`
+	Actor     string     `json:"actor"`
+	EntityID  string     `json:"entity_id,omitempty"`
 	NodeID    *uuid.UUID `json:"node_id,omitempty"`
-	Href      string    `json:"href"`
-	CreatedAt time.Time `json:"created_at"`
+	Href      string     `json:"href"`
+	CreatedAt time.Time  `json:"created_at"`
 }
 
 type RCACandidate struct {
-	ID             string    `json:"id"`
-	Title          string    `json:"title"`
-	Severity       string    `json:"severity"`
+	ID             string     `json:"id"`
+	Title          string     `json:"title"`
+	Severity       string     `json:"severity"`
 	NodeID         *uuid.UUID `json:"node_id,omitempty"`
-	Evidence       []string  `json:"evidence"`
-	Recommendation string    `json:"recommendation"`
-	Href           string    `json:"href"`
+	Evidence       []string   `json:"evidence"`
+	Recommendation string     `json:"recommendation"`
+	Href           string     `json:"href"`
 }
 
 type RCAAnalyzeRequest struct {
-	Prompt  string     `json:"prompt,omitempty"`
-	NodeID  *uuid.UUID `json:"node_id,omitempty"`
-	UseLLM  bool       `json:"use_llm,omitempty"`
-	Model   string     `json:"model,omitempty"`
-	Limit   int        `json:"limit,omitempty"`
+	Prompt string     `json:"prompt,omitempty"`
+	NodeID *uuid.UUID `json:"node_id,omitempty"`
+	UseLLM bool       `json:"use_llm,omitempty"`
+	Model  string     `json:"model,omitempty"`
+	Limit  int        `json:"limit,omitempty"`
 }
 
 type RCAAnalyzeResponse struct {

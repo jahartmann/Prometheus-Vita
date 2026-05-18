@@ -43,7 +43,16 @@ func TestParseToolPreflightOutput(t *testing.T) {
 }
 
 func TestRunToolPreflightUsesSingleShellCommand(t *testing.T) {
-	runner := &preflightRunner{output: "nmap|/usr/bin/nmap\nss|/usr/sbin/ss\njournalctl|/usr/bin/journalctl\npct|/usr/sbin/pct\nqm|/usr/sbin/qm\n"}
+	// Provide stdout matching every entry in defaultToolDefinitions so the
+	// test is robust against new tools being added to that list.
+	var b strings.Builder
+	for _, def := range defaultToolDefinitions {
+		b.WriteString(def.Name)
+		b.WriteString("|/usr/bin/")
+		b.WriteString(def.Name)
+		b.WriteString("\n")
+	}
+	runner := &preflightRunner{output: b.String()}
 	nodeID := uuid.New()
 
 	result, err := RunToolPreflight(context.Background(), runner, nodeID)
@@ -59,7 +68,7 @@ func TestRunToolPreflightUsesSingleShellCommand(t *testing.T) {
 	if !strings.Contains(runner.commands[0], "command -v nmap") {
 		t.Fatalf("expected nmap check in command, got %q", runner.commands[0])
 	}
-	if len(result.Tools) != 5 {
-		t.Fatalf("expected five tools, got %d", len(result.Tools))
+	if len(result.Tools) != len(defaultToolDefinitions) {
+		t.Fatalf("expected %d tools, got %d", len(defaultToolDefinitions), len(result.Tools))
 	}
 }

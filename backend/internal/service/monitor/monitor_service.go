@@ -49,10 +49,10 @@ func (s *Service) GetCachedStatus(ctx context.Context, nodeID uuid.UUID) (*proxm
 }
 
 type NodeStatusSummary struct {
-	NodeID   uuid.UUID             `json:"node_id"`
-	NodeName string                `json:"node_name"`
-	IsOnline bool                  `json:"is_online"`
-	Status   *proxmox.NodeStatus   `json:"status,omitempty"`
+	NodeID   uuid.UUID           `json:"node_id"`
+	NodeName string              `json:"node_name"`
+	IsOnline bool                `json:"is_online"`
+	Status   *proxmox.NodeStatus `json:"status,omitempty"`
 }
 
 func (s *Service) GetAllNodesStatus(ctx context.Context) ([]NodeStatusSummary, error) {

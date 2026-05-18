@@ -273,9 +273,9 @@ type NodePort struct {
 type VMPortGroup struct {
 	VMID       int        `json:"vmid"`
 	Name       string     `json:"name"`
-	Type       string     `json:"type"`                  // "node", "qemu", "lxc"
-	ScanStatus string     `json:"scan_status"`           // "ok", "no_agent", "error"
-	ScanError  string     `json:"scan_error,omitempty"`  // human-readable reason if not ok
+	Type       string     `json:"type"`                 // "node", "qemu", "lxc"
+	ScanStatus string     `json:"scan_status"`          // "ok", "no_agent", "error"
+	ScanError  string     `json:"scan_error,omitempty"` // human-readable reason if not ok
 	Ports      []NodePort `json:"ports"`
 }
 

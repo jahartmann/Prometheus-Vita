@@ -17,10 +17,10 @@ const (
 )
 
 type ToolSecurity struct {
-	Risk          ToolRisk         `json:"risk"`
-	Permission    model.Permission `json:"permission"`
-	Action        string           `json:"action"`
-	RequiresDryRun bool            `json:"requires_dry_run"`
+	Risk           ToolRisk         `json:"risk"`
+	Permission     model.Permission `json:"permission"`
+	Action         string           `json:"action"`
+	RequiresDryRun bool             `json:"requires_dry_run"`
 }
 
 type SecureTool interface {
@@ -46,9 +46,9 @@ func securityForTool(tool Tool) ToolSecurity {
 		}
 	}
 	return ToolSecurity{
-		Risk:          ToolRiskHigh,
-		Permission:    model.PermissionAgentExecute,
-		Action:        "execute",
+		Risk:           ToolRiskHigh,
+		Permission:     model.PermissionAgentExecute,
+		Action:         "execute",
 		RequiresDryRun: true,
 	}
 }
@@ -56,6 +56,36 @@ func securityForTool(tool Tool) ToolSecurity {
 func toolSupportsDryRun(tool Tool) bool {
 	_, ok := tool.(DryRunTool)
 	return ok
+}
+
+// argsAreRealRun reports true when the security policy requires a dry-run
+// for the tool AND the LLM-provided args do NOT explicitly opt into dry-run
+// (i.e. `dry_run` is missing or false). When this is the case the call is
+// destructive and must always be routed through the approval workflow, even
+// for users with AutonomyFullAuto. This closes the bypass where an LLM
+// hallucinates `dry_run: false` and skips approval that was meant to guard
+// the destructive code path.
+func argsAreRealRun(security ToolSecurity, args json.RawMessage) bool {
+	if !security.RequiresDryRun {
+		return false
+	}
+	if len(args) == 0 {
+		// No args at all → defaults apply; we treat that as real-run because
+		// the tool isn't being explicitly told to preview.
+		return true
+	}
+	var probe struct {
+		DryRun *bool `json:"dry_run"`
+	}
+	if err := json.Unmarshal(args, &probe); err != nil {
+		// Malformed args → fall through to caller's normal handling; don't
+		// pretend it's a dry-run.
+		return true
+	}
+	if probe.DryRun == nil {
+		return true
+	}
+	return !*probe.DryRun
 }
 
 var builtInToolSecurity = map[string]ToolSecurity{

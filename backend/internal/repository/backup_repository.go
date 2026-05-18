@@ -25,6 +25,11 @@ type BackupRepository interface {
 	GetNextVersion(ctx context.Context, nodeID uuid.UUID) (int, error)
 	CountByNode(ctx context.Context, nodeID uuid.UUID) (int, error)
 	DeleteOldest(ctx context.Context, nodeID uuid.UUID, keepCount int) error
+	// MarkStuckRunningAsFailed sweeps backups that have been in PENDING or
+	// RUNNING state longer than maxAgeSeconds and marks them FAILED with the
+	// supplied reason. Used on startup to clean up records orphaned when the
+	// server was killed mid-backup. Returns the number of rows updated.
+	MarkStuckRunningAsFailed(ctx context.Context, maxAgeSeconds int, reason string) (int, error)
 }
 
 type pgBackupRepository struct {
@@ -167,6 +172,25 @@ func (r *pgBackupRepository) UpdateStatus(ctx context.Context, id uuid.UUID, sta
 	return nil
 }
 
+func (r *pgBackupRepository) MarkStuckRunningAsFailed(ctx context.Context, maxAgeSeconds int, reason string) (int, error) {
+	if maxAgeSeconds <= 0 {
+		maxAgeSeconds = 3600 // 1h default
+	}
+	tag, err := r.db.Exec(ctx,
+		`UPDATE config_backups
+		    SET status = $1, error_message = $2, completed_at = NOW()
+		  WHERE status IN ($3, $4)
+		    AND created_at < NOW() - make_interval(secs => $5)`,
+		model.BackupStatusFailed, reason,
+		model.BackupStatusPending, model.BackupStatusRunning,
+		maxAgeSeconds,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("mark stuck backups failed: %w", err)
+	}
+	return int(tag.RowsAffected()), nil
+}
+
 func (r *pgBackupRepository) UpdateCompleted(ctx context.Context, id uuid.UUID, fileCount int, totalSize int64) error {
 	_, err := r.db.Exec(ctx,
 		`UPDATE config_backups SET file_count=$1, total_size=$2, status=$3, completed_at=NOW()
@@ -267,7 +291,7 @@ func (r *pgBackupRepository) DeleteOldest(ctx context.Context, nodeID uuid.UUID,
 	_, err = tx.Exec(ctx,
 		`DELETE FROM config_backup_files WHERE backup_id IN (
 			SELECT id FROM config_backups WHERE node_id = $1 AND backup_type = 'scheduled'
-			ORDER BY created_at DESC OFFSET $2
+			ORDER BY created_at DESC, id DESC OFFSET $2
 		)`, nodeID, keepCount,
 	)
 	if err != nil {
@@ -277,7 +301,7 @@ func (r *pgBackupRepository) DeleteOldest(ctx context.Context, nodeID uuid.UUID,
 	_, err = tx.Exec(ctx,
 		`DELETE FROM config_backups WHERE id IN (
 			SELECT id FROM config_backups WHERE node_id = $1 AND backup_type = 'scheduled'
-			ORDER BY created_at DESC OFFSET $2
+			ORDER BY created_at DESC, id DESC OFFSET $2
 		)`, nodeID, keepCount,
 	)
 	if err != nil {

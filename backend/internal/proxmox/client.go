@@ -31,10 +31,10 @@ func validateVMType(vmType string) error {
 }
 
 type Client struct {
-	baseURL    string
-	tokenID    string
+	baseURL     string
+	tokenID     string
 	tokenSecret string
-	httpClient *http.Client
+	httpClient  *http.Client
 }
 
 func NewClient(hostname string, port int, tokenID, tokenSecret string, tlsCfg *tls.Config) *Client {
@@ -43,8 +43,8 @@ func NewClient(hostname string, port int, tokenID, tokenSecret string, tlsCfg *t
 		tlsCfg = &tls.Config{InsecureSkipVerify: true}
 	}
 	return &Client{
-		baseURL:    fmt.Sprintf("https://%s:%d/api2/json", hostname, port),
-		tokenID:    tokenID,
+		baseURL:     fmt.Sprintf("https://%s:%d/api2/json", hostname, port),
+		tokenID:     tokenID,
 		tokenSecret: tokenSecret,
 		httpClient: &http.Client{
 			Timeout: 120 * time.Second,
@@ -130,8 +130,8 @@ func (c *Client) GetNodeStatus(ctx context.Context, node string) (*NodeStatus, e
 	}
 
 	var raw struct {
-		CPU     float64 `json:"cpu"`
-		Memory  struct {
+		CPU    float64 `json:"cpu"`
+		Memory struct {
 			Total int64 `json:"total"`
 			Used  int64 `json:"used"`
 			Free  int64 `json:"free"`
@@ -1147,4 +1147,3 @@ func (c *Client) RestoreVM(ctx context.Context, node string, archive string, sto
 	}
 	return upid, nil
 }
-

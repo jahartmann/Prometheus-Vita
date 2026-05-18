@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math"
 	"time"
 
 	"github.com/antigravity/prometheus/internal/model"
@@ -99,9 +100,20 @@ func (s *AlertService) evaluateRule(ctx context.Context, rule *model.AlertRule) 
 		rule.Name, nodeName, rule.Metric, value, rule.Operator, rule.Threshold, rule.Severity,
 	)
 
-	// Send to configured channels
+	// Send to configured channels. We don't gate alert evaluation on
+	// delivery (unlike escalation steps): an alert that loses its dispatch
+	// shouldn't get re-evaluated next tick because the rule's cooldown
+	// already updated. But we DO log loudly when zero channels delivered
+	// so operators see the silent gap in notification history.
 	if len(rule.ChannelIDs) > 0 {
-		s.notifSvc.NotifyChannels(ctx, rule.ChannelIDs, "alert_triggered", subject, body)
+		attempted, delivered := s.notifSvc.NotifyChannels(ctx, rule.ChannelIDs, "alert_triggered", subject, body)
+		if delivered == 0 && attempted > 0 {
+			slog.Error("alert: triggered but ZERO channels delivered",
+				slog.String("rule", rule.Name),
+				slog.Int("attempted", attempted),
+				slog.String("severity", string(rule.Severity)),
+			)
+		}
 	} else {
 		s.notifSvc.Notify(ctx, "alert_triggered", subject, body)
 	}
@@ -180,6 +192,22 @@ func (s *AlertService) getMetricValue(record *model.MetricsRecord, metric string
 }
 
 func (s *AlertService) checkThreshold(value float64, operator string, threshold float64) bool {
+	// NaN/Inf in either side of the comparison makes IEEE-754 say "not
+	// greater, not less, not equal" — i.e. every operator returns false.
+	// That means a metric pipeline glitch (division by zero upstream,
+	// uninitialised field) would silently disable every alert that
+	// references the metric. We log and treat as "no alert" deliberately,
+	// so the operator notices the upstream bug instead of getting either
+	// silently-skipped or false-positive pages.
+	if math.IsNaN(value) || math.IsInf(value, 0) ||
+		math.IsNaN(threshold) || math.IsInf(threshold, 0) {
+		slog.Warn("alert: non-finite value or threshold; skipping rule",
+			slog.Float64("value", value),
+			slog.Float64("threshold", threshold),
+			slog.String("operator", operator),
+		)
+		return false
+	}
 	switch operator {
 	case ">":
 		return value > threshold

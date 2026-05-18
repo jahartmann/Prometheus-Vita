@@ -67,7 +67,7 @@ func (h *SecurityHandler) GetStats(c echo.Context) error {
 		Total:          total,
 		Unacknowledged: total,
 		BySeverity:     bySeverity,
-		ByCategory: byCategory,
+		ByCategory:     byCategory,
 	}
 
 	return apiPkg.Success(c, stats)

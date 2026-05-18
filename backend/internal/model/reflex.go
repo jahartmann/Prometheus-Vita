@@ -48,20 +48,20 @@ type ReflexRule struct {
 	TriggerCount    int              `json:"trigger_count"`
 
 	// Time-based scheduling
-	ScheduleType    string `json:"schedule_type,omitempty"`      // "always", "time_window", "cron"
-	ScheduleCron    string `json:"schedule_cron,omitempty"`      // Cron expression for scheduled rules
-	TimeWindowStart string `json:"time_window_start,omitempty"`  // "08:00" format
-	TimeWindowEnd   string `json:"time_window_end,omitempty"`    // "18:00" format
-	TimeWindowDays  []int  `json:"time_window_days,omitempty"`   // 0=Sun, 1=Mon, ..., 6=Sat
+	ScheduleType    string `json:"schedule_type,omitempty"`     // "always", "time_window", "cron"
+	ScheduleCron    string `json:"schedule_cron,omitempty"`     // Cron expression for scheduled rules
+	TimeWindowStart string `json:"time_window_start,omitempty"` // "08:00" format
+	TimeWindowEnd   string `json:"time_window_end,omitempty"`   // "18:00" format
+	TimeWindowDays  []int  `json:"time_window_days,omitempty"`  // 0=Sun, 1=Mon, ..., 6=Sat
 
 	// AI integration
-	AIEnabled        bool   `json:"ai_enabled"`                   // Whether AI evaluates this rule
-	AISeverity       string `json:"ai_severity,omitempty"`        // AI-assessed severity
-	AIRecommendation string `json:"ai_recommendation,omitempty"`  // AI suggestion for this rule
+	AIEnabled        bool   `json:"ai_enabled"`                  // Whether AI evaluates this rule
+	AISeverity       string `json:"ai_severity,omitempty"`       // AI-assessed severity
+	AIRecommendation string `json:"ai_recommendation,omitempty"` // AI suggestion for this rule
 
 	// Rule chaining
-	Priority int      `json:"priority"`        // Execution priority (lower = first)
-	Tags     []string `json:"tags,omitempty"`  // Categorization tags
+	Priority int      `json:"priority"`       // Execution priority (lower = first)
+	Tags     []string `json:"tags,omitempty"` // Categorization tags
 
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`

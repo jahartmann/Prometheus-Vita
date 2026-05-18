@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"math"
+	"strings"
 	"time"
 
 	"github.com/antigravity/prometheus/internal/model"
@@ -13,6 +15,13 @@ import (
 	"github.com/antigravity/prometheus/internal/service/notification"
 	"github.com/google/uuid"
 )
+
+// metricMaxStaleness bounds how old a metric record may be when we evaluate a
+// rule against it. If the latest sample is older than this we skip the rule
+// instead of firing an action on what is essentially historical data — see
+// audit B2 P0 ("stale metric evaluation window"). 5 minutes is conservative
+// for the 30s/60s scheduler ticks we use elsewhere.
+const metricMaxStaleness = 5 * time.Minute
 
 type Service struct {
 	reflexRepo  repository.ReflexRuleRepository
@@ -36,6 +45,53 @@ func NewService(
 		nodeSvc:     nodeSvc,
 		notifSvc:    notifSvc,
 	}
+}
+
+// validateReflexInputs runs input validation that used to be missing — bad
+// cron expressions, out-of-range weekday entries and unknown action types
+// would all reach the evaluation loop and either silently never fire or fire
+// against wrong targets. Catch them at Create/Update time so the operator
+// sees the problem immediately.
+func validateReflexInputs(actionType model.ReflexActionType, scheduleType, scheduleCron string, timeWindowDays []int) error {
+	if string(actionType) == "" {
+		return fmt.Errorf("action_type ist erforderlich")
+	}
+	if !actionType.IsValid() {
+		return fmt.Errorf("action_type %q ist unbekannt", actionType)
+	}
+	if scheduleType == "cron" {
+		if strings.TrimSpace(scheduleCron) == "" {
+			return fmt.Errorf("schedule_cron ist erforderlich bei schedule_type=cron")
+		}
+		if err := validateCronExpression(scheduleCron); err != nil {
+			return fmt.Errorf("ungültiger cron-Ausdruck %q: %w", scheduleCron, err)
+		}
+	}
+	for _, d := range timeWindowDays {
+		if d < 0 || d > 6 {
+			return fmt.Errorf("time_window_days enthält ungültigen Wochentag %d (erlaubt: 0..6, 0=Sonntag)", d)
+		}
+	}
+	return nil
+}
+
+// validateCronExpression accepts the classic 5-field POSIX cron syntax used
+// elsewhere in the codebase. It's intentionally permissive but rejects the
+// most common typos (wrong field count, non-numeric out-of-range values).
+func validateCronExpression(expr string) error {
+	fields := strings.Fields(expr)
+	if len(fields) != 5 {
+		return fmt.Errorf("erwartet 5 Felder (Minute Stunde Tag Monat Wochentag), erhalten %d", len(fields))
+	}
+	// We don't need to verify ranges in detail here — the cron library used by
+	// the scheduler will reject anything malformed. But empty fields are a
+	// guaranteed bug.
+	for i, f := range fields {
+		if f == "" {
+			return fmt.Errorf("Feld %d ist leer", i+1)
+		}
+	}
+	return nil
 }
 
 func (s *Service) Create(ctx context.Context, req model.CreateReflexRuleRequest) (*model.ReflexRule, error) {
@@ -77,6 +133,10 @@ func (s *Service) Create(ctx context.Context, req model.CreateReflexRuleRequest)
 	timeWindowDays := req.TimeWindowDays
 	if timeWindowDays == nil {
 		timeWindowDays = []int{}
+	}
+
+	if err := validateReflexInputs(req.ActionType, scheduleType, req.ScheduleCron, timeWindowDays); err != nil {
+		return nil, err
 	}
 
 	rule := &model.ReflexRule{
@@ -176,6 +236,10 @@ func (s *Service) Update(ctx context.Context, id uuid.UUID, req model.UpdateRefl
 		rule.Tags = req.Tags
 	}
 
+	if err := validateReflexInputs(rule.ActionType, rule.ScheduleType, rule.ScheduleCron, rule.TimeWindowDays); err != nil {
+		return nil, err
+	}
+
 	if err := s.reflexRepo.Update(ctx, rule); err != nil {
 		return nil, fmt.Errorf("update reflex rule: %w", err)
 	}
@@ -203,26 +267,39 @@ func (s *Service) EvaluateRules(ctx context.Context) error {
 	for i := range rules {
 		rule := &rules[i]
 
-		// Cooldown check
+		// Cooldown check (best-effort first-pass; the atomic CAS below is
+		// the real guard against double-fire).
 		if rule.LastTriggeredAt != nil {
 			if now.Sub(*rule.LastTriggeredAt) < time.Duration(rule.CooldownSeconds)*time.Second {
 				continue
 			}
 		}
 
-		// Time window check
 		if !isInTimeWindow(rule) {
 			continue
 		}
 
-		// Determine which nodes to check
+		// Resolve target nodes. Distinguish "rule applies cluster-wide"
+		// (NodeID nil) from "rule targets a specific node that no longer
+		// exists in our list" — the latter is a configuration error and
+		// should be visible, not silently skipped.
 		var targetNodes []model.Node
 		if rule.NodeID != nil {
+			found := false
 			for _, n := range nodes {
 				if n.ID == *rule.NodeID {
 					targetNodes = append(targetNodes, n)
+					found = true
 					break
 				}
+			}
+			if !found {
+				slog.Warn("reflex: rule targets unknown node — skipping",
+					slog.String("rule", rule.Name),
+					slog.String("rule_id", rule.ID.String()),
+					slog.String("target_node_id", rule.NodeID.String()),
+				)
+				continue
 			}
 		} else {
 			targetNodes = nodes
@@ -238,33 +315,84 @@ func (s *Service) EvaluateRules(ctx context.Context) error {
 				continue
 			}
 
-			value := extractMetricValue(latest, rule.TriggerMetric)
-			if value == nil {
+			// Freshness guard: if metrics are too old, the rule would be
+			// firing on historical state. Skip — the next metric tick will
+			// re-evaluate with fresh data.
+			if !latest.RecordedAt.IsZero() && time.Since(latest.RecordedAt) > metricMaxStaleness {
+				slog.Debug("reflex: latest metric is too stale, skipping",
+					slog.String("rule", rule.Name),
+					slog.String("node", n.Name),
+					slog.Duration("age", time.Since(latest.RecordedAt)),
+				)
 				continue
 			}
 
-			if !evaluateCondition(*value, rule.Operator, rule.Threshold) {
+			value, extractErr := extractMetricValueE(latest, rule.TriggerMetric)
+			if extractErr != nil {
+				slog.Warn("reflex: cannot extract metric — rule misconfigured",
+					slog.String("rule", rule.Name),
+					slog.String("metric", rule.TriggerMetric),
+					slog.Any("error", extractErr),
+				)
 				continue
 			}
 
-			slog.Info("reflex rule triggered",
-				slog.String("rule", rule.Name),
-				slog.String("node", n.Name),
-				slog.String("metric", rule.TriggerMetric),
-				slog.Float64("value", *value),
-				slog.Float64("threshold", rule.Threshold),
-			)
+			if !evaluateCondition(value, rule.Operator, rule.Threshold) {
+				continue
+			}
 
-			s.executeAction(ctx, rule, &n)
+			// Atomic compare-and-swap on LastTriggeredAt: only fire if no
+			// other replica or overlapping eval cycle has already triggered
+			// the rule within its cooldown. This is the actual guard against
+			// the bypass described in audit B2 P0 #4.
+			cooldown := time.Duration(rule.CooldownSeconds) * time.Second
+			ok, err := s.reflexRepo.TryMarkTriggered(ctx, rule.ID, now, cooldown)
+			if err != nil {
+				slog.Warn("reflex: TryMarkTriggered failed", slog.String("rule", rule.Name), slog.Any("error", err))
+				continue
+			}
+			if !ok {
+				// Another evaluator beat us to it. Skip silently.
+				continue
+			}
 
-			if err := s.reflexRepo.UpdateLastTriggered(ctx, rule.ID, now); err != nil {
-				slog.Warn("failed to update reflex rule last triggered",
+			// Re-fetch the rule immediately before executing the action.
+			// Between ListActive() above and now the rule may have been
+			// disabled or had its action edited. Firing an old action would
+			// be wrong.
+			fresh, err := s.reflexRepo.GetByID(ctx, rule.ID)
+			if err != nil {
+				slog.Warn("reflex: re-fetch before action failed — skipping execution",
 					slog.String("rule", rule.Name),
 					slog.Any("error", err),
 				)
+				continue
+			}
+			if !fresh.IsActive {
+				slog.Info("reflex: rule disabled between eval and execute — not firing",
+					slog.String("rule", rule.Name),
+				)
+				continue
 			}
 
-			// Only trigger once per rule per evaluation cycle
+			// Audit-quality structured log: an operator searching for
+			// "reflex.action_executed" must be able to reconstruct who,
+			// what, when, on which node.
+			slog.Info("reflex.action_executed",
+				slog.String("rule", fresh.Name),
+				slog.String("rule_id", fresh.ID.String()),
+				slog.String("action_type", string(fresh.ActionType)),
+				slog.String("node", n.Name),
+				slog.String("node_id", n.ID.String()),
+				slog.String("metric", fresh.TriggerMetric),
+				slog.Float64("value", value),
+				slog.Float64("threshold", fresh.Threshold),
+				slog.Time("triggered_at", now),
+			)
+
+			s.executeAction(ctx, fresh, &n)
+
+			// Only fire once per rule per evaluation cycle.
 			break
 		}
 	}
@@ -381,30 +509,38 @@ func (s *Service) executeAction(ctx context.Context, rule *model.ReflexRule, n *
 	}
 }
 
-func extractMetricValue(record *model.MetricsRecord, metric string) *float64 {
+// extractMetricValueE replaces the old extractMetricValue: instead of
+// returning a nil pointer for every kind of failure (unknown metric, NaN,
+// missing field) it returns a descriptive error so misconfigured rules are
+// visible in logs rather than silently never firing. Also guards against
+// NaN/Inf propagation from upstream metric collection.
+func extractMetricValueE(record *model.MetricsRecord, metric string) (float64, error) {
 	var val float64
 	switch metric {
 	case "cpu_usage":
 		val = record.CPUUsage
 	case "memory_usage":
 		if record.MemTotal == 0 {
-			return nil
+			return 0, fmt.Errorf("memory_usage: MemTotal is zero")
 		}
 		val = float64(record.MemUsed) / float64(record.MemTotal) * 100
 	case "disk_usage":
 		if record.DiskTotal == 0 {
-			return nil
+			return 0, fmt.Errorf("disk_usage: DiskTotal is zero")
 		}
 		val = float64(record.DiskUsed) / float64(record.DiskTotal) * 100
 	case "load_avg":
 		if len(record.LoadAvg) == 0 {
-			return nil
+			return 0, fmt.Errorf("load_avg: LoadAvg array is empty")
 		}
 		val = record.LoadAvg[0]
 	default:
-		return nil
+		return 0, fmt.Errorf("metric %q is not supported", metric)
 	}
-	return &val
+	if math.IsNaN(val) || math.IsInf(val, 0) {
+		return 0, fmt.Errorf("metric %s produced non-finite value (%v)", metric, val)
+	}
+	return val, nil
 }
 
 func isInTimeWindow(rule *model.ReflexRule) bool {

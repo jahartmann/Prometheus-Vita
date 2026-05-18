@@ -4,15 +4,29 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
+	"sync"
+	"time"
 
 	"golang.org/x/crypto/ssh"
 )
 
-const streamBufferSize = 4 * 1024 * 1024 // 4MB
+const (
+	streamBufferSize     = 4 * 1024 * 1024 // 4MB
+	streamShutdownWindow = 10 * time.Second
+)
 
 // StreamCopyNodeToNode pipes a file from source node to target node via SSH.
 // It reads from source stdout and writes to target stdin using a fixed 4MB buffer.
 // The onProgress callback is called with bytes transferred so far.
+//
+// Cancellation safety: on ctx.Done() we signal both sessions, then wait a
+// bounded amount of time for the background copy goroutine to exit before
+// returning. Without this the goroutine could keep running, holding the
+// SSH sessions open beyond the lifetime of the caller's context — and the
+// previous version of this function could double-close tgtStdin (once from
+// the copy goroutine, once via deferred session.Close) which would
+// occasionally panic.
 func StreamCopyNodeToNode(
 	ctx context.Context,
 	sourceClient *Client,
@@ -21,7 +35,6 @@ func StreamCopyNodeToNode(
 	targetPath string,
 	onProgress func(bytesSent int64),
 ) (int64, error) {
-	// Create source session for reading
 	srcSession, err := sourceClient.client.NewSession()
 	if err != nil {
 		return 0, fmt.Errorf("create source session: %w", err)
@@ -33,7 +46,6 @@ func StreamCopyNodeToNode(
 		return 0, fmt.Errorf("source stdout pipe: %w", err)
 	}
 
-	// Create target session for writing
 	tgtSession, err := targetClient.client.NewSession()
 	if err != nil {
 		return 0, fmt.Errorf("create target session: %w", err)
@@ -45,17 +57,24 @@ func StreamCopyNodeToNode(
 		return 0, fmt.Errorf("target stdin pipe: %w", err)
 	}
 
-	// Start source command: cat the vzdump file
-	if err := srcSession.Start(fmt.Sprintf("cat %q", sourcePath)); err != nil {
-		return 0, fmt.Errorf("start source cat: %w", err)
+	// Close tgtStdin at most once. CopyBuffer's goroutine wants to close it
+	// on success; the cancellation path also wants to close it to unblock
+	// any pending write. sync.Once guarantees both can be safely called.
+	var stdinCloseOnce sync.Once
+	closeStdin := func() {
+		stdinCloseOnce.Do(func() {
+			_ = tgtStdin.Close()
+		})
 	}
 
-	// Start target command: write to target path
-	if err := tgtSession.Start(fmt.Sprintf("cat > %q", targetPath)); err != nil {
+	if err := srcSession.Start(fmt.Sprintf("cat %s", ShellQuote(sourcePath))); err != nil {
+		return 0, fmt.Errorf("start source cat: %w", err)
+	}
+	if err := tgtSession.Start(fmt.Sprintf("cat > %s", ShellQuote(targetPath))); err != nil {
+		_ = srcSession.Signal(ssh.SIGTERM)
 		return 0, fmt.Errorf("start target cat: %w", err)
 	}
 
-	// Copy with progress tracking
 	var writer io.Writer = tgtStdin
 	if onProgress != nil {
 		writer = &ProgressWriter{
@@ -72,7 +91,7 @@ func StreamCopyNodeToNode(
 
 	go func() {
 		n, err := io.CopyBuffer(writer, srcStdout, buf)
-		tgtStdin.Close()
+		closeStdin()
 		done <- struct {
 			n   int64
 			err error
@@ -81,18 +100,27 @@ func StreamCopyNodeToNode(
 
 	select {
 	case <-ctx.Done():
+		// Tell the remote ends to stop and unblock our own goroutine by
+		// closing stdin (it may be wedged on a write that no one is reading).
 		_ = srcSession.Signal(ssh.SIGTERM)
 		_ = tgtSession.Signal(ssh.SIGTERM)
+		closeStdin()
+		// Bounded wait for the copy goroutine so it does not leak.
+		select {
+		case <-done:
+		case <-time.After(streamShutdownWindow):
+			slog.Warn("ssh stream copy: goroutine did not exit within shutdown window — leaking",
+				slog.String("source_path", sourcePath),
+			)
+		}
 		return 0, ctx.Err()
 	case result := <-done:
 		if result.err != nil {
 			return result.n, fmt.Errorf("stream copy: %w", result.err)
 		}
-		// Wait for source to finish
 		if err := srcSession.Wait(); err != nil {
 			return result.n, fmt.Errorf("source session wait: %w", err)
 		}
-		// Wait for target to finish
 		if err := tgtSession.Wait(); err != nil {
 			return result.n, fmt.Errorf("target session wait: %w", err)
 		}

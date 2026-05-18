@@ -22,6 +22,20 @@ func NewMigrator(db *pgxpool.Pool, migrationsDir string) *Migrator {
 }
 
 func (m *Migrator) Run(ctx context.Context) error {
+	// Acquire a Postgres advisory lock so that when multiple replicas of the
+	// server boot at the same time, only one of them actually runs the
+	// migrations. The others block here and then observe an up-to-date schema.
+	// The arbitrary 64-bit key below is just a project-specific constant.
+	const advisoryLockKey int64 = 0x70726f6d65746575 // "prometeu" — project-specific 8-byte constant
+	if _, err := m.db.Exec(ctx, "SELECT pg_advisory_lock($1)", advisoryLockKey); err != nil {
+		return fmt.Errorf("acquire advisory lock: %w", err)
+	}
+	defer func() {
+		if _, err := m.db.Exec(context.Background(), "SELECT pg_advisory_unlock($1)", advisoryLockKey); err != nil {
+			slog.Warn("failed to release migration advisory lock", slog.Any("error", err))
+		}
+	}()
+
 	if err := m.ensureMigrationsTable(ctx); err != nil {
 		return fmt.Errorf("ensure migrations table: %w", err)
 	}
@@ -55,13 +69,17 @@ func (m *Migrator) Run(ctx context.Context) error {
 		}
 
 		if _, err := tx.Exec(ctx, string(content)); err != nil {
-			_ = tx.Rollback(ctx)
+			if rbErr := tx.Rollback(ctx); rbErr != nil {
+				slog.Warn("migration rollback failed", slog.String("file", name), slog.Any("error", rbErr))
+			}
 			return fmt.Errorf("execute migration %s: %w", name, err)
 		}
 
 		if _, err := tx.Exec(ctx,
 			"INSERT INTO schema_migrations (filename) VALUES ($1)", name); err != nil {
-			_ = tx.Rollback(ctx)
+			if rbErr := tx.Rollback(ctx); rbErr != nil {
+				slog.Warn("migration rollback failed", slog.String("file", name), slog.Any("error", rbErr))
+			}
 			return fmt.Errorf("record migration %s: %w", name, err)
 		}
 

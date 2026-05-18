@@ -14,7 +14,8 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /prometheus-server ./c
 # Runtime stage
 FROM alpine:3.21
 
-RUN apk add --no-cache ca-certificates tzdata nmap openssh-client iproute2
+# curl is needed for the container HEALTHCHECK below.
+RUN apk add --no-cache ca-certificates tzdata nmap openssh-client iproute2 curl
 
 RUN addgroup -S prometheus && adduser -S -G prometheus prometheus
 
@@ -28,5 +29,8 @@ RUN chown -R prometheus:prometheus /app
 USER prometheus
 
 EXPOSE 8080
+
+HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=3 \
+  CMD curl -fsS http://localhost:8080/live || exit 1
 
 ENTRYPOINT ["./prometheus-server"]

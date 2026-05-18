@@ -14,8 +14,8 @@ import (
 	apiPkg "github.com/antigravity/prometheus/internal/api/response"
 	"github.com/antigravity/prometheus/internal/apierror"
 	"github.com/antigravity/prometheus/internal/model"
-	nodeService "github.com/antigravity/prometheus/internal/service/node"
 	"github.com/antigravity/prometheus/internal/service/auth"
+	nodeService "github.com/antigravity/prometheus/internal/service/node"
 	vmService "github.com/antigravity/prometheus/internal/service/vm"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -60,11 +60,11 @@ type VMDisk struct {
 }
 
 type VMCockpitHandler struct {
-	nodeSvc        *nodeService.Service
-	permSvc        *vmService.PermissionService
-	jwtSvc         *auth.JWTService
-	upgrader       websocket.Upgrader
-	tlsConfig      *tls.Config // TLS config for Proxmox WebSocket connections
+	nodeSvc   *nodeService.Service
+	permSvc   *vmService.PermissionService
+	jwtSvc    *auth.JWTService
+	upgrader  websocket.Upgrader
+	tlsConfig *tls.Config // TLS config for Proxmox WebSocket connections
 }
 
 func NewVMCockpitHandler(nodeSvc *nodeService.Service, permSvc *vmService.PermissionService, jwtSvc *auth.JWTService, allowedOrigins []string, tlsCfg *tls.Config) *VMCockpitHandler {

@@ -24,9 +24,9 @@ func (r UserRole) IsValid() bool {
 
 // Autonomy levels for AI agent tool execution
 const (
-	AutonomyReadOnly  = 0 // Read-only: no write tools allowed
-	AutonomyConfirm   = 1 // Confirm: write tools require approval
-	AutonomyFullAuto  = 2 // Full auto: all tools executed immediately
+	AutonomyReadOnly = 0 // Read-only: no write tools allowed
+	AutonomyConfirm  = 1 // Confirm: write tools require approval
+	AutonomyFullAuto = 2 // Full auto: all tools executed immediately
 )
 
 type User struct {

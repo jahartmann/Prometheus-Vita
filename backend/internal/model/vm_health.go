@@ -8,14 +8,14 @@ import (
 
 // HealthScore represents a VM's overall health score (0-100).
 type HealthScore struct {
-	NodeID    uuid.UUID        `json:"node_id"`
-	VMID      int              `json:"vmid"`
-	VMName    string           `json:"vm_name"`
-	VMType    string           `json:"vm_type"`
-	Score     int              `json:"score"`
-	Status    string           `json:"status"` // healthy, warning, critical
-	Breakdown HealthBreakdown  `json:"breakdown"`
-	UpdatedAt time.Time        `json:"updated_at"`
+	NodeID    uuid.UUID       `json:"node_id"`
+	VMID      int             `json:"vmid"`
+	VMName    string          `json:"vm_name"`
+	VMType    string          `json:"vm_type"`
+	Score     int             `json:"score"`
+	Status    string          `json:"status"` // healthy, warning, critical
+	Breakdown HealthBreakdown `json:"breakdown"`
+	UpdatedAt time.Time       `json:"updated_at"`
 }
 
 // HealthBreakdown shows the individual components of a health score.
@@ -34,12 +34,12 @@ type HealthBreakdown struct {
 // RightsizingRecommendation is a per-VM recommendation from the VM-level
 // rightsizing analyzer (different from the node-level ResourceRecommendation).
 type VMRightsizingRecommendation struct {
-	NodeID       uuid.UUID                  `json:"node_id"`
-	VMID         int                        `json:"vmid"`
-	VMName       string                     `json:"vm_name"`
-	VMType       string                     `json:"vm_type"`
-	Resources    []VMResourceRecommendation `json:"resources"`
-	AnalyzedAt   time.Time                  `json:"analyzed_at"`
+	NodeID     uuid.UUID                  `json:"node_id"`
+	VMID       int                        `json:"vmid"`
+	VMName     string                     `json:"vm_name"`
+	VMType     string                     `json:"vm_type"`
+	Resources  []VMResourceRecommendation `json:"resources"`
+	AnalyzedAt time.Time                  `json:"analyzed_at"`
 }
 
 type VMResourceRecommendation struct {

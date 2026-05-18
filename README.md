@@ -36,6 +36,23 @@ docker compose up --build
 
 Beim ersten Start wird ein Admin-User erstellt. Passwort aus `ADMIN_PASSWORD` in `.env` oder automatisch generiert (siehe Server-Logs).
 
+## Production-Ready Deployment
+
+Für den produktiven Einsatz im Business-Bereich:
+
+- **TLS / HTTPS** via Caddy (Let's Encrypt oder interne CA):
+  `docker compose --profile tls up -d`
+- **Automatische Postgres-Backups** mit Retention:
+  `docker compose --profile backup up -d`
+- **Schritt-für-Schritt-Anleitung**, Sizing & Update-Pfad:
+  → siehe [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)
+- **Backup- und Restore-Verfahren**, DR-Runbook:
+  → siehe [`docs/BACKUP.md`](docs/BACKUP.md)
+- **Troubleshooting** nach Symptom:
+  → siehe [`docs/TROUBLESHOOT.md`](docs/TROUBLESHOOT.md)
+- **Health-Endpunkte**: `/live` (Process-Liveness), `/ready` (Postgres + Redis), `/health` (Legacy)
+- **Changelog** mit allen Härtungs-Iterationen: [`CHANGELOG.md`](CHANGELOG.md)
+
 ## Architektur
 
 ```

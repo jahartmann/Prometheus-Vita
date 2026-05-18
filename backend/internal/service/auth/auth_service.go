@@ -22,9 +22,16 @@ var (
 )
 
 const (
-	lockoutTTL      = 15 * time.Minute
+	lockoutTTL       = 15 * time.Minute
 	maxLoginAttempts = 5
 )
+
+// dummyBcryptHash is a pre-computed bcrypt hash of the string "dummy"
+// (cost 12). We compare against it on the "unknown user" path so login
+// timing for nonexistent accounts matches the timing for wrong-password
+// attempts on real accounts. The value is hardcoded because bcrypt
+// computation at startup would add startup latency without benefit.
+var dummyBcryptHash = []byte("$2a$12$cQH.aPnvFtchg2krzAOu7ehJfaZJg.G2cVQqHHKgLpZK5HwwPxYwK")
 
 type Service struct {
 	userRepo  repository.UserRepository
@@ -55,12 +62,22 @@ func (s *Service) Login(ctx context.Context, req model.LoginRequest) (*model.Log
 	user, err := s.userRepo.GetByUsername(ctx, req.Username)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
+			// Mitigate username enumeration via timing side channel: always
+			// perform a bcrypt comparison (against a fixed dummy hash) so
+			// the response time for unknown user matches the response time
+			// for known-user-wrong-password. Otherwise an attacker
+			// distinguishes "user exists" from "user doesn't exist" by
+			// timing alone.
+			_ = bcrypt.CompareHashAndPassword(dummyBcryptHash, []byte(req.Password))
 			return nil, ErrInvalidCredentials
 		}
 		return nil, fmt.Errorf("get user: %w", err)
 	}
 
 	if !user.IsActive {
+		// Equalise timing here too — run a bcrypt comparison before
+		// returning so timing doesn't reveal "active" vs "inactive".
+		_ = bcrypt.CompareHashAndPassword(dummyBcryptHash, []byte(req.Password))
 		return nil, ErrUserInactive
 	}
 

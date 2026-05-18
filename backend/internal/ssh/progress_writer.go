@@ -2,6 +2,7 @@ package ssh
 
 import (
 	"io"
+	"log/slog"
 	"sync/atomic"
 	"time"
 )
@@ -24,7 +25,18 @@ func (pw *ProgressWriter) Write(p []byte) (int, error) {
 	if n > 0 {
 		total := pw.written.Add(int64(n))
 		if pw.OnProgress != nil {
-			pw.OnProgress(total)
+			// Isolate caller panics: a UI callback that crashes must not
+			// take down the entire transfer.
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						slog.Error("ssh: ProgressWriter OnProgress callback panicked",
+							slog.Any("panic", r),
+						)
+					}
+				}()
+				pw.OnProgress(total)
+			}()
 		}
 	}
 	return n, err

@@ -33,37 +33,37 @@ type DriftCheck struct {
 }
 
 type DriftFileDetail struct {
-	FilePath     string          `json:"file_path"`
-	Status       string          `json:"status"` // added, removed, modified, unchanged
-	Diff         string          `json:"diff,omitempty"`
-	Acknowledged bool            `json:"acknowledged"`
+	FilePath       string          `json:"file_path"`
+	Status         string          `json:"status"` // added, removed, modified, unchanged
+	Diff           string          `json:"diff,omitempty"`
+	Acknowledged   bool            `json:"acknowledged"`
 	AIFileAnalysis *AIFileAnalysis `json:"ai_file_analysis,omitempty"`
 }
 
 // AIFileAnalysis contains the AI-generated analysis for a single file change.
 type AIFileAnalysis struct {
 	FilePath       string `json:"file_path"`
-	Severity       int    `json:"severity"`        // 1-10
+	Severity       int    `json:"severity"` // 1-10
 	SeverityReason string `json:"severity_reason"`
-	Category       string `json:"category"`        // Security, Performance, Network, Configuration, Cosmetic
+	Category       string `json:"category"` // Security, Performance, Network, Configuration, Cosmetic
 	RiskAssessment string `json:"risk_assessment"`
-	Recommendation string `json:"recommendation"`  // fix, accept, monitor
-	Summary        string `json:"summary"`         // German human-readable summary
+	Recommendation string `json:"recommendation"` // fix, accept, monitor
+	Summary        string `json:"summary"`        // German human-readable summary
 }
 
 // AIAnalysisResult is the top-level AI analysis stored in the drift check.
 type AIAnalysisResult struct {
-	AnalyzedAt    time.Time       `json:"analyzed_at"`
-	Model         string          `json:"model"`
-	FileAnalyses  []AIFileAnalysis `json:"file_analyses"`
-	OverallSeverity int           `json:"overall_severity"`
-	OverallSummary  string        `json:"overall_summary"`
+	AnalyzedAt      time.Time        `json:"analyzed_at"`
+	Model           string           `json:"model"`
+	FileAnalyses    []AIFileAnalysis `json:"file_analyses"`
+	OverallSeverity int              `json:"overall_severity"`
+	OverallSummary  string           `json:"overall_summary"`
 }
 
 // CompareNodesRequest is the request body for cross-node comparison.
 type CompareNodesRequest struct {
-	FilePaths []string  `json:"file_paths"`
-	NodeIDs   []string  `json:"node_ids"`
+	FilePaths []string `json:"file_paths"`
+	NodeIDs   []string `json:"node_ids"`
 }
 
 // NodeFileContent holds the content of a file from a specific node.
