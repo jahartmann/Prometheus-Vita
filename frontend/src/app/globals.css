@@ -68,7 +68,7 @@
   --secondary: oklch(0.225 0.013 255);
   --secondary-foreground: oklch(0.94 0.006 255);
   --muted: oklch(0.215 0.013 255);
-  --muted-foreground: oklch(0.68 0.018 255);
+  --muted-foreground: oklch(0.72 0.02 255); /* bumped for WCAG AA contrast */
   --accent: oklch(0.245 0.015 255);
   --accent-foreground: oklch(0.96 0.004 255);
   --destructive: oklch(0.61 0.22 27);
@@ -78,7 +78,7 @@
   --ring: oklch(0.72 0.17 55);
   --sidebar: oklch(0.095 0.01 255);
   --sidebar-foreground: oklch(0.955 0.004 255);
-  --sidebar-muted: oklch(0.63 0.018 255);
+  --sidebar-muted: oklch(0.74 0.02 255); /* bumped for WCAG AA contrast */
 }
 
 @layer base {
@@ -118,8 +118,8 @@
   .surface-panel {
     @apply rounded-lg border bg-card text-card-foreground;
     box-shadow:
-      0 1px 0 0 oklch(0 0 0 / 0.02),
-      0 1px 3px oklch(0 0 0 / 0.04);
+      0 1px 2px oklch(0 0 0 / 0.05),
+      0 4px 12px oklch(0 0 0 / 0.08);
   }
   .dark .surface-panel {
     box-shadow:
@@ -232,5 +232,40 @@
   /* Eyebrow — small uppercase label above page titles. */
   .eyebrow {
     @apply text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground;
+  }
+
+  /* Shimmer loading state — replaces the default animate-pulse on Skeleton.
+     The directional gradient sweep signals "actively loading" much more
+     clearly than the static pulse, especially on large skeletons. */
+  .shimmer {
+    position: relative;
+    overflow: hidden;
+    background-color: var(--muted);
+  }
+  .shimmer::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      oklch(1 0 0 / 0.08) 50%,
+      transparent 100%
+    );
+    animation: shimmer 1.6s ease-in-out infinite;
+  }
+  .dark .shimmer::after {
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      oklch(1 0 0 / 0.05) 50%,
+      transparent 100%
+    );
+  }
+  @keyframes shimmer {
+    100% {
+      transform: translateX(100%);
+    }
   }
 }

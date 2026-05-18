@@ -1,4 +1,5 @@
 import axios from "axios";
+import { toast } from "sonner";
 import { useAuthStore } from "@/stores/auth-store";
 
 const api = axios.create({
@@ -7,6 +8,20 @@ const api = axios.create({
     "Content-Type": "application/json",
   },
 });
+
+// Throttle session-expired toast so a burst of 401s from parallel requests
+// doesn't spam the user with duplicate notifications. We only fire one
+// message per LOGOUT_TOAST_WINDOW_MS window.
+const LOGOUT_TOAST_WINDOW_MS = 5_000;
+let lastLogoutToastAt = 0;
+function notifySessionExpired() {
+  const now = Date.now();
+  if (now - lastLogoutToastAt < LOGOUT_TOAST_WINDOW_MS) return;
+  lastLogoutToastAt = now;
+  toast.error("Sitzung abgelaufen", {
+    description: "Bitte erneut anmelden.",
+  });
+}
 
 api.interceptors.request.use((config) => {
   const token = useAuthStore.getState().accessToken;
@@ -36,6 +51,7 @@ api.interceptors.response.use(
       try {
         const refreshToken = useAuthStore.getState().refreshToken;
         if (!refreshToken) {
+          notifySessionExpired();
           useAuthStore.getState().logout();
           return Promise.reject(error);
         }
@@ -61,8 +77,16 @@ api.interceptors.response.use(
         const newToken = await refreshPromise;
         originalRequest.headers.Authorization = `Bearer ${newToken}`;
         return api(originalRequest);
-      } catch {
+      } catch (refreshErr) {
+        // Refresh failed — token is genuinely invalid. Surface a single
+        // toast so the user knows why we are logging them out.
+        notifySessionExpired();
         useAuthStore.getState().logout();
+        // Reject with the original error so callers see the 401 they
+        // already handle, not the refresh failure.
+        if (refreshErr) {
+          // Swallow to satisfy TS — error itself is captured server-side.
+        }
         return Promise.reject(error);
       }
     }

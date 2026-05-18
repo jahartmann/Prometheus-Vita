@@ -11,9 +11,14 @@ const badgeVariants = cva(
         secondary: "border border-transparent bg-secondary text-secondary-foreground",
         destructive: "border border-transparent bg-destructive text-destructive-foreground shadow-sm",
         outline: "border text-foreground",
-        success: "border border-green-200 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-500/15 dark:text-green-400",
-        warning: "border border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-800 dark:bg-orange-500/15 dark:text-orange-400",
-        degraded: "border border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-500/15 dark:text-red-300",
+        // Severity palette aligned with StatusBadge so a green pill means the
+        // same thing wherever it appears: emerald=ok, amber=warning, red=
+        // critical/degraded, sky=info. Dark variants use /40 for readable
+        // contrast on the very dark dark-mode card background.
+        success: "border border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300",
+        warning: "border border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300",
+        degraded: "border border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300",
+        info: "border border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900/60 dark:bg-sky-950/40 dark:text-sky-300",
         maintenance: "border border-zinc-200 bg-zinc-100 text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200",
       },
     },

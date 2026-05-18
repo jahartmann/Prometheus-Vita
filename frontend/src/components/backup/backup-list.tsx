@@ -25,7 +25,8 @@ import { BackupDetailDialog } from "./backup-detail-dialog";
 import { BackupScheduleDialog } from "./backup-schedule-dialog";
 import { RestoreDialog } from "./restore-dialog";
 import { VzdumpDialog } from "./vzdump-dialog";
-import { backupApi } from "@/lib/api";
+import { backupApi, getApiErrorMessage } from "@/lib/api";
+import { toast } from "sonner";
 import { formatBytes } from "@/lib/utils";
 import type { ConfigBackup } from "@/types/api";
 
@@ -78,8 +79,11 @@ export function BackupList({ nodeId }: BackupListProps) {
       a.download = `backup-${backupId}.tar.gz`;
       a.click();
       window.URL.revokeObjectURL(url);
-    } catch {
-      /* ignore */
+      toast.success("Download gestartet");
+    } catch (err) {
+      toast.error("Download fehlgeschlagen", {
+        description: getApiErrorMessage(err, "Backup konnte nicht heruntergeladen werden."),
+      });
     }
   };
 

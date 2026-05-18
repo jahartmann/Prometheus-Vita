@@ -55,21 +55,21 @@ export function KpiCard({ title, value, subtitle, icon: Icon, color = "neutral",
       <CardContent className="flex items-start gap-3.5 p-4">
         <div
           className={cn(
-            "flex size-10 shrink-0 items-center justify-center rounded-lg ring-1 ring-inset",
+            "flex size-11 shrink-0 items-center justify-center rounded-lg ring-1 ring-inset",
             palette.bg,
             palette.ring
           )}
         >
-          <Icon className={cn("h-5 w-5", palette.text)} />
+          <Icon className={cn("h-6 w-6", palette.text)} />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          <p className="mb-2 truncate text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
             {title}
           </p>
-          <p className="mt-0.5 truncate text-2xl font-semibold tabular tracking-tight">
+          <p className="truncate text-3xl font-semibold tabular leading-none tracking-tight">
             {value}
           </p>
-          <div className="mt-0.5 flex items-center gap-1.5">
+          <div className="mt-1.5 flex items-center gap-1.5">
             {subtitle && (
               <p className="truncate text-xs text-muted-foreground">{subtitle}</p>
             )}
