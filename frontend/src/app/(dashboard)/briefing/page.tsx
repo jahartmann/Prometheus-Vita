@@ -146,6 +146,7 @@ export default function BriefingPage() {
   const [resolvingIds, setResolvingIds] = useState<Set<string>>(new Set());
   const [anomaliesOpen, setAnomaliesOpen] = useState(true);
   const [predictionsOpen, setPredictionsOpen] = useState(true);
+  const [latest, setLatest] = useState<{ summary?: string; generated_at?: string } | null>(null);
 
   const loadBriefing = useCallback(async () => {
     setIsLoading(true);
@@ -154,12 +155,16 @@ export default function BriefingPage() {
       briefingApi.getLive(),
       anomalyApi.listUnresolved().catch(() => []),
       predictionApi.listCritical().catch(() => []),
+      briefingApi.getLatest().catch(() => null),
     ])
-      .then(([briefing, rawAnomalies, rawPredictions]) => {
+      .then(([briefing, rawAnomalies, rawPredictions, latestBriefing]) => {
         setData(briefing);
         setAnomalies(toArray<AnomalyRecord>(rawAnomalies) as AnomalyRecord[]);
         setPredictions(
           toArray<MaintenancePrediction>(rawPredictions) as MaintenancePrediction[]
+        );
+        setLatest(
+          latestBriefing as { summary?: string; generated_at?: string } | null
         );
       })
       .catch(() => setError("Briefing konnte nicht geladen werden"))
@@ -324,6 +329,28 @@ export default function BriefingPage() {
               : "Warnungen vorhanden"}
         </Badge>
       </div>
+
+      {/* KI-Tageszusammenfassung (gespeichertes Briefing, vom LLM erzeugt) */}
+      {latest?.summary && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Zap className="h-4 w-4 text-primary" />
+              Tageszusammenfassung
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <p className="whitespace-pre-wrap text-sm text-muted-foreground">
+              {latest.summary}
+            </p>
+            {latest.generated_at && (
+              <p className="text-xs text-muted-foreground/70">
+                Erstellt: {new Date(latest.generated_at).toLocaleString("de-DE")}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* KPI Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
