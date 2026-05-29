@@ -555,6 +555,25 @@ func (s *Service) ExecuteApprovedTool(ctx context.Context, userID uuid.UUID, app
 		return nil, fmt.Errorf("user autonomy is read-only; write tool %q cannot execute", approval.ToolName)
 	}
 	resultStr, _ := s.executeToolDirect(ctx, approval.MessageID, approval.ToolName, tool, approval.Arguments)
+
+	// Record the outcome in the conversation so the user (and the next LLM turn)
+	// can see what the approved action actually did. Otherwise the last stored
+	// tool result stays the "pending_approval" placeholder and the agent can
+	// never report or reason about the result.
+	if s.msgRepo != nil {
+		outcome := &model.ChatMessage{
+			ConversationID: approval.ConversationID,
+			Role:           model.RoleAssistant,
+			Content:        fmt.Sprintf("✓ Freigegebene Aktion ausgeführt: %s\n\nErgebnis:\n%s", approval.ToolName, resultStr),
+		}
+		if err := s.msgRepo.Create(ctx, outcome); err != nil {
+			slog.Warn("failed to persist approved-tool outcome message",
+				slog.String("approval_id", approval.ID.String()),
+				slog.Any("error", err),
+			)
+		}
+	}
+
 	return json.RawMessage(resultStr), nil
 }
 

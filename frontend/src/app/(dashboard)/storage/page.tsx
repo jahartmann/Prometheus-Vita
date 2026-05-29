@@ -24,7 +24,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { formatBytes } from "@/lib/utils";
 import { storageApi, toArray } from "@/lib/api";
 import type { ClusterStorageItem } from "@/types/api";
-import { SnapshotAnalysis } from "@/components/storage/snapshot-analysis";
 
 // --- Types ---
 
@@ -355,7 +354,6 @@ export default function ClusterStoragePage() {
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [typeFilter, setTypeFilter] = useState<string>("");
   const [showTable, setShowTable] = useState(true);
-  const [showSnapshots, setShowSnapshots] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -701,18 +699,6 @@ export default function ClusterStoragePage() {
         )}
       </Card>
 
-      {/* Snapshot Analysis */}
-      <div>
-        <Button
-          variant="outline"
-          className="mb-3 gap-2"
-          onClick={() => setShowSnapshots(!showSnapshots)}
-        >
-          {showSnapshots ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-          Snapshot-Analyse
-        </Button>
-        {showSnapshots && <SnapshotAnalysis />}
-      </div>
     </div>
   );
 }

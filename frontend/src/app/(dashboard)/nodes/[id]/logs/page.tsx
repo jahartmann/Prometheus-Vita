@@ -12,6 +12,8 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { useNodeStore } from "@/stores/node-store";
 import { logApi } from "@/lib/api";
+import { useLogStream } from "@/hooks/use-log-stream";
+import { LogStream } from "@/components/logs/log-stream";
 import { AlertCircle, AlertTriangle, Activity, Zap } from "lucide-react";
 
 const LOG_FILES = [
@@ -67,6 +69,11 @@ export default function NodeLogsPage() {
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [filter, setFilter] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [liveMode, setLiveMode] = useState(false);
+
+  // Live tail via the /ws/logs WebSocket. enabled gates the connection so the
+  // hook can stay mounted while the user toggles between polling and live.
+  const { isConnected } = useLogStream({ nodeIds: [nodeId], enabled: liveMode });
 
   const containerRef = useRef<HTMLDivElement>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -220,11 +227,33 @@ export default function NodeLogsPage() {
         />
 
         <div className="flex items-center gap-2">
-          <Switch checked={autoRefresh} onCheckedChange={setAutoRefresh} />
+          <Switch
+            checked={autoRefresh}
+            onCheckedChange={setAutoRefresh}
+            disabled={liveMode}
+          />
           <span className="text-xs text-zinc-400">Auto-Refresh</span>
         </div>
 
-        <Button variant="outline" size="sm" onClick={fetchLogs} disabled={isLoading}>
+        <div className="flex items-center gap-2">
+          <Switch
+            checked={liveMode}
+            onCheckedChange={(v) => {
+              setLiveMode(v);
+              if (v) setAutoRefresh(false);
+            }}
+          />
+          <span className="text-xs text-zinc-400">
+            Live-Stream
+            {liveMode && (
+              <span className={isConnected ? "text-green-500" : "text-yellow-500"}>
+                {" "}{isConnected ? "● verbunden" : "○ verbinde…"}
+              </span>
+            )}
+          </span>
+        </div>
+
+        <Button variant="outline" size="sm" onClick={fetchLogs} disabled={isLoading || liveMode}>
           <RefreshCw className={`h-4 w-4 mr-1 ${isLoading ? "animate-spin" : ""}`} />
           Aktualisieren
         </Button>
@@ -238,6 +267,14 @@ export default function NodeLogsPage() {
       )}
 
       {/* Log Output */}
+      {liveMode ? (
+        <div
+          className="flex-1 min-h-0 overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950"
+          style={{ minHeight: "300px" }}
+        >
+          <LogStream autoScroll />
+        </div>
+      ) : (
       <div
         ref={containerRef}
         className="flex-1 overflow-auto bg-zinc-950 rounded-lg border border-zinc-800 p-3 font-mono text-sm min-h-0"
@@ -273,6 +310,7 @@ export default function NodeLogsPage() {
           );
         })}
       </div>
+      )}
     </div>
   );
 }
