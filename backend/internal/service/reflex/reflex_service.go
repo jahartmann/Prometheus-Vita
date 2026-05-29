@@ -499,7 +499,13 @@ func (s *Service) executeAction(ctx context.Context, rule *model.ReflexRule, n *
 			slog.Warn("reflex: snapshot missing vmid or vm_type", slog.String("rule", rule.Name))
 			return
 		}
-		slog.Info("reflex: snapshot created", slog.String("rule", rule.Name), slog.Int("vmid", int(vmidFloat)))
+		snapName := fmt.Sprintf("reflex-%s", time.Now().Format("20060102-150405"))
+		desc := fmt.Sprintf("Automatischer Snapshot durch Reflex-Regel '%s'", rule.Name)
+		if _, err := s.nodeSvc.CreateSnapshot(ctx, n.ID, int(vmidFloat), vmType, snapName, desc, false); err != nil {
+			slog.Warn("reflex: snapshot failed", slog.String("rule", rule.Name), slog.Any("error", err))
+			return
+		}
+		slog.Info("reflex: snapshot created", slog.String("rule", rule.Name), slog.Int("vmid", int(vmidFloat)), slog.String("snapshot", snapName))
 
 	case model.ReflexActionAIAnalyze:
 		subject := fmt.Sprintf("Reflex KI-Analyse: %s", rule.Name)

@@ -287,7 +287,7 @@ func main() {
 	predictionSvc.SetNodeService(nodeSvc)
 
 	// Phase 6 Services
-	driftSvc := drift.NewService(driftRepo, backupRepo, backupFileRepo, nodeRepo, encryptor, sshPool, llmRegistry)
+	driftSvc := drift.NewService(driftRepo, backupRepo, backupFileRepo, nodeRepo, encryptor, sshPool, llmRegistry, backupSvc)
 	envSvc := environment.NewService(envRepo, nodeRepo)
 	updateSvc := updates.NewService(updateRepo, nodeRepo, encryptor, sshPool)
 	rightsizingSvc := rightsizing.NewService(recRepo, nodeRepo, clientFactory)
