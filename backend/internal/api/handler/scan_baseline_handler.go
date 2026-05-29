@@ -11,11 +11,12 @@ import (
 )
 
 type ScanBaselineHandler struct {
-	repo repository.ScanBaselineRepository
+	repo     repository.ScanBaselineRepository
+	scanRepo repository.NetworkScanRepository
 }
 
-func NewScanBaselineHandler(repo repository.ScanBaselineRepository) *ScanBaselineHandler {
-	return &ScanBaselineHandler{repo: repo}
+func NewScanBaselineHandler(repo repository.ScanBaselineRepository, scanRepo repository.NetworkScanRepository) *ScanBaselineHandler {
+	return &ScanBaselineHandler{repo: repo, scanRepo: scanRepo}
 }
 
 func (h *ScanBaselineHandler) ListByNode(c echo.Context) error {
@@ -48,6 +49,21 @@ func (h *ScanBaselineHandler) Create(c echo.Context) error {
 		Label:         req.Label,
 		WhitelistJSON: req.WhitelistJSON,
 	}
+
+	// Capture the node's latest completed quick scan as the baseline snapshot so
+	// future scans can be compared against this known-good state. Without this
+	// the baseline_json was always empty and "baseline compare" did nothing.
+	if h.scanRepo != nil {
+		if scans, err := h.scanRepo.ListByNode(c.Request().Context(), nodeID, 10, 0); err == nil {
+			for _, sc := range scans {
+				if sc.ScanType == "quick" && len(sc.ResultsJSON) > 0 {
+					baseline.BaselineJSON = sc.ResultsJSON
+					break
+				}
+			}
+		}
+	}
+
 	if err := h.repo.Create(c.Request().Context(), baseline); err != nil {
 		return response.InternalError(c, "failed to create baseline")
 	}

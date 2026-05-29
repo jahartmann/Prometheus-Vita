@@ -194,6 +194,7 @@ func (s *ScanScheduler) TriggerScan(ctx context.Context, nodeID uuid.UUID, scanT
 			return scan, fmt.Errorf("netscan: marshal full scan results: %w", err)
 		}
 		s.persistFullScanDevices(ctx, nodeID, fsr)
+		s.discoverDevices(ctx, nodeID, runner)
 	}
 
 	if compErr := s.scanRepo.Complete(ctx, scan.ID, resultsJSON); compErr != nil {
@@ -296,6 +297,7 @@ func (s *ScanScheduler) scanNode(ctx context.Context, nodeID uuid.UUID, scanType
 			return fmt.Errorf("netscan: marshal full results: %w", err)
 		}
 		s.persistFullScanDevices(ctx, nodeID, fsr)
+		s.discoverDevices(ctx, nodeID, runner)
 	}
 
 	if compErr := s.scanRepo.Complete(ctx, scan.ID, resultsJSON); compErr != nil {
@@ -405,6 +407,54 @@ func (s *ScanScheduler) persistFullScanDevices(ctx context.Context, nodeID uuid.
 			)
 		}
 	}
+}
+
+// discoverDevices sweeps the node's local subnet for live hosts and upserts them
+// as network devices. Best-effort: failures are logged, not fatal. New hosts are
+// recorded as unknown (is_known=false); Upsert preserves an operator's known
+// marking for already-recorded devices. Previously only 127.0.0.1 was ever
+// stored, so real LAN devices were never discovered.
+func (s *ScanScheduler) discoverDevices(ctx context.Context, nodeID uuid.UUID, runner SSHRunner) {
+	subnet, err := deriveSubnet(ctx, runner)
+	if err != nil {
+		slog.Debug("netscan: subnet discovery skipped",
+			slog.String("node_id", nodeID.String()),
+			slog.Any("error", err),
+		)
+		return
+	}
+	hosts, err := RunSubnetDiscovery(ctx, runner, subnet)
+	if err != nil {
+		slog.Warn("netscan: subnet discovery failed",
+			slog.String("node_id", nodeID.String()),
+			slog.String("subnet", subnet),
+			slog.Any("error", err),
+		)
+		return
+	}
+	for _, h := range hosts {
+		if h.IP == "" {
+			continue
+		}
+		dev := &model.NetworkDevice{
+			NodeID:   nodeID,
+			IP:       h.IP,
+			MAC:      h.MAC,
+			Hostname: h.Hostname,
+			IsKnown:  false,
+		}
+		if err := s.deviceRepo.Upsert(ctx, dev); err != nil {
+			slog.Error("netscan: upsert discovered device",
+				slog.String("ip", h.IP),
+				slog.Any("error", err),
+			)
+		}
+	}
+	slog.Info("netscan: subnet discovery completed",
+		slog.String("node_id", nodeID.String()),
+		slog.String("subnet", subnet),
+		slog.Int("hosts", len(hosts)),
+	)
 }
 
 // runnerForNode fetches the node's SSH config from the repository and returns

@@ -573,7 +573,7 @@ func main() {
 		NetworkScan:       handler.NewNetworkScanHandler(netScanner, networkScanRepo),
 		NetworkDevice:     handler.NewNetworkDeviceHandler(networkDeviceRepo),
 		NetworkAnomaly:    handler.NewNetworkAnomalyHandler(networkAnomalyRepo),
-		ScanBaseline:      handler.NewScanBaselineHandler(scanBaselineRepo),
+		ScanBaseline:      handler.NewScanBaselineHandler(scanBaselineRepo, networkScanRepo),
 		Bandwidth:         handler.NewBandwidthHandler(nodeSvc),
 	}
 
