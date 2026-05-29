@@ -11,7 +11,6 @@ import type {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { KpiCard } from "@/components/ui/kpi-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
   Collapsible,
@@ -19,8 +18,6 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import {
-  Server,
-  ServerCog,
   Cpu,
   MemoryStick,
   HardDrive,
@@ -352,41 +349,9 @@ export default function BriefingPage() {
         </Card>
       )}
 
-      {/* KPI Cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard
-          title="Server"
-          value={`${data.nodes_online}/${data.nodes_total}`}
-          subtitle={
-            data.nodes_offline > 0
-              ? `${data.nodes_offline} offline`
-              : "Alle online"
-          }
-          icon={Server}
-          color={data.nodes_offline > 0 ? "red" : "green"}
-        />
-        <KpiCard
-          title="VMs / Container"
-          value={data.vms_total}
-          subtitle={`${data.vms_running} aktiv, ${data.vms_stopped} gestoppt`}
-          icon={ServerCog}
-          color="blue"
-        />
-        <KpiCard
-          title="CPU-Durchschnitt"
-          value={`${data.avg_cpu.toFixed(1)}%`}
-          subtitle="Cluster-weit"
-          icon={Cpu}
-          color={data.avg_cpu > 80 ? "red" : data.avg_cpu > 60 ? "orange" : "green"}
-        />
-        <KpiCard
-          title="RAM-Durchschnitt"
-          value={`${data.avg_ram.toFixed(1)}%`}
-          subtitle="Cluster-weit"
-          icon={MemoryStick}
-          color={data.avg_ram > 85 ? "red" : data.avg_ram > 70 ? "orange" : "green"}
-        />
-      </div>
+      {/* Cluster KPIs (Nodes/CPU/RAM/VMs) intentionally omitted here — they are
+          shown on the Lagezentrum dashboard and the Cluster page; the Lagebrief
+          focuses on the AI summary, actions, anomalies and predictions. */}
 
       {/* Recommended Actions */}
       {actions.length > 0 && (
@@ -816,113 +781,19 @@ export default function BriefingPage() {
         </Card>
       </div>
 
-      {/* Node Details */}
+      {/* The detailed per-node comparison table and storage usage live on the
+          Cluster page — link there instead of duplicating them here. */}
       <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Server className="h-4 w-4 text-muted-foreground" />
-            Node-Übersicht
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {data.node_details && data.node_details.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-left text-muted-foreground">
-                    <th className="pb-2 font-medium">Node</th>
-                    <th className="pb-2 font-medium">Status</th>
-                    <th className="pb-2 font-medium text-right">CPU</th>
-                    <th className="pb-2 font-medium text-right">RAM</th>
-                    <th className="pb-2 font-medium text-right">Disk</th>
-                    <th className="pb-2 font-medium text-right">VMs</th>
-                    <th className="pb-2 font-medium text-right">Uptime</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {data.node_details.map((node) => (
-                    <tr key={node.node_id} className="hover:bg-muted/50">
-                      <td className="py-2.5 font-medium">{node.node_name}</td>
-                      <td className="py-2.5">
-                        <Badge
-                          variant={node.is_online ? "success" : "destructive"}
-                          className="text-xs"
-                        >
-                          {node.is_online ? "Online" : "Offline"}
-                        </Badge>
-                      </td>
-                      <td className="py-2.5 text-right font-mono">
-                        {node.is_online
-                          ? `${(node.cpu_usage ?? 0).toFixed(1)}%`
-                          : "-"}
-                      </td>
-                      <td className="py-2.5 text-right font-mono">
-                        {node.is_online
-                          ? `${(node.mem_pct ?? 0).toFixed(1)}%`
-                          : "-"}
-                      </td>
-                      <td className="py-2.5 text-right font-mono">
-                        {node.is_online
-                          ? `${(node.disk_pct ?? 0).toFixed(1)}%`
-                          : "-"}
-                      </td>
-                      <td className="py-2.5 text-right">
-                        {node.is_online
-                          ? `${node.vm_running ?? 0}/${node.vm_count ?? 0}`
-                          : "-"}
-                      </td>
-                      <td className="py-2.5 text-right text-muted-foreground">
-                        <span className="flex items-center justify-end gap-1">
-                          <Clock className="h-3 w-3" />
-                          {node.is_online && node.uptime > 0
-                            ? formatUptime(node.uptime)
-                            : "-"}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">Keine Nodes konfiguriert</p>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Disk Usage */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <HardDrive className="h-4 w-4 text-muted-foreground" />
-            Speicher-Übersicht
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center gap-4">
-            <div className="flex-1">
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-sm text-muted-foreground">
-                  Durchschnittliche Disk-Auslastung
-                </span>
-                <span className="text-sm font-mono font-medium">
-                  {data.avg_disk.toFixed(1)}%
-                </span>
-              </div>
-              <div className="h-2.5 w-full rounded-full bg-muted">
-                <div
-                  className={`h-full rounded-full transition-all ${
-                    data.avg_disk > 90
-                      ? "bg-red-500"
-                      : data.avg_disk > 75
-                        ? "bg-orange-500"
-                        : "bg-green-500"
-                  }`}
-                  style={{ width: `${Math.min(data.avg_disk, 100)}%` }}
-                />
-              </div>
-            </div>
-          </div>
+        <CardContent className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-muted-foreground">
+            Detaillierter Node-Vergleich (CPU/RAM/Disk/VMs) und Speicher-Auslastung
+          </p>
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/cluster" className="gap-1.5">
+              Zum Cluster
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </Button>
         </CardContent>
       </Card>
     </div>
