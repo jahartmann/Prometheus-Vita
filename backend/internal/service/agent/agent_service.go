@@ -260,11 +260,12 @@ func (s *Service) Chat(ctx context.Context, userID uuid.UUID, req model.ChatRequ
 		return nil, fmt.Errorf("list messages: %w", err)
 	}
 
-	// Sliding window: only keep the last N messages to avoid exceeding LLM context windows
+	// Sliding window: keep the last N messages to avoid exceeding LLM context
+	// windows, but never start the window on an orphaned tool result whose
+	// assistant tool_calls message was cut off — that triggers a hard 400 from
+	// OpenAI/Anthropic and breaks the conversation permanently.
 	const maxContextMessages = 50
-	if len(existingMsgs) > maxContextMessages {
-		existingMsgs = existingMsgs[len(existingMsgs)-maxContextMessages:]
-	}
+	existingMsgs = pairAwareWindow(existingMsgs, maxContextMessages)
 
 	// 3. Build LLM messages with autonomy-aware system prompt
 	llmMessages := []llm.Message{
@@ -554,6 +555,25 @@ func (s *Service) ExecuteApprovedTool(ctx context.Context, userID uuid.UUID, app
 		return nil, fmt.Errorf("user autonomy is read-only; write tool %q cannot execute", approval.ToolName)
 	}
 	resultStr, _ := s.executeToolDirect(ctx, approval.MessageID, approval.ToolName, tool, approval.Arguments)
+
+	// Record the outcome in the conversation so the user (and the next LLM turn)
+	// can see what the approved action actually did. Otherwise the last stored
+	// tool result stays the "pending_approval" placeholder and the agent can
+	// never report or reason about the result.
+	if s.msgRepo != nil {
+		outcome := &model.ChatMessage{
+			ConversationID: approval.ConversationID,
+			Role:           model.RoleAssistant,
+			Content:        fmt.Sprintf("✓ Freigegebene Aktion ausgeführt: %s\n\nErgebnis:\n%s", approval.ToolName, resultStr),
+		}
+		if err := s.msgRepo.Create(ctx, outcome); err != nil {
+			slog.Warn("failed to persist approved-tool outcome message",
+				slog.String("approval_id", approval.ID.String()),
+				slog.Any("error", err),
+			)
+		}
+	}
+
 	return json.RawMessage(resultStr), nil
 }
 

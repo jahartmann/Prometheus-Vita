@@ -397,8 +397,14 @@ func (h *NodeHandler) scanQEMUPorts(ctx context.Context, nodeID uuid.UUID, vmid 
 	if err != nil {
 		errMsg := err.Error()
 		if strings.Contains(errMsg, "agent") || strings.Contains(errMsg, "QEMU guest agent") {
+			// No in-guest agent — fall back to an external nmap scan from the
+			// node (no agent required). Only succeeds if the VM's IP is in the
+			// node's ARP table and nmap finds open ports.
+			if ext := h.scanQEMUPortsExternal(ctx, nodeID, vmid, group); ext.ScanStatus == "external" {
+				return ext
+			}
 			group.ScanStatus = "no_agent"
-			group.ScanError = "QEMU Guest Agent nicht verfuegbar"
+			group.ScanError = "QEMU Guest Agent nicht aktiv. In Proxmox unter VM → Optionen aktivieren (agent: 1) und qemu-guest-agent im Gast starten — oder externer Scan war nicht möglich (keine IP in der ARP-Tabelle)."
 		} else {
 			slog.Warn("qemu port scan failed", slog.Int("vmid", vmid), slog.Any("error", err))
 			group.ScanStatus = "error"

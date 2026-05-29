@@ -218,7 +218,7 @@ export default function DriftPage() {
     return (
       <div className="space-y-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Konfigurations-Drift</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Konfigurations-Drift</h1>
           <p className="text-sm text-muted-foreground">
             Vergleicht aktuelle VM-Konfigurationen mit der letzten gesicherten Baseline.
           </p>
@@ -233,7 +233,7 @@ export default function DriftPage() {
     <div className="space-y-4">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Konfigurations-Drift</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Konfigurations-Drift</h1>
         <p className="text-sm text-muted-foreground">
           Vergleicht aktuelle VM-Konfigurationen mit der letzten gesicherten Baseline.
         </p>

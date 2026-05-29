@@ -11,6 +11,7 @@ import (
 	"github.com/antigravity/prometheus/internal/model"
 	"github.com/antigravity/prometheus/internal/proxmox"
 	"github.com/antigravity/prometheus/internal/repository"
+	nodeService "github.com/antigravity/prometheus/internal/service/node"
 	"github.com/google/uuid"
 )
 
@@ -134,7 +135,7 @@ func (s *SnapshotPolicyService) ExecutePolicy(ctx context.Context, policy *model
 	snapName := fmt.Sprintf("auto-%s-%s", policy.Name, time.Now().Format("20060102-150405"))
 	description := fmt.Sprintf("Automatischer Snapshot (Richtlinie: %s)", policy.Name)
 
-	_, err = client.CreateSnapshot(ctx, pveNodes[0], policy.VMID, policy.VMType, snapName, description, false)
+	_, err = client.CreateSnapshot(ctx, nodeService.ResolvePVENode(node, pveNodes), policy.VMID, policy.VMType, snapName, description, false)
 	if err != nil {
 		return fmt.Errorf("create snapshot: %w", err)
 	}
@@ -149,7 +150,7 @@ func (s *SnapshotPolicyService) ExecutePolicy(ctx context.Context, policy *model
 	_ = s.policyRepo.UpdateLastRun(ctx, policy.ID, time.Now())
 
 	// Enforce retention
-	snapshots, err := client.ListSnapshots(ctx, pveNodes[0], policy.VMID, policy.VMType)
+	snapshots, err := client.ListSnapshots(ctx, nodeService.ResolvePVENode(node, pveNodes), policy.VMID, policy.VMType)
 	if err != nil {
 		slog.Warn("failed to list snapshots for retention", slog.Any("error", err))
 		return nil
@@ -184,7 +185,7 @@ func (s *SnapshotPolicyService) ExecutePolicy(ctx context.Context, policy *model
 	if len(autoSnaps) > maxKeep {
 		toDelete := autoSnaps[maxKeep:]
 		for _, snap := range toDelete {
-			_, err := client.DeleteSnapshot(ctx, pveNodes[0], policy.VMID, policy.VMType, snap.name)
+			_, err := client.DeleteSnapshot(ctx, nodeService.ResolvePVENode(node, pveNodes), policy.VMID, policy.VMType, snap.name)
 			if err != nil {
 				slog.Warn("failed to delete old snapshot",
 					slog.String("snapshot", snap.name),

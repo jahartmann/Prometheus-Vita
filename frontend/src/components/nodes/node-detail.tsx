@@ -208,59 +208,19 @@ export function NodeDetail({ node }: NodeDetailProps) {
         </div>
       )}
 
+      {/* Activity strip — resource gauges (CPU/RAM/Swap/Disk) live in the
+          Übersicht tab below, so CPU/RAM/Disk are not repeated here. */}
       {status && (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-          <Card>
-            <CardContent className="flex items-center gap-3 p-4">
-              <Cpu className="h-5 w-5 text-primary" />
-              <div>
-                <p className="text-xs text-muted-foreground">CPU</p>
-                <p className="text-lg font-bold">
-                  {formatPercentage(cpuUsage)}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {status.cpu_cores} Cores
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="flex items-center gap-3 p-4">
-              <MemoryStick className="h-5 w-5 text-primary" />
-              <div>
-                <p className="text-xs text-muted-foreground">RAM</p>
-                <p className="text-lg font-bold">
-                  {formatPercentage(memUsage)}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {formatBytes(status.memory_used)} / {formatBytes(status.memory_total)}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="flex items-center gap-3 p-4">
-              <HardDrive className="h-5 w-5 text-primary" />
-              <div>
-                <p className="text-xs text-muted-foreground">Disk</p>
-                <p className="text-lg font-bold">
-                  {formatPercentage(diskUsage)}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {formatBytes(status.disk_used)} / {formatBytes(status.disk_total)}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Card>
             <CardContent className="flex items-center gap-3 p-4">
               <Network className="h-5 w-5 text-primary" />
               <div>
                 <p className="text-xs text-muted-foreground">Netzwerk</p>
-                <p className="text-sm font-bold text-blue-500">
+                <p className="text-sm font-bold text-sky-500">
                   &darr; {formatBandwidth(latestMetrics?.network_in ?? 0)}
                 </p>
-                <p className="text-sm font-bold text-green-500">
+                <p className="text-sm font-bold text-emerald-500">
                   &uarr; {formatBandwidth(latestMetrics?.network_out ?? 0)}
                 </p>
               </div>

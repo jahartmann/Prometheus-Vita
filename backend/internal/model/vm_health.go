@@ -106,15 +106,16 @@ type UpdateSnapshotPolicyRequest struct {
 
 // ScheduledAction defines a cron-based action for a VM.
 type ScheduledAction struct {
-	ID           uuid.UUID `json:"id"`
-	NodeID       uuid.UUID `json:"node_id"`
-	VMID         *int      `json:"vmid,omitempty"`
-	VMType       string    `json:"vm_type,omitempty"`
-	Action       string    `json:"action"`
-	ScheduleCron string    `json:"schedule_cron"`
-	IsActive     bool      `json:"is_active"`
-	Description  string    `json:"description,omitempty"`
-	CreatedAt    time.Time `json:"created_at"`
+	ID           uuid.UUID  `json:"id"`
+	NodeID       uuid.UUID  `json:"node_id"`
+	VMID         *int       `json:"vmid,omitempty"`
+	VMType       string     `json:"vm_type,omitempty"`
+	Action       string     `json:"action"`
+	ScheduleCron string     `json:"schedule_cron"`
+	IsActive     bool       `json:"is_active"`
+	Description  string     `json:"description,omitempty"`
+	LastRunAt    *time.Time `json:"last_run_at,omitempty"`
+	CreatedAt    time.Time  `json:"created_at"`
 }
 
 type CreateScheduledActionRequest struct {

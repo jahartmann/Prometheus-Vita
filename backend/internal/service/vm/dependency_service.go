@@ -7,6 +7,7 @@ import (
 	"github.com/antigravity/prometheus/internal/model"
 	"github.com/antigravity/prometheus/internal/proxmox"
 	"github.com/antigravity/prometheus/internal/repository"
+	nodeService "github.com/antigravity/prometheus/internal/service/node"
 	"github.com/google/uuid"
 )
 
@@ -103,7 +104,7 @@ func (s *DependencyService) enrichDependencies(ctx context.Context, deps []model
 		if err != nil || len(pveNodes) == 0 {
 			continue
 		}
-		vms, err := client.GetVMs(ctx, pveNodes[0])
+		vms, err := client.GetVMs(ctx, nodeService.ResolvePVENode(node, pveNodes))
 		if err != nil {
 			continue
 		}

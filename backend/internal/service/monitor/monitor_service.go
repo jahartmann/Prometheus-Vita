@@ -224,8 +224,11 @@ func (s *Service) GetClusterHistory(ctx context.Context, since, until time.Time)
 			CPUAvg:  cpuSum / n,
 			MemPct:  memPct,
 			DiskPct: diskPct,
-			NetIn:   netIn / int64(n),
-			NetOut:  netOut / int64(n),
+			// Network is a per-node rate; sum across nodes for total cluster
+			// throughput rather than averaging (which under-reported by the
+			// node count).
+			NetIn:   netIn,
+			NetOut:  netOut,
 		})
 	}
 

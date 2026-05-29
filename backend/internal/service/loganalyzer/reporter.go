@@ -128,8 +128,11 @@ func (r *Reporter) analyze(ctx context.Context, req model.AnalyzeLogsRequest, sc
 // node in the request, filtered to the requested time range.
 func (r *Reporter) collectLogs(ctx context.Context, req model.AnalyzeLogsRequest) ([]string, error) {
 	// Redis Stream IDs are millisecond timestamps; use them to bound the read.
+	// The end bound must be a bare "<ms>" (Redis auto-fills the sequence to the
+	// max) — the previous "<ms>-+" form is an invalid stream ID that made
+	// XRANGE error out, so AI log analysis always ran on zero entries.
 	minID := fmt.Sprintf("%d-0", req.TimeFrom.UnixMilli())
-	maxID := fmt.Sprintf("%d-+", req.TimeTo.UnixMilli())
+	maxID := fmt.Sprintf("%d", req.TimeTo.UnixMilli())
 
 	var lines []string
 

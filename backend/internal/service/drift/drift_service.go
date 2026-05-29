@@ -30,6 +30,7 @@ type Service struct {
 	sshPool     *ssh.Pool
 	collector   *backup.FileCollector
 	llmRegistry *llm.Registry
+	backupSvc   *backup.Service
 }
 
 func NewService(
@@ -40,6 +41,7 @@ func NewService(
 	encryptor *crypto.Encryptor,
 	sshPool *ssh.Pool,
 	llmRegistry *llm.Registry,
+	backupSvc *backup.Service,
 ) *Service {
 	return &Service{
 		driftRepo:   driftRepo,
@@ -50,6 +52,7 @@ func NewService(
 		sshPool:     sshPool,
 		collector:   backup.NewFileCollector(),
 		llmRegistry: llmRegistry,
+		backupSvc:   backupSvc,
 	}
 }
 
@@ -417,6 +420,19 @@ func (s *Service) AcceptBaseline(ctx context.Context, checkID uuid.UUID) error {
 	check, err := s.driftRepo.GetByID(ctx, checkID)
 	if err != nil {
 		return fmt.Errorf("get drift check: %w", err)
+	}
+
+	// Capture the current node state as a fresh backup so it becomes the new
+	// baseline that CheckDrift (GetLatestByNode) compares against. Without this
+	// the next scheduled check would diff against the same old backup and
+	// re-report the identical drift the operator just accepted.
+	if s.backupSvc != nil {
+		if _, err := s.backupSvc.CreateBackup(ctx, check.NodeID, model.CreateBackupRequest{
+			BackupType: model.BackupTypeManual,
+			Notes:      "Baseline akzeptiert nach Drift-Erkennung",
+		}); err != nil {
+			return fmt.Errorf("create baseline backup: %w", err)
+		}
 	}
 
 	now := time.Now().UTC()

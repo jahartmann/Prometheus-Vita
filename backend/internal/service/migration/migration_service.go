@@ -1017,7 +1017,33 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 	// If we restore with the same VMID, we must first unregister the VM from the source.
 	// We save the source config so we can re-register on failure.
 	var sourceConfigBackup string
+	// stoppedForUnregister is set when we force-stop a still-running source VM
+	// (snapshot mode) before unregistering it; the restore-failure rollback uses
+	// it to restart the source so a failed migration does not leave it down.
+	stoppedForUnregister := false
 	if restoreVMID == m.VMID {
+		// Data-integrity guard: once we unregister the source config and restore
+		// the SAME VMID on the target, a still-running source process would hold
+		// the same disk image as the newly-restored target VM (split-brain). In
+		// snapshot mode the source was never stopped, so stop it now before
+		// unregistering. The vzdump was already taken live (crash-consistent),
+		// so force-stopping the soon-to-be-discarded source is safe.
+		if !vmWasStopped {
+			s.broadcastLog(m.ID, fmt.Sprintf("Stoppe Source-VM %d vor Entregistrierung (gleiche VMID auf Target)...", m.VMID))
+			stopUPID, stopErr := srcClient.StopVM(ctx, srcPVENode, m.VMID, m.VMType)
+			if stopErr != nil {
+				handleError("restoring", fmt.Errorf("Source-VM vor Entregistrierung stoppen: %w", stopErr))
+				return
+			}
+			if err := s.waitForTask(ctx, srcClient, srcPVENode, stopUPID, 300*time.Second); err != nil {
+				handleError("restoring", fmt.Errorf("warten auf Stop der Source-VM: %w", err))
+				return
+			}
+			vmWasStopped = true
+			stoppedForUnregister = true
+			s.broadcastLog(m.ID, "✓ Source-VM gestoppt")
+		}
+
 		s.broadcastLog(m.ID, fmt.Sprintf("Entregistriere VM %d von Source-Node (Cluster-VMID-Konflikt)...", m.VMID))
 
 		// Save the config for rollback
@@ -1059,6 +1085,12 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 	if err != nil {
 		rbErr := s.rollbackSourceConfig(ctx, srcSSHClient, srcPVENode, m.VMID, m.VMType, sourceConfigBackup)
 		_, _ = tgtSSHClient.RunCommand(ctx, "rm -f "+shellQuote(targetVzdumpPath))
+		if stoppedForUnregister && rbErr == nil {
+			s.broadcastLog(m.ID, fmt.Sprintf("Starte Source-VM %d nach Rollback wieder...", m.VMID))
+			if _, startErr := srcClient.StartVM(ctx, srcPVENode, m.VMID, m.VMType); startErr != nil {
+				s.broadcastLog(m.ID, fmt.Sprintf("⚠ Source-VM konnte nach Rollback nicht wieder gestartet werden: %v", startErr))
+			}
+		}
 		finalErr := fmt.Errorf("restore konnte nicht gestartet werden: %w", err)
 		if rbErr != nil {
 			// Source rollback also failed — the VM is orphaned. This MUST be
@@ -1082,6 +1114,12 @@ func (s *Service) executeMigration(ctx context.Context, migrationID uuid.UUID) {
 		taskLog := s.getTaskLogForError(ctx, tgtClient, tgtPVENode, restoreUPID)
 		rbErr := s.rollbackSourceConfig(ctx, srcSSHClient, srcPVENode, m.VMID, m.VMType, sourceConfigBackup)
 		_, _ = tgtSSHClient.RunCommand(ctx, "rm -f "+shellQuote(targetVzdumpPath))
+		if stoppedForUnregister && rbErr == nil {
+			s.broadcastLog(m.ID, fmt.Sprintf("Starte Source-VM %d nach Rollback wieder...", m.VMID))
+			if _, startErr := srcClient.StartVM(ctx, srcPVENode, m.VMID, m.VMType); startErr != nil {
+				s.broadcastLog(m.ID, fmt.Sprintf("⚠ Source-VM konnte nach Rollback nicht wieder gestartet werden: %v", startErr))
+			}
+		}
 		finalErr := fmt.Errorf("restore fehlgeschlagen: %w\n\nTask-Log:\n%s", err, taskLog)
 		if rbErr != nil {
 			s.broadcastLog(m.ID, fmt.Sprintf("✗ KRITISCH: Source-Config-Rollback fehlgeschlagen: %v", rbErr))

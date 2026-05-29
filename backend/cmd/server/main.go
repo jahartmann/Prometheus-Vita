@@ -287,7 +287,7 @@ func main() {
 	predictionSvc.SetNodeService(nodeSvc)
 
 	// Phase 6 Services
-	driftSvc := drift.NewService(driftRepo, backupRepo, backupFileRepo, nodeRepo, encryptor, sshPool, llmRegistry)
+	driftSvc := drift.NewService(driftRepo, backupRepo, backupFileRepo, nodeRepo, encryptor, sshPool, llmRegistry, backupSvc)
 	envSvc := environment.NewService(envRepo, nodeRepo)
 	updateSvc := updates.NewService(updateRepo, nodeRepo, encryptor, sshPool)
 	rightsizingSvc := rightsizing.NewService(recRepo, nodeRepo, clientFactory)
@@ -350,7 +350,7 @@ func main() {
 	vmRightsizingSvc := vmService.NewRightsizingService(nodeRepo, clientFactory)
 	vmAnomalySvc := vmService.NewAnomalyService(nodeRepo, metricsRepo, clientFactory)
 	snapshotPolicySvc := vmService.NewSnapshotPolicyService(snapshotPolicyRepo, nodeRepo, clientFactory)
-	scheduledActionSvc := vmService.NewScheduledActionService(scheduledActionRepo)
+	scheduledActionSvc := vmService.NewScheduledActionService(scheduledActionRepo, nodeSvc)
 	vmDependencySvc := vmService.NewDependencyService(vmDependencyRepo, nodeRepo, clientFactory)
 	operationsSvc := operationsService.NewService(
 		nodeRepo,
@@ -476,6 +476,12 @@ func main() {
 	sched.AddJob(updateCheckJob)
 	rightsizingJob := scheduler.NewRightsizingJob(rightsizingSvc, nodeRepo, 24*time.Hour)
 	sched.AddJob(rightsizingJob)
+	// VM snapshot policies and scheduled VM actions are cron-based; poll every
+	// 60s (cron granularity is minutes) and run the ones that are due.
+	snapshotPolicyJob := scheduler.NewSnapshotPolicyJob(snapshotPolicyRepo, snapshotPolicySvc, 60*time.Second)
+	sched.AddJob(snapshotPolicyJob)
+	scheduledActionJob := scheduler.NewScheduledActionJob(scheduledActionRepo, scheduledActionSvc, 60*time.Second)
+	sched.AddJob(scheduledActionJob)
 	keyRotationJob := scheduler.NewKeyRotationJob(sshkeySvc, 1*time.Hour)
 	sched.AddJob(keyRotationJob)
 	reflexEvalJob := scheduler.NewReflexEvaluationJob(reflexSvc, 30*time.Second)
@@ -490,7 +496,7 @@ func main() {
 	sched.AddJob(netFullScanJob)
 	logRetentionJob := scheduler.NewLogRetentionJob(logAnomalyRepo, logAnalysisRepo, networkScanRepo, networkAnomalyRepo, 24*time.Hour)
 	sched.AddJob(logRetentionJob)
-	logReportJob := scheduler.NewLogReportScheduleJob(logReportScheduleRepo, logReporter, 60*time.Second)
+	logReportJob := scheduler.NewLogReportScheduleJob(logReportScheduleRepo, logReporter, notifSvc, 60*time.Second)
 	sched.AddJob(logReportJob)
 
 	if telegramBotEnabled && telegramBotSvc != nil {
@@ -567,7 +573,7 @@ func main() {
 		NetworkScan:       handler.NewNetworkScanHandler(netScanner, networkScanRepo),
 		NetworkDevice:     handler.NewNetworkDeviceHandler(networkDeviceRepo),
 		NetworkAnomaly:    handler.NewNetworkAnomalyHandler(networkAnomalyRepo),
-		ScanBaseline:      handler.NewScanBaselineHandler(scanBaselineRepo),
+		ScanBaseline:      handler.NewScanBaselineHandler(scanBaselineRepo, networkScanRepo),
 		Bandwidth:         handler.NewBandwidthHandler(nodeSvc),
 	}
 

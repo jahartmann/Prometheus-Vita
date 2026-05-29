@@ -971,6 +971,15 @@ func (s *Service) ShutdownVM(ctx context.Context, nodeID uuid.UUID, vmid int, vm
 	return client.ShutdownVM(ctx, pveNode, vmid, vmType)
 }
 
+func (s *Service) RebootVM(ctx context.Context, nodeID uuid.UUID, vmid int, vmType string) (string, error) {
+	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
+	if err != nil {
+		return "", err
+	}
+
+	return client.RebootVM(ctx, pveNode, vmid, vmType)
+}
+
 func (s *Service) SuspendVM(ctx context.Context, nodeID uuid.UUID, vmid int) (string, error) {
 	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
 	if err != nil {
@@ -1057,6 +1066,15 @@ func (s *Service) GetGuestOSFamily(ctx context.Context, nodeID uuid.UUID, vmid i
 		slog.Int("vmid", vmid), slog.String("os_id", info.ID),
 		slog.String("os_family", family), slog.String("pretty_name", info.PrettyName))
 	return family
+}
+
+// GetVMConfig returns the raw Proxmox VM/CT configuration map (net0, etc.).
+func (s *Service) GetVMConfig(ctx context.Context, nodeID uuid.UUID, vmid int, vmType string) (map[string]interface{}, error) {
+	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
+	if err != nil {
+		return nil, err
+	}
+	return client.GetVMConfig(ctx, pveNode, vmid, vmType)
 }
 
 func (s *Service) GetTermProxy(ctx context.Context, nodeID uuid.UUID, vmid int, vmType string) (*proxmox.VNCProxyResponse, error) {

@@ -63,7 +63,7 @@ export default function RootCausePage() {
     <div className="space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Ursachenanalyse</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Ursachenanalyse</h1>
           <p className="text-sm text-muted-foreground">Korreliert Metriken, Sicherheit, Vorhersagen, Backups, Migrationen und Änderungen zu konkreten Verdachtsmomenten.</p>
         </div>
         <Button variant="outline" size="sm" onClick={load} disabled={isLoading}>

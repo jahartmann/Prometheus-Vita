@@ -83,7 +83,7 @@ func (c *Client) doRequest(ctx context.Context, method, path string) (json.RawMe
 		return nil, fmt.Errorf("authentication failed (HTTP %d) for %s: %s", resp.StatusCode, path, truncateBody(body))
 	}
 	if resp.StatusCode == 500 && strings.Contains(string(body), "QEMU guest agent is not running") {
-		return nil, fmt.Errorf("QEMU Guest Agent ist nicht aktiv auf der VM (Pfad: %s). Bitte qemu-guest-agent installieren und starten", path)
+		return nil, fmt.Errorf("QEMU guest agent is not running (Pfad: %s). In Proxmox unter VM → Optionen den QEMU Guest Agent aktivieren (agent: 1) UND qemu-guest-agent im Gast installieren/starten — installiert allein reicht nicht, Proxmox muss ihn auch abfragen dürfen", path)
 	}
 	if resp.StatusCode == 500 && strings.Contains(string(body), "not running") {
 		return nil, fmt.Errorf("VM/CT ist nicht aktiv (HTTP 500 für %s): %s", path, truncateBody(body))
@@ -423,7 +423,7 @@ func (c *Client) doRequestWithBody(ctx context.Context, method, path string, par
 		return nil, fmt.Errorf("authentication failed (HTTP %d) for %s: %s", resp.StatusCode, path, truncateBody(respBody))
 	}
 	if resp.StatusCode == 500 && strings.Contains(string(respBody), "QEMU guest agent is not running") {
-		return nil, fmt.Errorf("QEMU Guest Agent ist nicht aktiv auf der VM (Pfad: %s). Bitte qemu-guest-agent installieren und starten", path)
+		return nil, fmt.Errorf("QEMU guest agent is not running (Pfad: %s). In Proxmox unter VM → Optionen den QEMU Guest Agent aktivieren (agent: 1) UND qemu-guest-agent im Gast installieren/starten — installiert allein reicht nicht, Proxmox muss ihn auch abfragen dürfen", path)
 	}
 	if resp.StatusCode == 500 && strings.Contains(string(respBody), "not running") {
 		return nil, fmt.Errorf("VM/CT ist nicht aktiv (HTTP 500 für %s): %s", path, truncateBody(respBody))
@@ -489,6 +489,24 @@ func (c *Client) ShutdownVM(ctx context.Context, node string, vmid int, vmType s
 	var upid string
 	if err := json.Unmarshal(data, &upid); err != nil {
 		return "", fmt.Errorf("unmarshal shutdown upid: %w", err)
+	}
+	return upid, nil
+}
+
+// RebootVM reboots a VM/CT via the Proxmox status/reboot endpoint (graceful
+// shutdown then start). Returns the task UPID.
+func (c *Client) RebootVM(ctx context.Context, node string, vmid int, vmType string) (string, error) {
+	if err := validateVMType(vmType); err != nil {
+		return "", err
+	}
+	path := fmt.Sprintf("/nodes/%s/%s/%d/status/reboot", node, vmType, vmid)
+	data, err := c.doRequestWithBody(ctx, http.MethodPost, path, nil)
+	if err != nil {
+		return "", fmt.Errorf("reboot vm %d: %w", vmid, err)
+	}
+	var upid string
+	if err := json.Unmarshal(data, &upid); err != nil {
+		return "", fmt.Errorf("unmarshal reboot upid: %w", err)
 	}
 	return upid, nil
 }

@@ -60,32 +60,24 @@ function isZfsType(type: string): boolean {
   return type === "zfspool" || type === "zfs";
 }
 
-/** Fake sparkline data for usage trend (last 7 points) */
-function generateSparklineData(currentPercent: number): number[] {
-  const points: number[] = [];
-  for (let i = 6; i >= 0; i--) {
-    const variance = (Math.random() - 0.3) * 8;
-    const val = Math.max(0, Math.min(100, currentPercent - i * 0.5 + variance));
-    points.push(val);
-  }
-  points[6] = currentPercent;
-  return points;
+// Usage-trend sparkline data. There is no per-storage historical metric series
+// yet, so we return no points rather than fabricating a trend with Math.random
+// (which changed on every render and misled capacity planning). The Sparkline
+// component renders nothing for an empty series.
+function generateSparklineData(_currentPercent: number): number[] {
+  return [];
 }
 
-/** Predict days until 100% based on simple linear growth assumption */
-function predictFullDate(usagePercent: number): string | null {
-  if (usagePercent <= 0 || usagePercent >= 100) return null;
-  // Assume ~0.5% growth per day as simple projection
-  const dailyGrowth = 0.3 + Math.random() * 0.4;
-  const remaining = 100 - usagePercent;
-  const daysLeft = Math.round(remaining / dailyGrowth);
-  if (daysLeft > 365) return "> 1 Jahr";
-  if (daysLeft > 180) return `~${Math.round(daysLeft / 30)} Monate`;
-  if (daysLeft > 30) return `~${Math.round(daysLeft / 7)} Wochen`;
-  return `~${daysLeft} Tage`;
+// Capacity-fill prediction. Without real historical samples there is nothing to
+// project from, so we return null (no estimate) instead of a fabricated
+// "Voll in X" based on a random growth rate.
+function predictFullDate(_usagePercent: number): string | null {
+  return null;
 }
 
 function Sparkline({ data, className }: { data: number[]; className?: string }) {
+  // No historical series available → render nothing rather than a misleading line.
+  if (data.length < 2) return null;
   const max = Math.max(...data, 1);
   const height = 24;
   const width = 64;
@@ -195,8 +187,8 @@ export function StorageOverview({ nodeId, status }: StorageOverviewProps) {
         <Card hover>
           <CardContent className="p-5">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100 dark:bg-zinc-800">
-                <Database className="h-5 w-5 text-zinc-600 dark:text-zinc-400" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100 dark:bg-muted">
+                <Database className="h-5 w-5 text-muted-foreground dark:text-muted-foreground" />
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Gesamt-Speicher</p>
@@ -210,8 +202,8 @@ export function StorageOverview({ nodeId, status }: StorageOverviewProps) {
         <Card hover>
           <CardContent className="p-5">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100 dark:bg-zinc-800">
-                <HardDrive className="h-5 w-5 text-zinc-600 dark:text-zinc-400" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100 dark:bg-muted">
+                <HardDrive className="h-5 w-5 text-muted-foreground dark:text-muted-foreground" />
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Belegt</p>
@@ -225,8 +217,8 @@ export function StorageOverview({ nodeId, status }: StorageOverviewProps) {
         <Card hover>
           <CardContent className="p-5">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100 dark:bg-zinc-800">
-                <HardDrive className="h-5 w-5 text-zinc-600 dark:text-zinc-400" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100 dark:bg-muted">
+                <HardDrive className="h-5 w-5 text-muted-foreground dark:text-muted-foreground" />
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Verfügbar</p>

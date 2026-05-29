@@ -30,33 +30,48 @@ function parseDiff(data: unknown): DiffChange[] {
   const obj = data as Record<string, unknown>;
   const changes: DiffChange[] = [];
 
-  if (Array.isArray(obj.new_ports)) {
-    for (const p of obj.new_ports as number[]) {
-      changes.push({ type: "added", description: `Port ${p} neu geöffnet` });
-    }
+  // Matches the backend model.ScanDiff shape: new_ports/closed_ports are
+  // PortChange objects, devices are DeviceChange objects, service_changes and
+  // new_connections are their own object arrays.
+  const asObjArray = (v: unknown): Record<string, unknown>[] =>
+    Array.isArray(v) ? (v as Record<string, unknown>[]) : [];
+  const svcSuffix = (s: unknown): string => (s ? ` (${String(s)})` : "");
+
+  for (const p of asObjArray(obj.new_ports)) {
+    changes.push({
+      type: "added",
+      description: `Port ${String(p.port)}/${String(p.protocol)} neu geöffnet auf ${String(p.device_ip)}${svcSuffix(p.service_name)}`,
+    });
   }
-  if (Array.isArray(obj.removed_ports)) {
-    for (const p of obj.removed_ports as number[]) {
-      changes.push({ type: "removed", description: `Port ${p} geschlossen` });
-    }
+  for (const p of asObjArray(obj.closed_ports)) {
+    changes.push({
+      type: "removed",
+      description: `Port ${String(p.port)}/${String(p.protocol)} geschlossen auf ${String(p.device_ip)}${svcSuffix(p.service_name)}`,
+    });
   }
-  if (Array.isArray(obj.new_devices)) {
-    for (const d of obj.new_devices as string[]) {
-      changes.push({ type: "added", description: `Neues Gerät: ${d}` });
-    }
+  for (const d of asObjArray(obj.new_devices)) {
+    changes.push({
+      type: "added",
+      description: `Neues Gerät: ${String(d.ip)}${d.hostname ? ` (${String(d.hostname)})` : ""}`,
+    });
   }
-  if (Array.isArray(obj.removed_devices)) {
-    for (const d of obj.removed_devices as string[]) {
-      changes.push({ type: "removed", description: `Gerät nicht mehr sichtbar: ${d}` });
-    }
+  for (const d of asObjArray(obj.disappeared_devices)) {
+    changes.push({
+      type: "removed",
+      description: `Gerät nicht mehr sichtbar: ${String(d.ip)}${d.hostname ? ` (${String(d.hostname)})` : ""}`,
+    });
   }
-  if (Array.isArray(obj.changes)) {
-    for (const c of obj.changes as Array<Record<string, unknown>>) {
-      changes.push({
-        type: "changed",
-        description: String(c.description ?? c.message ?? JSON.stringify(c).slice(0, 80)),
-      });
-    }
+  for (const c of asObjArray(obj.service_changes)) {
+    changes.push({
+      type: "changed",
+      description: `${String(c.device_ip)}:${String(c.port)} ${String(c.old_service ?? "?")} → ${String(c.new_service ?? "?")}`,
+    });
+  }
+  for (const c of asObjArray(obj.new_connections)) {
+    changes.push({
+      type: "added",
+      description: `Neue Verbindung: :${String(c.local_port)} → ${String(c.peer_ip)}:${String(c.peer_port)}${c.process ? ` (${String(c.process)})` : ""}`,
+    });
   }
   return changes;
 }
@@ -128,7 +143,7 @@ export function ScanTimeline({ nodeId }: ScanTimelineProps) {
 
   if (scans.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 text-zinc-500">
+      <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
         <Clock className="h-8 w-8 mb-3 opacity-30" />
         <p className="text-sm">Noch keine Scan-Historie vorhanden.</p>
       </div>
@@ -138,9 +153,9 @@ export function ScanTimeline({ nodeId }: ScanTimelineProps) {
   return (
     <div className="space-y-6">
       {/* Chart */}
-      <Card className="border-zinc-800 bg-zinc-900/60">
+      <Card className="border-border bg-card">
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium text-zinc-300">Port-Anzahl über Zeit</CardTitle>
+          <CardTitle className="text-sm font-medium text-foreground">Port-Anzahl über Zeit</CardTitle>
         </CardHeader>
         <CardContent>
           {chartData.length > 1 ? (
@@ -165,34 +180,34 @@ export function ScanTimeline({ nodeId }: ScanTimelineProps) {
               </BarChart>
             </ResponsiveContainer>
           ) : (
-            <p className="text-xs text-zinc-600 text-center py-8">Nicht genug Daten für Chart</p>
+            <p className="text-xs text-muted-foreground text-center py-8">Nicht genug Daten für Chart</p>
           )}
         </CardContent>
       </Card>
 
       {/* Scan list */}
       <div className="space-y-1.5">
-        <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide">Letzte Scans</p>
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Letzte Scans</p>
         {scans.slice(0, 15).map((s) => (
           <div
             key={s.id}
-            className="flex items-center gap-3 rounded-md border border-zinc-800/50 bg-zinc-900/40 px-3 py-2"
+            className="flex items-center gap-3 rounded-md border border-border bg-card px-3 py-2"
           >
             <Badge
               variant={s.scan_type === "full" ? "default" : "secondary"}
               className={`text-[10px] shrink-0 ${
                 s.scan_type === "full"
                   ? "bg-blue-500/20 text-blue-400 border-blue-500/30"
-                  : "bg-zinc-700/50 text-zinc-400"
+                  : "bg-muted text-muted-foreground"
               }`}
             >
               {s.scan_type === "full" ? "Full" : "Quick"}
             </Badge>
-            <span className="text-xs text-zinc-400 font-mono">
+            <span className="text-xs text-muted-foreground font-mono">
               {new Date(s.started_at).toLocaleString("de-DE")}
             </span>
             {s.completed_at && (
-              <span className="text-xs text-zinc-600">
+              <span className="text-xs text-muted-foreground">
                 Dauer:{" "}
                 {Math.round(
                   (new Date(s.completed_at).getTime() - new Date(s.started_at).getTime()) / 1000
@@ -200,16 +215,16 @@ export function ScanTimeline({ nodeId }: ScanTimelineProps) {
                 s
               </span>
             )}
-            <span className="text-xs text-zinc-700 font-mono ml-auto">{s.id.slice(0, 8)}…</span>
+            <span className="text-xs text-muted-foreground font-mono ml-auto">{s.id.slice(0, 8)}…</span>
           </div>
         ))}
       </div>
 
       {/* Diff comparison */}
       {scans.length >= 2 && (
-        <Card className="border-zinc-800 bg-zinc-900/60">
+        <Card className="border-border bg-card">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-zinc-300 flex items-center gap-2">
+            <CardTitle className="text-sm font-medium text-foreground flex items-center gap-2">
               <GitCompare className="h-4 w-4" />
               Scans vergleichen
             </CardTitle>
@@ -217,7 +232,7 @@ export function ScanTimeline({ nodeId }: ScanTimelineProps) {
           <CardContent className="space-y-3">
             <div className="flex items-center gap-2 flex-wrap">
               <Select value={scanA} onValueChange={setScanA}>
-                <SelectTrigger className="w-52 h-8 text-xs bg-zinc-900 border-zinc-700">
+                <SelectTrigger className="w-52 h-8 text-xs bg-card border-border">
                   <SelectValue placeholder="Scan A wählen..." />
                 </SelectTrigger>
                 <SelectContent>
@@ -229,10 +244,10 @@ export function ScanTimeline({ nodeId }: ScanTimelineProps) {
                 </SelectContent>
               </Select>
 
-              <span className="text-zinc-600 text-xs">vs.</span>
+              <span className="text-muted-foreground text-xs">vs.</span>
 
               <Select value={scanB} onValueChange={setScanB}>
-                <SelectTrigger className="w-52 h-8 text-xs bg-zinc-900 border-zinc-700">
+                <SelectTrigger className="w-52 h-8 text-xs bg-card border-border">
                   <SelectValue placeholder="Scan B wählen..." />
                 </SelectTrigger>
                 <SelectContent>
@@ -263,10 +278,10 @@ export function ScanTimeline({ nodeId }: ScanTimelineProps) {
             {diff !== null && (
               <div className="space-y-1 mt-2">
                 {diff.length === 0 ? (
-                  <p className="text-xs text-zinc-500">Keine Unterschiede gefunden.</p>
+                  <p className="text-xs text-muted-foreground">Keine Unterschiede gefunden.</p>
                 ) : (
                   diff.map((c, i) => (
-                    <div key={i} className="flex items-start gap-2 text-xs py-1 border-b border-zinc-800/30 last:border-0">
+                    <div key={i} className="flex items-start gap-2 text-xs py-1 border-b border-border last:border-0">
                       <span
                         className={`shrink-0 font-mono font-bold ${
                           c.type === "added"
@@ -278,7 +293,7 @@ export function ScanTimeline({ nodeId }: ScanTimelineProps) {
                       >
                         {c.type === "added" ? "+" : c.type === "removed" ? "−" : "~"}
                       </span>
-                      <span className="text-zinc-400">{c.description}</span>
+                      <span className="text-muted-foreground">{c.description}</span>
                     </div>
                   ))
                 )}

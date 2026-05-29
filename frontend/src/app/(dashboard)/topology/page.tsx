@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { ReactFlowProvider } from "@xyflow/react";
 import {
   Server,
   Monitor,
@@ -9,11 +10,15 @@ import {
   MemoryStick,
   HardDrive,
   Circle,
+  Network,
+  LayoutGrid,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { TopologyMap } from "@/components/topology/topology-map";
 import { useNodeStore } from "@/stores/node-store";
 import type { VM } from "@/types/api";
 
@@ -58,6 +63,7 @@ function statusLabel(status: VM["status"]): string {
 export default function TopologyPage() {
   const { nodes, nodeStatus, nodeVMs, isLoading, fetchNodes, fetchNodeStatus, fetchNodeVMs } =
     useNodeStore();
+  const [view, setView] = useState<"map" | "grid">("map");
 
   useEffect(() => {
     fetchNodes();
@@ -74,7 +80,7 @@ export default function TopologyPage() {
     return (
       <div className="space-y-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Cluster-Topologie</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Cluster-Topologie</h1>
           <p className="text-sm text-muted-foreground">
             Nodes und VMs im Cluster auf einen Blick.
           </p>
@@ -97,11 +103,40 @@ export default function TopologyPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Cluster-Topologie</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Cluster-Topologie</h1>
         <p className="text-sm text-muted-foreground">
           Nodes und VMs im Cluster auf einen Blick.
         </p>
       </div>
+
+      {/* View: interactive map (default) vs compact list */}
+      <div className="flex gap-1">
+        <Button
+          variant={view === "map" ? "default" : "outline"}
+          size="sm"
+          onClick={() => setView("map")}
+          className="gap-1.5"
+        >
+          <Network className="h-4 w-4" /> Karte
+        </Button>
+        <Button
+          variant={view === "grid" ? "default" : "outline"}
+          size="sm"
+          onClick={() => setView("grid")}
+          className="gap-1.5"
+        >
+          <LayoutGrid className="h-4 w-4" /> Liste
+        </Button>
+      </div>
+
+      {view === "map" ? (
+        <ReactFlowProvider>
+          <div className="h-[calc(100vh-15rem)] min-h-[480px] overflow-hidden rounded-xl border">
+            <TopologyMap />
+          </div>
+        </ReactFlowProvider>
+      ) : (
+      <>
 
       {/* Summary */}
       <div className="flex flex-wrap gap-3">
@@ -262,6 +297,8 @@ export default function TopologyPage() {
           <Circle className="h-2 w-2 fill-current text-muted-foreground" /> {statusLabel("stopped")}
         </span>
       </div>
+      </>
+      )}
     </div>
   );
 }

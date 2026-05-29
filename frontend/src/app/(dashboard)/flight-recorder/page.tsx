@@ -65,7 +65,7 @@ export default function FlightRecorderPage() {
     <div className="space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Infrastructure Flight Recorder</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Infrastructure Flight Recorder</h1>
           <p className="text-sm text-muted-foreground">Zeitlinie aus Audits, Security, Backups, Migrationen und Notifications.</p>
         </div>
         <Button variant="outline" size="sm" onClick={load} disabled={isLoading}>

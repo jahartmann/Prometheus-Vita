@@ -1,6 +1,7 @@
 import axios from "axios";
 import { toast } from "sonner";
 import { useAuthStore } from "@/stores/auth-store";
+import { toArray, getApiErrorMessage } from "./response";
 
 const api = axios.create({
   baseURL: "/api/v1",
@@ -117,42 +118,10 @@ export const systemApi = {
   health: () => axios.get("/health").then((r) => r.data),
 };
 
-/**
- * Safely extract an array from an API response, handling both
- * interceptor-unwrapped and raw envelope responses.
- */
-export function toArray<T>(data: unknown): T[] {
-  if (Array.isArray(data)) return data;
-  if (data && typeof data === "object" && "data" in (data as Record<string, unknown>)) {
-    const inner = (data as Record<string, unknown>).data;
-    if (Array.isArray(inner)) return inner;
-  }
-  return [];
-}
-
-export function getApiErrorMessage(error: unknown, fallback: string): string {
-  if (error && typeof error === "object" && "response" in error) {
-    const response = (error as { response?: { status?: number; data?: unknown } }).response;
-    const data = response?.data;
-
-    if (data && typeof data === "object") {
-      const payload = data as { message?: string; error?: string };
-      return payload.message ?? payload.error ?? fallback;
-    }
-
-    if (typeof data === "string" && data.trim() && data.trim() !== "Internal Server Error") {
-      return data;
-    }
-
-    if (response?.status === 500 && data === "Internal Server Error") {
-      return "API momentan nicht erreichbar. Bitte pruefen, ob das Backend auf Port 8080 laeuft.";
-    }
-
-    return fallback;
-  }
-  if (error instanceof Error) return error.message;
-  return fallback;
-}
+// toArray + getApiErrorMessage are defined in ./response (pure, side-effect-free,
+// unit-tested) and re-exported so existing `import { toArray } from "@/lib/api"`
+// consumers keep working.
+export { toArray, getApiErrorMessage };
 
 // Bulk VM API
 export const bulkVmApi = {
@@ -305,8 +274,8 @@ export const networkApi = {
     api.put(`/scan-baselines/${id}`, data),
   deleteBaseline: (id: string) =>
     api.delete(`/scan-baselines/${id}`),
-  activateBaseline: (id: string) =>
-    api.post(`/scan-baselines/${id}/activate`),
+  activateBaseline: (id: string, nodeId: string) =>
+    api.post(`/scan-baselines/${id}/activate?node_id=${nodeId}`),
 };
 
 // Storage API (cluster-level)

@@ -101,7 +101,7 @@ export default function ClusterNetworkPage() {
           <Network className="h-5 w-5 text-blue-500" />
         </div>
         <div className="flex-1 min-w-0">
-          <h1 className="text-2xl font-bold tracking-tight">Netzwerk-Analyse</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Netzwerk-Analyse</h1>
           <p className="text-sm text-muted-foreground">Cluster-weite Port- und Geräteerkennung</p>
         </div>
       </div>
@@ -181,7 +181,7 @@ export default function ClusterNetworkPage() {
 
           {/* Tabs */}
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
-            <TabsList className="bg-zinc-900 border border-zinc-800">
+            <TabsList className="bg-card border border-border">
               <TabsTrigger value="ports" className="text-sm">Ports</TabsTrigger>
               <TabsTrigger value="devices" className="text-sm">Netzwerk-Geräte</TabsTrigger>
               <TabsTrigger value="anomalies" className="text-sm gap-1.5">
@@ -229,15 +229,15 @@ export default function ClusterNetworkPage() {
 
           {/* Baseline manager */}
           <Collapsible open={baselineOpen} onOpenChange={setBaselineOpen}>
-            <CollapsibleTrigger className="flex items-center gap-2 w-full rounded-lg border border-zinc-800 bg-zinc-900/60 px-4 py-2.5 hover:bg-zinc-800/60 transition-colors text-sm font-medium text-zinc-300">
-              <BookMarked className="h-4 w-4 text-zinc-500" />
+            <CollapsibleTrigger className="flex items-center gap-2 w-full rounded-lg border border-border bg-card px-4 py-2.5 hover:bg-muted transition-colors text-sm font-medium text-foreground">
+              <BookMarked className="h-4 w-4 text-muted-foreground" />
               Baseline-Verwaltung
               <ChevronDown
-                className={`h-4 w-4 ml-auto text-zinc-500 transition-transform ${baselineOpen ? "rotate-180" : ""}`}
+                className={`h-4 w-4 ml-auto text-muted-foreground transition-transform ${baselineOpen ? "rotate-180" : ""}`}
               />
             </CollapsibleTrigger>
             <NetworkSectionError message={scopedError("baselines")} className="mt-2" />
-            <CollapsibleContent className="mt-2 rounded-lg border border-zinc-800 bg-zinc-900/40 p-4">
+            <CollapsibleContent className="mt-2 rounded-lg border border-border bg-card p-4">
               <BaselineManager nodeId={selectedNodeId} />
             </CollapsibleContent>
           </Collapsible>

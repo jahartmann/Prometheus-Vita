@@ -17,6 +17,7 @@ import {
   GitCompare,
   HardDrive,
   HeartPulse,
+  History,
   KeyRound,
   LayoutDashboard,
   Link2,
@@ -28,6 +29,7 @@ import {
   RadioTower,
   Search,
   SearchCheck,
+  ScrollText,
   Server,
   Settings,
   Shield,
@@ -69,6 +71,8 @@ const workspaces: WorkspaceNav[] = [
     items: [
       { label: "Lagezentrum", href: "/", icon: LayoutDashboard, keywords: "dashboard start cockpit" },
       { label: "Monitoring", href: "/monitoring", icon: Activity, matchPrefix: "/monitoring" },
+      { label: "Logs", href: "/logs", icon: ScrollText, matchPrefix: "/logs", keywords: "logs syslog journal protokoll" },
+      { label: "Flight Recorder", href: "/flight-recorder", icon: History, matchPrefix: "/flight-recorder", keywords: "flight recorder verlauf history aufzeichnung" },
       { label: "Aufgaben", href: "/task-center", icon: ListChecks, matchPrefix: "/task-center", keywords: "tasks todo timeline" },
       { label: "Alarme", href: "/alerts", icon: AlertTriangle, matchPrefix: "/alerts", keywords: "alerts warnungen" },
     ],
@@ -93,7 +97,7 @@ const workspaces: WorkspaceNav[] = [
     description: "Sicherheit, Backup, Recovery",
     icon: ShieldCheck,
     items: [
-      { label: "Sicherheit", href: "/security", icon: ShieldCheck, matchPrefix: "/security" },
+      { label: "Sicherheitslage", href: "/security", icon: ShieldCheck, matchPrefix: "/security", keywords: "security sicherheit befunde events" },
       { label: "Backups", href: "/backups", icon: Archive, matchPrefix: "/backups" },
       { label: "Notfallplanung", href: "/disaster-recovery", icon: Shield, matchPrefix: "/disaster-recovery", keywords: "dr disaster recovery runbook" },
       { label: "Migrationen", href: "/migrations", icon: GitBranch, matchPrefix: "/migrations" },
@@ -128,7 +132,7 @@ const workspaces: WorkspaceNav[] = [
       { label: "Benutzer", href: "/settings/users", icon: Users, matchPrefix: "/settings/users" },
       { label: "Rollen & Rechte", href: "/settings/roles", icon: UserCog, matchPrefix: "/settings/roles" },
       { label: "API-Tokens", href: "/settings/api-tokens", icon: KeyRound, matchPrefix: "/settings/api-tokens" },
-      { label: "Tags", href: "/settings/tags", icon: Tag, matchPrefix: "/settings/tags" },
+      { label: "Tags", href: "/tags", icon: Tag, matchPrefix: "/tags" },
     ],
   },
 ];

@@ -16,7 +16,7 @@ import (
 )
 
 // ShellQuote wraps a string in single quotes for safe use in POSIX shell commands.
-// Single quotes prevent ALL shell interpretation including $(), ``, etc.
+// Single quotes prevent ALL shell interpretation including $(), “, etc.
 func ShellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
 }

@@ -153,7 +153,7 @@ export function VMServiceAnalysis({ nodeId }: VMServiceAnalysisProps) {
   );
 
   return (
-    <Card className="border-zinc-800 bg-zinc-900/50">
+    <Card className="border-border bg-card">
       <CardHeader className="flex-row items-center gap-3 space-y-0">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-500/10">
           <ServerCog className="h-5 w-5 text-blue-400" />
@@ -173,21 +173,21 @@ export function VMServiceAnalysis({ nodeId }: VMServiceAnalysisProps) {
       </CardHeader>
       <CardContent>
         {loading ? (
-          <div className="flex items-center justify-center py-12 text-sm text-zinc-500">
+          <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
             VM-Services werden geladen...
           </div>
         ) : vmLoadFailed ? (
-          <div className="flex items-center justify-center py-12 text-sm text-zinc-500">
+          <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
             VM-Daten konnten nicht geladen werden.
           </div>
         ) : vmCount === 0 ? (
-          <div className="flex items-center justify-center py-12 text-sm text-zinc-500">
+          <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
             Keine VM-Daten für diesen Node.
           </div>
         ) : (
           <Table aria-label="VM-Service-Analyse mit Traffic, Bandbreite und Port-Risiken">
             <TableHeader>
-              <TableRow className="border-zinc-800">
+              <TableRow className="border-border">
                 <TableHead>VM</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Traffic 24h</TableHead>
@@ -204,13 +204,13 @@ export function VMServiceAnalysis({ nodeId }: VMServiceAnalysisProps) {
                 const hasRisk = risks.some((port) => port.risk === "high" || port.risk === "medium");
 
                 return (
-                  <TableRow key={`${row.vm.type}-${row.vm.vmid}`} className="border-zinc-800/60">
+                  <TableRow key={`${row.vm.type}-${row.vm.vmid}`} className="border-border">
                     <TableCell>
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-zinc-200">
+                        <p className="truncate text-sm font-medium text-foreground">
                           {row.vm.name || `VM ${row.vm.vmid}`}
                         </p>
-                        <p className="text-xs text-zinc-500">
+                        <p className="text-xs text-muted-foreground">
                           {row.vm.type.toUpperCase()} · {row.vm.vmid}
                         </p>
                       </div>
@@ -223,7 +223,7 @@ export function VMServiceAnalysis({ nodeId }: VMServiceAnalysisProps) {
                     <TableCell className="text-right font-mono text-sm">
                       <div>{formatTraffic(totalTraffic)}</div>
                       {!row.summary && (
-                        <span className="text-[11px] text-zinc-600">Keine Metriken</span>
+                        <span className="text-[11px] text-muted-foreground">Keine Metriken</span>
                       )}
                     </TableCell>
                     <TableCell className="text-right font-mono text-sm">
@@ -234,7 +234,7 @@ export function VMServiceAnalysis({ nodeId }: VMServiceAnalysisProps) {
                         <div className="flex flex-wrap items-center gap-1.5">
                           {visibleRisks.map((port) => (
                             <span key={port.key} className="inline-flex items-center gap-1">
-                              <span className="font-mono text-xs text-zinc-500">{port.label}</span>
+                              <span className="font-mono text-xs text-muted-foreground">{port.label}</span>
                               <ServiceRiskBadge risk={port.risk} reason={port.reason} />
                             </span>
                           ))}
@@ -250,7 +250,7 @@ export function VMServiceAnalysis({ nodeId }: VMServiceAnalysisProps) {
                           )}
                         </div>
                       ) : (
-                        <span className="text-xs text-zinc-600">
+                        <span className="text-xs text-muted-foreground">
                           {row.portsAvailable ? "Keine Portdaten" : "Portdaten nicht verfügbar"}
                         </span>
                       )}

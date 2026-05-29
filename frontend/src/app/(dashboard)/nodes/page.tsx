@@ -23,7 +23,7 @@ export default function NodesPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Nodes</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Nodes</h1>
           <p className="text-muted-foreground">
             Übersicht aller verbundenen Proxmox Nodes.
           </p>

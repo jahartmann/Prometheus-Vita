@@ -45,8 +45,8 @@ func validateFilePath(filePath string) error {
 }
 
 // shellQuote wraps a string in single quotes for safe use in POSIX shell commands.
-// Single quotes prevent ALL shell interpretation including $(), ``, etc.
-// Any embedded single quotes are escaped via the '\'' idiom.
+// Single quotes prevent ALL shell interpretation including $(), “, etc.
+// Any embedded single quotes are escaped via the '\” idiom.
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
 }

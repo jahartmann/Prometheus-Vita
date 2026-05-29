@@ -8,6 +8,7 @@ import (
 	"github.com/antigravity/prometheus/internal/model"
 	"github.com/antigravity/prometheus/internal/proxmox"
 	"github.com/antigravity/prometheus/internal/repository"
+	nodeService "github.com/antigravity/prometheus/internal/service/node"
 	"github.com/google/uuid"
 )
 
@@ -43,7 +44,7 @@ func (s *RightsizingService) AnalyzeVM(ctx context.Context, nodeID uuid.UUID, vm
 		return nil, fmt.Errorf("get pve nodes: %w", err)
 	}
 
-	vms, err := client.GetVMs(ctx, pveNodes[0])
+	vms, err := client.GetVMs(ctx, nodeService.ResolvePVENode(node, pveNodes))
 	if err != nil {
 		return nil, fmt.Errorf("get vms: %w", err)
 	}
@@ -59,7 +60,7 @@ func (s *RightsizingService) AnalyzeVM(ctx context.Context, nodeID uuid.UUID, vm
 		return nil, fmt.Errorf("vm %d not found", vmid)
 	}
 
-	rrdData, err := client.GetVMRRDData(ctx, pveNodes[0], vmid, vm.Type, "week")
+	rrdData, err := client.GetVMRRDData(ctx, nodeService.ResolvePVENode(node, pveNodes), vmid, vm.Type, "week")
 	if err != nil || len(rrdData) == 0 {
 		return &model.VMRightsizingRecommendation{
 			NodeID:     nodeID,

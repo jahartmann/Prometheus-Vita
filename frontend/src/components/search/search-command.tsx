@@ -319,7 +319,7 @@ export function SearchCommand() {
         category: "settings" as SearchCategory,
         icon: Hash,
         label: "Tags verwalten",
-        href: "/settings/tags",
+        href: "/tags",
         tags: ["tag", "label", "kategorie"],
       },
       {

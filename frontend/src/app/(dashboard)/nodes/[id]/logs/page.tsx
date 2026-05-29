@@ -12,11 +12,13 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { useNodeStore } from "@/stores/node-store";
 import { logApi } from "@/lib/api";
+import { useLogStream } from "@/hooks/use-log-stream";
+import { LogStream } from "@/components/logs/log-stream";
 import { AlertCircle, AlertTriangle, Activity, Zap } from "lucide-react";
 
 const LOG_FILES = [
   { value: "syslog", label: "/var/log/syslog" },
-  { value: "auth.log", label: "/var/log/auth.log" },
+  { value: "auth", label: "/var/log/auth.log" },
   { value: "pveproxy", label: "/var/log/pveproxy/access.log" },
   { value: "pvedaemon", label: "/var/log/pvedaemon.log" },
   { value: "pve-firewall", label: "/var/log/pve-firewall.log" },
@@ -28,7 +30,7 @@ const LINE_COUNTS = [50, 100, 200, 500, 1000];
 const SEVERITY_COLORS: Record<string, string> = {
   critical: "text-red-500 animate-pulse font-bold",
   error: "text-red-400",
-  warning: "text-yellow-400",
+  warning: "text-amber-400",
   info: "text-zinc-300",
   debug: "text-zinc-500",
 };
@@ -67,6 +69,11 @@ export default function NodeLogsPage() {
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [filter, setFilter] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [liveMode, setLiveMode] = useState(false);
+
+  // Live tail via the /ws/logs WebSocket. enabled gates the connection so the
+  // hook can stay mounted while the user toggles between polling and live.
+  const { isConnected } = useLogStream({ nodeIds: [nodeId], enabled: liveMode });
 
   const containerRef = useRef<HTMLDivElement>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -131,7 +138,7 @@ export default function NodeLogsPage() {
           </Button>
         </Link>
         <div className="flex-1 min-w-0">
-          <h1 className="text-2xl font-bold tracking-tight truncate">
+          <h1 className="text-2xl font-semibold tracking-tight truncate">
             Log Viewer{node ? ` — ${node.name}` : ""}
           </h1>
           <p className="text-sm text-zinc-400">
@@ -155,33 +162,33 @@ export default function NodeLogsPage() {
         </Card>
         <Card>
           <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-yellow-500/10">
-              <AlertTriangle className="h-4 w-4 text-yellow-500" />
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/10">
+              <AlertTriangle className="h-4 w-4 text-amber-500" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-yellow-500">{counts.warnings}</p>
+              <p className="text-2xl font-bold text-amber-500">{counts.warnings}</p>
               <p className="text-xs text-zinc-400">Warnings</p>
             </div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-orange-500/10">
-              <Activity className="h-4 w-4 text-orange-500" />
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/10">
+              <Activity className="h-4 w-4 text-amber-500" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-orange-400">{counts.critical}</p>
+              <p className="text-2xl font-bold text-amber-400">{counts.critical}</p>
               <p className="text-xs text-zinc-400">Critical</p>
             </div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-500/10">
-              <Zap className="h-4 w-4 text-blue-500" />
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sky-500/10">
+              <Zap className="h-4 w-4 text-sky-500" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-blue-400">{filteredLines.length}</p>
+              <p className="text-2xl font-bold text-sky-400">{filteredLines.length}</p>
               <p className="text-xs text-zinc-400">Sichtbar</p>
             </div>
           </CardContent>
@@ -220,11 +227,33 @@ export default function NodeLogsPage() {
         />
 
         <div className="flex items-center gap-2">
-          <Switch checked={autoRefresh} onCheckedChange={setAutoRefresh} />
+          <Switch
+            checked={autoRefresh}
+            onCheckedChange={setAutoRefresh}
+            disabled={liveMode}
+          />
           <span className="text-xs text-zinc-400">Auto-Refresh</span>
         </div>
 
-        <Button variant="outline" size="sm" onClick={fetchLogs} disabled={isLoading}>
+        <div className="flex items-center gap-2">
+          <Switch
+            checked={liveMode}
+            onCheckedChange={(v) => {
+              setLiveMode(v);
+              if (v) setAutoRefresh(false);
+            }}
+          />
+          <span className="text-xs text-zinc-400">
+            Live-Stream
+            {liveMode && (
+              <span className={isConnected ? "text-green-500" : "text-amber-500"}>
+                {" "}{isConnected ? "● verbunden" : "○ verbinde…"}
+              </span>
+            )}
+          </span>
+        </div>
+
+        <Button variant="outline" size="sm" onClick={fetchLogs} disabled={isLoading || liveMode}>
           <RefreshCw className={`h-4 w-4 mr-1 ${isLoading ? "animate-spin" : ""}`} />
           Aktualisieren
         </Button>
@@ -238,6 +267,14 @@ export default function NodeLogsPage() {
       )}
 
       {/* Log Output */}
+      {liveMode ? (
+        <div
+          className="flex-1 min-h-0 overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950"
+          style={{ minHeight: "300px" }}
+        >
+          <LogStream autoScroll />
+        </div>
+      ) : (
       <div
         ref={containerRef}
         className="flex-1 overflow-auto bg-zinc-950 rounded-lg border border-zinc-800 p-3 font-mono text-sm min-h-0"
@@ -265,7 +302,7 @@ export default function NodeLogsPage() {
             <div
               key={i}
               className={`px-1 py-0.5 leading-relaxed break-all ${colorClass} ${
-                isHighlighted && filter ? "bg-yellow-500/10" : ""
+                isHighlighted && filter ? "bg-amber-500/10" : ""
               }`}
             >
               {line}
@@ -273,6 +310,7 @@ export default function NodeLogsPage() {
           );
         })}
       </div>
+      )}
     </div>
   );
 }

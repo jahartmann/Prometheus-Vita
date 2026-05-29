@@ -23,7 +23,7 @@ interface MetricTileProps {
 }
 
 const toneClasses: Record<NonNullable<MetricTileProps["tone"]>, string> = {
-  default: "border-zinc-800 bg-zinc-950/30 text-zinc-400",
+  default: "border-border bg-card text-muted-foreground",
   ok: "border-green-500/20 bg-green-500/5 text-green-400",
   warning: "border-orange-500/25 bg-orange-500/10 text-orange-400",
   danger: "border-red-500/25 bg-red-500/10 text-red-400",
@@ -54,9 +54,9 @@ function MetricTile({ icon: Icon, label, value, detail, tone = "default" }: Metr
     <div className={cn("flex min-w-0 items-center gap-3 rounded-lg border px-3 py-2.5", toneClasses[tone])}>
       <Icon className="h-4 w-4 shrink-0" />
       <div className="min-w-0">
-        <p className="text-[10px] uppercase tracking-wide text-zinc-500">{label}</p>
-        <p className="truncate text-sm font-semibold text-zinc-100">{value}</p>
-        {detail && <p className="truncate text-xs text-zinc-500">{detail}</p>}
+        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
+        <p className="truncate text-sm font-semibold text-foreground">{value}</p>
+        {detail && <p className="truncate text-xs text-muted-foreground">{detail}</p>}
       </div>
     </div>
   );
@@ -124,7 +124,7 @@ export function NetworkSecurityOverview({ nodeId }: NetworkSecurityOverviewProps
     : "Warte auf Metriken";
 
   return (
-    <Card className="border-zinc-800 bg-zinc-900/50">
+    <Card className="border-border bg-card">
       <CardContent className="space-y-3 p-3">
         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
           <MetricTile

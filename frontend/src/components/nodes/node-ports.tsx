@@ -70,7 +70,7 @@ function GroupIcon({ type }: { type: string }) {
     case "node":
       return <Server className="h-4 w-4 text-blue-500" />;
     case "qemu":
-      return <Monitor className="h-4 w-4 text-green-500" />;
+      return <Monitor className="h-4 w-4 text-emerald-500" />;
     case "lxc":
       return <Box className="h-4 w-4 text-orange-500" />;
     default:
@@ -85,6 +85,13 @@ function ScanStatusBadge({ group }: { group: VMPortGroup }) {
       <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-300 shrink-0">
         <ShieldOff className="mr-1 h-3 w-3" />
         Kein Agent
+      </Badge>
+    );
+  }
+  if (group.scan_status === "external") {
+    return (
+      <Badge variant="outline" className="text-[10px] text-sky-600 border-sky-300 shrink-0">
+        Extern gescannt
       </Badge>
     );
   }
@@ -125,7 +132,10 @@ function PortGroup({
     (p) => p.state === "ESTAB" || p.state === "ESTABLISHED"
   ).length;
 
-  const hasError = group.scan_status !== "ok";
+  const isExternal = group.scan_status === "external";
+  // An "external" scan is a successful, agent-free result — render its ports
+  // like "ok" rather than as an error.
+  const hasError = group.scan_status !== "ok" && !isExternal;
 
   if (filter && filteredPorts.length === 0 && !hasError) return null;
 
@@ -188,6 +198,9 @@ function PortGroup({
 
       {expanded && !hasError && filteredPorts.length > 0 && (
         <div className="border-t">
+          {isExternal && group.scan_error && (
+            <p className="px-4 pt-3 text-xs text-sky-600 dark:text-sky-400">{group.scan_error}</p>
+          )}
           <Table>
             <TableHeader>
               <TableRow>
@@ -332,7 +345,7 @@ export function NodePorts({ nodeId }: NodePortsProps) {
         {/* Summary */}
         <div className="grid gap-3 sm:grid-cols-4">
           <div className="flex items-center gap-3 rounded-lg border p-3">
-            <ArrowDownToLine className="h-5 w-5 text-green-500" />
+            <ArrowDownToLine className="h-5 w-5 text-emerald-500" />
             <div>
               <p className="text-sm text-muted-foreground">Lauschend</p>
               <p className="text-lg font-bold">{listening.length}</p>
@@ -346,7 +359,7 @@ export function NodePorts({ nodeId }: NodePortsProps) {
             </div>
           </div>
           <div className="flex items-center gap-3 rounded-lg border p-3">
-            <Radio className="h-5 w-5 text-zinc-500" />
+            <Radio className="h-5 w-5 text-muted-foreground" />
             <div>
               <p className="text-sm text-muted-foreground">Gesamt</p>
               <p className="text-lg font-bold">{totalPorts}</p>

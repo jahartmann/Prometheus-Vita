@@ -126,7 +126,7 @@ export function DeviceTable({ nodeId }: DeviceTableProps) {
 
   if (devices.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 text-zinc-500">
+      <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
         <Wifi className="h-8 w-8 mb-3 opacity-30" />
         <p className="text-sm">Keine Geräte erkannt.</p>
         <p className="text-xs mt-1">Führe einen Full Scan aus, um Netzwerkgeräte und Dienstversionen zu entdecken.</p>
@@ -141,28 +141,28 @@ export function DeviceTable({ nodeId }: DeviceTableProps) {
           placeholder="IP, MAC, Hostname filtern..."
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
-          className="max-w-xs bg-zinc-900 border-zinc-700 text-sm h-8"
+          className="max-w-xs bg-card border-border text-sm h-8"
         />
-        <span className="ml-auto text-xs text-zinc-500">{filtered.length} Geräte</span>
+        <span className="ml-auto text-xs text-muted-foreground">{filtered.length} Geräte</span>
       </div>
 
-      <div className="rounded-lg border border-zinc-800 overflow-hidden">
+      <div className="rounded-lg border border-border overflow-hidden">
         <Table>
           <TableHeader>
-            <TableRow className="border-zinc-800">
-              <TableHead className="text-zinc-400 w-36">IP</TableHead>
-              <TableHead className="text-zinc-400 w-40">MAC</TableHead>
-              <TableHead className="text-zinc-400">Hostname</TableHead>
-              <TableHead className="text-zinc-400 w-20 text-center">Ports</TableHead>
-              <TableHead className="text-zinc-400 w-36">Zuerst gesehen</TableHead>
-              <TableHead className="text-zinc-400 w-36">Zuletzt gesehen</TableHead>
-              <TableHead className="text-zinc-400 w-24">Status</TableHead>
+            <TableRow className="border-border">
+              <TableHead className="text-muted-foreground w-36">IP</TableHead>
+              <TableHead className="text-muted-foreground w-40">MAC</TableHead>
+              <TableHead className="text-muted-foreground">Hostname</TableHead>
+              <TableHead className="text-muted-foreground w-20 text-center">Ports</TableHead>
+              <TableHead className="text-muted-foreground w-36">Zuerst gesehen</TableHead>
+              <TableHead className="text-muted-foreground w-36">Zuletzt gesehen</TableHead>
+              <TableHead className="text-muted-foreground w-24">Status</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center text-zinc-600 py-8">
+                <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                   Keine Geräte gefunden
                 </TableCell>
               </TableRow>
@@ -178,38 +178,38 @@ export function DeviceTable({ nodeId }: DeviceTableProps) {
                 return (
                   <Fragment key={device.id}>
                     <TableRow
-                      className={`border-zinc-800/50 cursor-pointer hover:bg-zinc-800/30 transition-colors ${
+                      className={`border-border cursor-pointer hover:bg-muted transition-colors ${
                         disappeared ? "opacity-50" : ""
                       }`}
                       onClick={() => setExpandedId(expanded ? null : device.id)}
                     >
-                      <TableCell className="font-mono text-sm text-zinc-300">
+                      <TableCell className="font-mono text-sm text-foreground">
                         <div className="flex items-center gap-1.5">
                           {expanded ? (
-                            <ChevronDown className="h-3 w-3 text-zinc-500" />
+                            <ChevronDown className="h-3 w-3 text-muted-foreground" />
                           ) : (
-                            <ChevronRight className="h-3 w-3 text-zinc-500" />
+                            <ChevronRight className="h-3 w-3 text-muted-foreground" />
                           )}
                           {device.ip}
                         </div>
                       </TableCell>
-                      <TableCell className="font-mono text-xs text-zinc-500">
+                      <TableCell className="font-mono text-xs text-muted-foreground">
                         {device.mac ?? "—"}
                       </TableCell>
-                      <TableCell className="text-sm text-zinc-300">
+                      <TableCell className="text-sm text-foreground">
                         {device.hostname ?? "—"}
                       </TableCell>
                       <TableCell className="text-center">
                         {portCount > 0 ? (
                           <Badge variant="secondary" className="text-xs">{portCount}</Badge>
                         ) : (
-                          <span className="text-zinc-600 text-xs">—</span>
+                          <span className="text-muted-foreground text-xs">—</span>
                         )}
                       </TableCell>
-                      <TableCell className="text-xs text-zinc-500">
+                      <TableCell className="text-xs text-muted-foreground">
                         {formatDate(device.first_seen)}
                       </TableCell>
-                      <TableCell className="text-xs text-zinc-500">
+                      <TableCell className="text-xs text-muted-foreground">
                         {formatDate(device.last_seen)}
                       </TableCell>
                       <TableCell>
@@ -231,7 +231,7 @@ export function DeviceTable({ nodeId }: DeviceTableProps) {
                             </Badge>
                           )}
                           {device.is_known && (
-                            <Badge variant="outline" className="text-zinc-400 border-zinc-600 text-[10px] px-1.5">
+                            <Badge variant="outline" className="text-muted-foreground border-border text-[10px] px-1.5">
                               Bekannt
                             </Badge>
                           )}
@@ -241,7 +241,7 @@ export function DeviceTable({ nodeId }: DeviceTableProps) {
 
                     {/* Inline expanded port list */}
                     {expanded && (
-                      <TableRow key={`${device.id}-expanded`} className="border-zinc-800/30 bg-zinc-900/40">
+                      <TableRow key={`${device.id}-expanded`} className="border-border bg-card">
                         <TableCell colSpan={7} className="py-3 px-6">
                           <DevicePortExpand ip={device.ip} scans={scans} />
                         </TableCell>
@@ -266,23 +266,23 @@ function DevicePortExpand({
   scans: ReturnType<typeof useNetworkStore.getState>["scans"];
 }) {
   const obj = scans[0]?.results_json as Record<string, unknown> | undefined;
-  if (!obj) return <p className="text-xs text-zinc-600">Keine Scandaten vorhanden.</p>;
+  if (!obj) return <p className="text-xs text-muted-foreground">Keine Scandaten vorhanden.</p>;
 
   const ports = getDevicePorts(obj, ip);
 
   if (ports.length === 0) {
-    return <p className="text-xs text-zinc-600">Keine offenen Ports gefunden.</p>;
+    return <p className="text-xs text-muted-foreground">Keine offenen Ports gefunden.</p>;
   }
 
   return (
     <div className="space-y-1">
-      <p className="text-xs font-medium text-zinc-400 mb-2">Offene Ports von {ip}</p>
+      <p className="text-xs font-medium text-muted-foreground mb-2">Offene Ports von {ip}</p>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
         {ports.map((p, i) => (
-          <div key={i} className="flex items-center gap-2 text-xs bg-zinc-800/60 rounded px-2 py-1.5">
+          <div key={i} className="flex items-center gap-2 text-xs bg-muted rounded px-2 py-1.5">
             <span className="font-mono font-bold text-green-400">{String(p.port ?? p.portid ?? "?")}</span>
-            <span className="text-zinc-500">{String(p.protocol ?? "tcp").toUpperCase()}</span>
-            <span className="text-zinc-400 truncate">{String(p.service ?? "—")}</span>
+            <span className="text-muted-foreground">{String(p.protocol ?? "tcp").toUpperCase()}</span>
+            <span className="text-muted-foreground truncate">{String(p.service ?? "—")}</span>
           </div>
         ))}
       </div>
