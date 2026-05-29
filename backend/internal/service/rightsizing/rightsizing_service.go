@@ -9,6 +9,7 @@ import (
 	"github.com/antigravity/prometheus/internal/model"
 	"github.com/antigravity/prometheus/internal/proxmox"
 	"github.com/antigravity/prometheus/internal/repository"
+	nodeService "github.com/antigravity/prometheus/internal/service/node"
 	"github.com/google/uuid"
 )
 
@@ -178,7 +179,7 @@ func (s *Service) AnalyzeNode(ctx context.Context, nodeID uuid.UUID) ([]model.Re
 		return nil, fmt.Errorf("get pve nodes: %w", err)
 	}
 
-	vms, err := client.GetVMs(ctx, pveNodes[0])
+	vms, err := client.GetVMs(ctx, nodeService.ResolvePVENode(node, pveNodes))
 	if err != nil {
 		return nil, fmt.Errorf("get vms: %w", err)
 	}
@@ -193,7 +194,7 @@ func (s *Service) AnalyzeNode(ctx context.Context, nodeID uuid.UUID) ([]model.Re
 			continue
 		}
 
-		rrdData, err := client.GetVMRRDData(ctx, pveNodes[0], vm.VMID, vm.Type, "day")
+		rrdData, err := client.GetVMRRDData(ctx, nodeService.ResolvePVENode(node, pveNodes), vm.VMID, vm.Type, "day")
 		if err != nil {
 			slog.Warn("failed to get RRD data for VM",
 				slog.Int("vmid", vm.VMID),

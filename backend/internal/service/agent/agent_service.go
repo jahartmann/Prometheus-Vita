@@ -260,11 +260,12 @@ func (s *Service) Chat(ctx context.Context, userID uuid.UUID, req model.ChatRequ
 		return nil, fmt.Errorf("list messages: %w", err)
 	}
 
-	// Sliding window: only keep the last N messages to avoid exceeding LLM context windows
+	// Sliding window: keep the last N messages to avoid exceeding LLM context
+	// windows, but never start the window on an orphaned tool result whose
+	// assistant tool_calls message was cut off — that triggers a hard 400 from
+	// OpenAI/Anthropic and breaks the conversation permanently.
 	const maxContextMessages = 50
-	if len(existingMsgs) > maxContextMessages {
-		existingMsgs = existingMsgs[len(existingMsgs)-maxContextMessages:]
-	}
+	existingMsgs = pairAwareWindow(existingMsgs, maxContextMessages)
 
 	// 3. Build LLM messages with autonomy-aware system prompt
 	llmMessages := []llm.Message{

@@ -8,6 +8,7 @@ import (
 	"github.com/antigravity/prometheus/internal/model"
 	"github.com/antigravity/prometheus/internal/proxmox"
 	"github.com/antigravity/prometheus/internal/repository"
+	nodeService "github.com/antigravity/prometheus/internal/service/node"
 )
 
 type Service struct {
@@ -75,7 +76,9 @@ func (s *Service) BuildTopology(ctx context.Context) (*model.TopologyGraph, erro
 			if err != nil || len(pveNodes) == 0 {
 				return
 			}
-			pveNode := pveNodes[0]
+			// Resolve the PVE host this registered node actually maps to;
+			// pveNodes[0] attaches another host's VMs/storage on multi-node clusters.
+			pveNode := nodeService.ResolvePVENode(&node, pveNodes)
 
 			// Get VMs
 			vms, err := client.GetVMs(ctx, pveNode)

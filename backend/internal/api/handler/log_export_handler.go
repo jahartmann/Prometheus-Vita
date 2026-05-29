@@ -48,11 +48,14 @@ func (h *LogExportHandler) Export(c echo.Context) error {
 	ctx := c.Request().Context()
 
 	nodeIDsParam := c.QueryParam("node_ids")
+	nodeIDParam := c.QueryParam("node_id")
 	sourcesParam := c.QueryParam("sources")
 	fromParam := c.QueryParam("from")
 	toParam := c.QueryParam("to")
 	format := c.QueryParam("format")
-	includeAI := c.QueryParam("include_ai") == "true"
+	// Accept both the documented "include_ai" and the frontend's
+	// "include_annotations" spelling.
+	includeAI := c.QueryParam("include_ai") == "true" || c.QueryParam("include_annotations") == "true"
 
 	if format == "" {
 		format = "text"
@@ -75,23 +78,12 @@ func (h *LogExportHandler) Export(c echo.Context) error {
 	}
 
 	// Build the Redis stream min/max IDs from time bounds.
-	minID := fmt.Sprintf("%d-0", fromTime.UnixMilli())
-	maxID := fmt.Sprintf("%d-+", toTime.UnixMilli())
+	minID, maxID := redisStreamBounds(fromTime, toTime)
 
-	// Parse requested node IDs.
-	var nodeIDs []uuid.UUID
-	if nodeIDsParam != "" {
-		for _, raw := range strings.Split(nodeIDsParam, ",") {
-			raw = strings.TrimSpace(raw)
-			if raw == "" {
-				continue
-			}
-			id, err := uuid.Parse(raw)
-			if err != nil {
-				return response.BadRequest(c, "invalid node_ids")
-			}
-			nodeIDs = append(nodeIDs, id)
-		}
+	// Parse requested node IDs (accept both node_ids plural and node_id singular).
+	nodeIDs, err := parseNodeIDParams(nodeIDsParam, nodeIDParam)
+	if err != nil {
+		return response.BadRequest(c, "invalid node id")
 	}
 
 	// Parse optional source filter.
@@ -152,8 +144,37 @@ func (h *LogExportHandler) Export(c echo.Context) error {
 		}
 	}
 
-	// Optionally attach anomaly data.
-	_ = includeAI // anomalies appended to entries in JSON export below
+	// Optionally attach AI anomaly annotations as additional entries so they
+	// flow into every export format uniformly.
+	if includeAI {
+		for _, nodeID := range nodeIDs {
+			anomalies, err := h.anomalyRepo.ListByNode(ctx, nodeID, 1000, 0)
+			if err != nil {
+				slog.Warn("log export: failed to read anomalies",
+					slog.String("node_id", nodeID.String()),
+					slog.Any("error", err),
+				)
+				continue
+			}
+			for _, a := range anomalies {
+				if a.Timestamp.Before(fromTime) || a.Timestamp.After(toTime) {
+					continue
+				}
+				entries = append(entries, exportLogEntry{
+					Timestamp: a.Timestamp.UTC().Format(time.RFC3339),
+					NodeID:    nodeID.String(),
+					Source:    "ai:" + a.Source,
+					Severity:  a.Severity,
+					Message:   a.Summary,
+					Raw:       a.RawLog,
+					Values: map[string]string{
+						"category":      a.Category,
+						"anomaly_score": fmt.Sprintf("%.2f", a.AnomalyScore),
+					},
+				})
+			}
+		}
+	}
 
 	// Determine filename and content-type.
 	ts := time.Now().UTC().Format("20060102-150405")
@@ -195,4 +216,44 @@ func parseInt64(s string) (int64, error) {
 	var v int64
 	_, err := fmt.Sscanf(s, "%d", &v)
 	return v, err
+}
+
+// parseNodeIDParams parses node IDs from the plural ("node_ids", comma-joined)
+// and singular ("node_id") query parameters, returning the deduplicated union.
+func parseNodeIDParams(plural, singular string) ([]uuid.UUID, error) {
+	seen := make(map[uuid.UUID]struct{})
+	var ids []uuid.UUID
+	add := func(raw string) error {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			return nil
+		}
+		id, err := uuid.Parse(raw)
+		if err != nil {
+			return err
+		}
+		if _, ok := seen[id]; ok {
+			return nil
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+		return nil
+	}
+	for _, raw := range strings.Split(plural, ",") {
+		if err := add(raw); err != nil {
+			return nil, err
+		}
+	}
+	if err := add(singular); err != nil {
+		return nil, err
+	}
+	return ids, nil
+}
+
+// redisStreamBounds converts a time range into valid Redis stream IDs for
+// XRANGE. The end bound uses the bare "<ms>" form (Redis auto-fills the
+// sequence to the maximum); the previous "<ms>-+" form was an invalid stream
+// ID that made XRANGE error out and silently return nothing.
+func redisStreamBounds(from, to time.Time) (string, string) {
+	return fmt.Sprintf("%d-0", from.UnixMilli()), fmt.Sprintf("%d", to.UnixMilli())
 }
