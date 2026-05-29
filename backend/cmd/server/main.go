@@ -496,7 +496,7 @@ func main() {
 	sched.AddJob(netFullScanJob)
 	logRetentionJob := scheduler.NewLogRetentionJob(logAnomalyRepo, logAnalysisRepo, networkScanRepo, networkAnomalyRepo, 24*time.Hour)
 	sched.AddJob(logRetentionJob)
-	logReportJob := scheduler.NewLogReportScheduleJob(logReportScheduleRepo, logReporter, 60*time.Second)
+	logReportJob := scheduler.NewLogReportScheduleJob(logReportScheduleRepo, logReporter, notifSvc, 60*time.Second)
 	sched.AddJob(logReportJob)
 
 	if telegramBotEnabled && telegramBotSvc != nil {

@@ -16,7 +16,7 @@ import { AlertCircle, AlertTriangle, Activity, Zap } from "lucide-react";
 
 const LOG_FILES = [
   { value: "syslog", label: "/var/log/syslog" },
-  { value: "auth.log", label: "/var/log/auth.log" },
+  { value: "auth", label: "/var/log/auth.log" },
   { value: "pveproxy", label: "/var/log/pveproxy/access.log" },
   { value: "pvedaemon", label: "/var/log/pvedaemon.log" },
   { value: "pve-firewall", label: "/var/log/pve-firewall.log" },

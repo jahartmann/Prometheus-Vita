@@ -30,33 +30,48 @@ function parseDiff(data: unknown): DiffChange[] {
   const obj = data as Record<string, unknown>;
   const changes: DiffChange[] = [];
 
-  if (Array.isArray(obj.new_ports)) {
-    for (const p of obj.new_ports as number[]) {
-      changes.push({ type: "added", description: `Port ${p} neu geöffnet` });
-    }
+  // Matches the backend model.ScanDiff shape: new_ports/closed_ports are
+  // PortChange objects, devices are DeviceChange objects, service_changes and
+  // new_connections are their own object arrays.
+  const asObjArray = (v: unknown): Record<string, unknown>[] =>
+    Array.isArray(v) ? (v as Record<string, unknown>[]) : [];
+  const svcSuffix = (s: unknown): string => (s ? ` (${String(s)})` : "");
+
+  for (const p of asObjArray(obj.new_ports)) {
+    changes.push({
+      type: "added",
+      description: `Port ${String(p.port)}/${String(p.protocol)} neu geöffnet auf ${String(p.device_ip)}${svcSuffix(p.service_name)}`,
+    });
   }
-  if (Array.isArray(obj.removed_ports)) {
-    for (const p of obj.removed_ports as number[]) {
-      changes.push({ type: "removed", description: `Port ${p} geschlossen` });
-    }
+  for (const p of asObjArray(obj.closed_ports)) {
+    changes.push({
+      type: "removed",
+      description: `Port ${String(p.port)}/${String(p.protocol)} geschlossen auf ${String(p.device_ip)}${svcSuffix(p.service_name)}`,
+    });
   }
-  if (Array.isArray(obj.new_devices)) {
-    for (const d of obj.new_devices as string[]) {
-      changes.push({ type: "added", description: `Neues Gerät: ${d}` });
-    }
+  for (const d of asObjArray(obj.new_devices)) {
+    changes.push({
+      type: "added",
+      description: `Neues Gerät: ${String(d.ip)}${d.hostname ? ` (${String(d.hostname)})` : ""}`,
+    });
   }
-  if (Array.isArray(obj.removed_devices)) {
-    for (const d of obj.removed_devices as string[]) {
-      changes.push({ type: "removed", description: `Gerät nicht mehr sichtbar: ${d}` });
-    }
+  for (const d of asObjArray(obj.disappeared_devices)) {
+    changes.push({
+      type: "removed",
+      description: `Gerät nicht mehr sichtbar: ${String(d.ip)}${d.hostname ? ` (${String(d.hostname)})` : ""}`,
+    });
   }
-  if (Array.isArray(obj.changes)) {
-    for (const c of obj.changes as Array<Record<string, unknown>>) {
-      changes.push({
-        type: "changed",
-        description: String(c.description ?? c.message ?? JSON.stringify(c).slice(0, 80)),
-      });
-    }
+  for (const c of asObjArray(obj.service_changes)) {
+    changes.push({
+      type: "changed",
+      description: `${String(c.device_ip)}:${String(c.port)} ${String(c.old_service ?? "?")} → ${String(c.new_service ?? "?")}`,
+    });
+  }
+  for (const c of asObjArray(obj.new_connections)) {
+    changes.push({
+      type: "added",
+      description: `Neue Verbindung: :${String(c.local_port)} → ${String(c.peer_ip)}:${String(c.peer_port)}${c.process ? ` (${String(c.process)})` : ""}`,
+    });
   }
   return changes;
 }

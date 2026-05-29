@@ -35,12 +35,30 @@ function renderDetails(details: unknown): string {
     const parts: string[] = [];
     if (obj.message) parts.push(String(obj.message));
     if (obj.description) parts.push(String(obj.description));
-    if (obj.new_ports && Array.isArray(obj.new_ports))
-      parts.push(`Neue Ports: ${(obj.new_ports as number[]).join(", ")}`);
-    if (obj.removed_ports && Array.isArray(obj.removed_ports))
-      parts.push(`Entfernte Ports: ${(obj.removed_ports as number[]).join(", ")}`);
-    if (obj.new_device)
-      parts.push(`Neues Gerät: ${String(obj.new_device)}`);
+    // details_json is the marshalled model.ScanDiff: ports are PortChange
+    // objects, not plain numbers.
+    const fmtPorts = (v: unknown): string =>
+      Array.isArray(v)
+        ? (v as Array<Record<string, unknown>>)
+            .map((p) => `${String(p.port)}/${String(p.protocol)}`)
+            .join(", ")
+        : "";
+    const np = fmtPorts(obj.new_ports);
+    if (np) parts.push(`Neue Ports: ${np}`);
+    const cp = fmtPorts(obj.closed_ports);
+    if (cp) parts.push(`Geschlossene Ports: ${cp}`);
+    if (Array.isArray(obj.service_changes) && obj.service_changes.length)
+      parts.push(
+        `Dienständerungen: ${(obj.service_changes as Array<Record<string, unknown>>)
+          .map((c) => `${String(c.device_ip)}:${String(c.port)}`)
+          .join(", ")}`,
+      );
+    if (Array.isArray(obj.new_devices) && obj.new_devices.length)
+      parts.push(
+        `Neue Geräte: ${(obj.new_devices as Array<Record<string, unknown>>)
+          .map((d) => String(d.ip))
+          .join(", ")}`,
+      );
     return parts.join(" · ") || JSON.stringify(details).slice(0, 120);
   } catch {
     return "";

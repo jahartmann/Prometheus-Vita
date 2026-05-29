@@ -305,8 +305,8 @@ export const networkApi = {
     api.put(`/scan-baselines/${id}`, data),
   deleteBaseline: (id: string) =>
     api.delete(`/scan-baselines/${id}`),
-  activateBaseline: (id: string) =>
-    api.post(`/scan-baselines/${id}/activate`),
+  activateBaseline: (id: string, nodeId: string) =>
+    api.post(`/scan-baselines/${id}/activate?node_id=${nodeId}`),
 };
 
 // Storage API (cluster-level)

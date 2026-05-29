@@ -74,7 +74,7 @@ let anomaliesRequestSeq = 0;
 let baselinesRequestSeq = 0;
 let toolsRequestSeq = 0;
 
-export const useNetworkStore = create<NetworkState>()((set) => ({
+export const useNetworkStore = create<NetworkState>()((set, get) => ({
   scans: [],
   devices: [],
   anomalies: [],
@@ -264,8 +264,15 @@ export const useNetworkStore = create<NetworkState>()((set) => ({
   },
 
   activateBaseline: async (id) => {
+    // The backend requires the node_id; resolve it from the baseline so the
+    // activate call no longer 400s (the route has no node_id path segment).
+    const nodeId = get().baselines.find((b) => b.id === id)?.node_id;
+    if (!nodeId) {
+      console.error("activateBaseline: unknown baseline", id);
+      return;
+    }
     try {
-      await networkApi.activateBaseline(id);
+      await networkApi.activateBaseline(id, nodeId);
       set((state) => ({
         baselines: state.baselines.map((b) => ({
           ...b,
