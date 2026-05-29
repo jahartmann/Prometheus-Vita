@@ -20,15 +20,17 @@ type fakeUserRepo struct {
 func (f *fakeUserRepo) GetByID(_ context.Context, _ uuid.UUID) (*model.User, error) {
 	return f.user, nil
 }
-func (f *fakeUserRepo) Create(_ context.Context, _ *model.User) error              { return nil }
-func (f *fakeUserRepo) GetByUsername(_ context.Context, _ string) (*model.User, error) { return nil, nil }
-func (f *fakeUserRepo) List(_ context.Context) ([]model.User, error)              { return nil, nil }
-func (f *fakeUserRepo) Update(_ context.Context, _ *model.User) error             { return nil }
-func (f *fakeUserRepo) Delete(_ context.Context, _ uuid.UUID) error               { return nil }
-func (f *fakeUserRepo) UpdateLastLogin(_ context.Context, _ uuid.UUID) error      { return nil }
+func (f *fakeUserRepo) Create(_ context.Context, _ *model.User) error { return nil }
+func (f *fakeUserRepo) GetByUsername(_ context.Context, _ string) (*model.User, error) {
+	return nil, nil
+}
+func (f *fakeUserRepo) List(_ context.Context) ([]model.User, error)                  { return nil, nil }
+func (f *fakeUserRepo) Update(_ context.Context, _ *model.User) error                 { return nil }
+func (f *fakeUserRepo) Delete(_ context.Context, _ uuid.UUID) error                   { return nil }
+func (f *fakeUserRepo) UpdateLastLogin(_ context.Context, _ uuid.UUID) error          { return nil }
 func (f *fakeUserRepo) UpdatePassword(_ context.Context, _ uuid.UUID, _ string) error { return nil }
-func (f *fakeUserRepo) Count(_ context.Context) (int, error)                      { return 0, nil }
-func (f *fakeUserRepo) CountByRole(_ context.Context, _ model.UserRole) (int, error) { return 0, nil }
+func (f *fakeUserRepo) Count(_ context.Context) (int, error)                          { return 0, nil }
+func (f *fakeUserRepo) CountByRole(_ context.Context, _ model.UserRole) (int, error)  { return 0, nil }
 
 // run executes the MustChangePassword middleware for the given request against a
 // user that must change its password, and reports whether next() was reached.

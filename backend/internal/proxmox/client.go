@@ -493,6 +493,24 @@ func (c *Client) ShutdownVM(ctx context.Context, node string, vmid int, vmType s
 	return upid, nil
 }
 
+// RebootVM reboots a VM/CT via the Proxmox status/reboot endpoint (graceful
+// shutdown then start). Returns the task UPID.
+func (c *Client) RebootVM(ctx context.Context, node string, vmid int, vmType string) (string, error) {
+	if err := validateVMType(vmType); err != nil {
+		return "", err
+	}
+	path := fmt.Sprintf("/nodes/%s/%s/%d/status/reboot", node, vmType, vmid)
+	data, err := c.doRequestWithBody(ctx, http.MethodPost, path, nil)
+	if err != nil {
+		return "", fmt.Errorf("reboot vm %d: %w", vmid, err)
+	}
+	var upid string
+	if err := json.Unmarshal(data, &upid); err != nil {
+		return "", fmt.Errorf("unmarshal reboot upid: %w", err)
+	}
+	return upid, nil
+}
+
 // SuspendVM suspends (pauses) a QEMU VM. Returns the task UPID.
 // NOTE: Proxmox does not support suspending LXC containers — use freeze/unfreeze
 // via lxc-freeze on the host if needed. This function is QEMU-only.

@@ -971,6 +971,15 @@ func (s *Service) ShutdownVM(ctx context.Context, nodeID uuid.UUID, vmid int, vm
 	return client.ShutdownVM(ctx, pveNode, vmid, vmType)
 }
 
+func (s *Service) RebootVM(ctx context.Context, nodeID uuid.UUID, vmid int, vmType string) (string, error) {
+	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
+	if err != nil {
+		return "", err
+	}
+
+	return client.RebootVM(ctx, pveNode, vmid, vmType)
+}
+
 func (s *Service) SuspendVM(ctx context.Context, nodeID uuid.UUID, vmid int) (string, error) {
 	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
 	if err != nil {

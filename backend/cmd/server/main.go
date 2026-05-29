@@ -350,7 +350,7 @@ func main() {
 	vmRightsizingSvc := vmService.NewRightsizingService(nodeRepo, clientFactory)
 	vmAnomalySvc := vmService.NewAnomalyService(nodeRepo, metricsRepo, clientFactory)
 	snapshotPolicySvc := vmService.NewSnapshotPolicyService(snapshotPolicyRepo, nodeRepo, clientFactory)
-	scheduledActionSvc := vmService.NewScheduledActionService(scheduledActionRepo)
+	scheduledActionSvc := vmService.NewScheduledActionService(scheduledActionRepo, nodeSvc)
 	vmDependencySvc := vmService.NewDependencyService(vmDependencyRepo, nodeRepo, clientFactory)
 	operationsSvc := operationsService.NewService(
 		nodeRepo,
@@ -476,6 +476,12 @@ func main() {
 	sched.AddJob(updateCheckJob)
 	rightsizingJob := scheduler.NewRightsizingJob(rightsizingSvc, nodeRepo, 24*time.Hour)
 	sched.AddJob(rightsizingJob)
+	// VM snapshot policies and scheduled VM actions are cron-based; poll every
+	// 60s (cron granularity is minutes) and run the ones that are due.
+	snapshotPolicyJob := scheduler.NewSnapshotPolicyJob(snapshotPolicyRepo, snapshotPolicySvc, 60*time.Second)
+	sched.AddJob(snapshotPolicyJob)
+	scheduledActionJob := scheduler.NewScheduledActionJob(scheduledActionRepo, scheduledActionSvc, 60*time.Second)
+	sched.AddJob(scheduledActionJob)
 	keyRotationJob := scheduler.NewKeyRotationJob(sshkeySvc, 1*time.Hour)
 	sched.AddJob(keyRotationJob)
 	reflexEvalJob := scheduler.NewReflexEvaluationJob(reflexSvc, 30*time.Second)

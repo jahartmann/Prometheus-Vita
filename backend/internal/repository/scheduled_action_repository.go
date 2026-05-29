@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/antigravity/prometheus/internal/model"
 	"github.com/google/uuid"
@@ -16,6 +17,7 @@ type ScheduledActionRepository interface {
 	ListByVM(ctx context.Context, nodeID uuid.UUID, vmid int) ([]model.ScheduledAction, error)
 	ListActive(ctx context.Context) ([]model.ScheduledAction, error)
 	Update(ctx context.Context, a *model.ScheduledAction) error
+	UpdateLastRun(ctx context.Context, id uuid.UUID, lastRun time.Time) error
 	Delete(ctx context.Context, id uuid.UUID) error
 }
 
@@ -38,9 +40,9 @@ func (r *pgScheduledActionRepository) Create(ctx context.Context, a *model.Sched
 func (r *pgScheduledActionRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.ScheduledAction, error) {
 	var a model.ScheduledAction
 	err := r.db.QueryRow(ctx,
-		`SELECT id, node_id, vmid, vm_type, action, schedule_cron, is_active, description, created_at
+		`SELECT id, node_id, vmid, vm_type, action, schedule_cron, is_active, description, last_run_at, created_at
 		 FROM scheduled_actions WHERE id = $1`, id,
-	).Scan(&a.ID, &a.NodeID, &a.VMID, &a.VMType, &a.Action, &a.ScheduleCron, &a.IsActive, &a.Description, &a.CreatedAt)
+	).Scan(&a.ID, &a.NodeID, &a.VMID, &a.VMType, &a.Action, &a.ScheduleCron, &a.IsActive, &a.Description, &a.LastRunAt, &a.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("get scheduled action: %w", err)
 	}
@@ -49,7 +51,7 @@ func (r *pgScheduledActionRepository) GetByID(ctx context.Context, id uuid.UUID)
 
 func (r *pgScheduledActionRepository) List(ctx context.Context) ([]model.ScheduledAction, error) {
 	rows, err := r.db.Query(ctx,
-		`SELECT id, node_id, vmid, vm_type, action, schedule_cron, is_active, description, created_at
+		`SELECT id, node_id, vmid, vm_type, action, schedule_cron, is_active, description, last_run_at, created_at
 		 FROM scheduled_actions ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, fmt.Errorf("list scheduled actions: %w", err)
@@ -59,7 +61,7 @@ func (r *pgScheduledActionRepository) List(ctx context.Context) ([]model.Schedul
 	var actions []model.ScheduledAction
 	for rows.Next() {
 		var a model.ScheduledAction
-		if err := rows.Scan(&a.ID, &a.NodeID, &a.VMID, &a.VMType, &a.Action, &a.ScheduleCron, &a.IsActive, &a.Description, &a.CreatedAt); err != nil {
+		if err := rows.Scan(&a.ID, &a.NodeID, &a.VMID, &a.VMType, &a.Action, &a.ScheduleCron, &a.IsActive, &a.Description, &a.LastRunAt, &a.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan scheduled action: %w", err)
 		}
 		actions = append(actions, a)
@@ -69,7 +71,7 @@ func (r *pgScheduledActionRepository) List(ctx context.Context) ([]model.Schedul
 
 func (r *pgScheduledActionRepository) ListByVM(ctx context.Context, nodeID uuid.UUID, vmid int) ([]model.ScheduledAction, error) {
 	rows, err := r.db.Query(ctx,
-		`SELECT id, node_id, vmid, vm_type, action, schedule_cron, is_active, description, created_at
+		`SELECT id, node_id, vmid, vm_type, action, schedule_cron, is_active, description, last_run_at, created_at
 		 FROM scheduled_actions WHERE node_id = $1 AND vmid = $2 ORDER BY created_at DESC`, nodeID, vmid)
 	if err != nil {
 		return nil, fmt.Errorf("list scheduled actions by VM: %w", err)
@@ -79,7 +81,7 @@ func (r *pgScheduledActionRepository) ListByVM(ctx context.Context, nodeID uuid.
 	var actions []model.ScheduledAction
 	for rows.Next() {
 		var a model.ScheduledAction
-		if err := rows.Scan(&a.ID, &a.NodeID, &a.VMID, &a.VMType, &a.Action, &a.ScheduleCron, &a.IsActive, &a.Description, &a.CreatedAt); err != nil {
+		if err := rows.Scan(&a.ID, &a.NodeID, &a.VMID, &a.VMType, &a.Action, &a.ScheduleCron, &a.IsActive, &a.Description, &a.LastRunAt, &a.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan scheduled action: %w", err)
 		}
 		actions = append(actions, a)
@@ -89,7 +91,7 @@ func (r *pgScheduledActionRepository) ListByVM(ctx context.Context, nodeID uuid.
 
 func (r *pgScheduledActionRepository) ListActive(ctx context.Context) ([]model.ScheduledAction, error) {
 	rows, err := r.db.Query(ctx,
-		`SELECT id, node_id, vmid, vm_type, action, schedule_cron, is_active, description, created_at
+		`SELECT id, node_id, vmid, vm_type, action, schedule_cron, is_active, description, last_run_at, created_at
 		 FROM scheduled_actions WHERE is_active = true ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, fmt.Errorf("list active scheduled actions: %w", err)
@@ -99,7 +101,7 @@ func (r *pgScheduledActionRepository) ListActive(ctx context.Context) ([]model.S
 	var actions []model.ScheduledAction
 	for rows.Next() {
 		var a model.ScheduledAction
-		if err := rows.Scan(&a.ID, &a.NodeID, &a.VMID, &a.VMType, &a.Action, &a.ScheduleCron, &a.IsActive, &a.Description, &a.CreatedAt); err != nil {
+		if err := rows.Scan(&a.ID, &a.NodeID, &a.VMID, &a.VMType, &a.Action, &a.ScheduleCron, &a.IsActive, &a.Description, &a.LastRunAt, &a.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan scheduled action: %w", err)
 		}
 		actions = append(actions, a)
@@ -111,6 +113,11 @@ func (r *pgScheduledActionRepository) Update(ctx context.Context, a *model.Sched
 	_, err := r.db.Exec(ctx,
 		`UPDATE scheduled_actions SET action = $2, schedule_cron = $3, is_active = $4, description = $5 WHERE id = $1`,
 		a.ID, a.Action, a.ScheduleCron, a.IsActive, a.Description)
+	return err
+}
+
+func (r *pgScheduledActionRepository) UpdateLastRun(ctx context.Context, id uuid.UUID, lastRun time.Time) error {
+	_, err := r.db.Exec(ctx, `UPDATE scheduled_actions SET last_run_at = $2 WHERE id = $1`, id, lastRun)
 	return err
 }
 
