@@ -16,6 +16,46 @@ const (
 	streamShutdownWindow = 10 * time.Second
 )
 
+// StreamingSession is a long-running remote command whose stdout is read
+// incrementally (line by line) rather than buffered to completion. Use it for
+// never-terminating commands like `tail -F`. The caller MUST call Close() to
+// terminate the remote command and release the SSH session.
+type StreamingSession struct {
+	session *ssh.Session
+	// Stdout streams the command's standard output as it is produced.
+	Stdout io.Reader
+}
+
+// Close signals the remote command to terminate and closes the session.
+func (s *StreamingSession) Close() error {
+	if s.session == nil {
+		return nil
+	}
+	_ = s.session.Signal(ssh.SIGTERM)
+	return s.session.Close()
+}
+
+// StartStreaming starts cmd on the remote host and returns a StreamingSession
+// whose Stdout can be read incrementally. Unlike RunCommand, it does not buffer
+// output or wait for the command to finish, so it works for indefinite streams
+// (e.g. `tail -F`). The caller owns the returned session and must Close() it.
+func (c *Client) StartStreaming(cmd string) (*StreamingSession, error) {
+	session, err := c.client.NewSession()
+	if err != nil {
+		return nil, fmt.Errorf("create streaming session: %w", err)
+	}
+	stdout, err := session.StdoutPipe()
+	if err != nil {
+		_ = session.Close()
+		return nil, fmt.Errorf("streaming stdout pipe: %w", err)
+	}
+	if err := session.Start(cmd); err != nil {
+		_ = session.Close()
+		return nil, fmt.Errorf("start streaming command: %w", err)
+	}
+	return &StreamingSession{session: session, Stdout: stdout}, nil
+}
+
 // StreamCopyNodeToNode pipes a file from source node to target node via SSH.
 // It reads from source stdout and writes to target stdin using a fixed 4MB buffer.
 // The onProgress callback is called with bytes transferred so far.

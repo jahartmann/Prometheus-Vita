@@ -184,40 +184,32 @@ func (w *Worker) streamCommand(ctx context.Context, cmd string) error {
 	}
 	defer client.Close()
 
-	// NOTE: The SSH client exposes its underlying *ssh.Client through RunCommand
-	// and CopyTo/CopyFrom, but not raw session creation. We use RunCommand in a
-	// goroutine with a context and read combined output via the result.
-	//
-	// For tail -f style streaming (long-running, line-by-line) we need direct
-	// session access. The streaming.go helper in the ssh package demonstrates
-	// that the internal client field is accessed directly within the package.
-	//
-	// We therefore use the streaming approach from ssh.StreamCopyNodeToNode as
-	// a reference: create a session, attach a stdout pipe, call session.Start,
-	// and read line-by-line.
-	//
-	// Because ssh.Client does not expose a public NewSession method, we run the
-	// command via RunCommand in a goroutine and post-process stdout. For true
-	// line-by-line streaming the operator may extend ssh.Client with a
-	// StartStreaming(cmd) (io.ReadCloser, error) method.
-	//
-	// Interim approach: run the command and process output when it finishes.
-	// This covers short-lived tail captures; for indefinite streams, see TODO.
-
-	// TODO: Add a ssh.Client.StartStreaming(cmd string) (io.ReadCloser, error)
-	// method that exposes session.StdoutPipe + session.Start for long-running
-	// commands. Until then, priority workers fall back to a timed RunCommand.
-
-	streamCtx, cancel := context.WithTimeout(ctx, w.manager.cfg.RotationInterval*2)
-	defer cancel()
-
-	result, err := client.RunCommand(streamCtx, cmd)
+	// Real-time streaming: `tail -F` never terminates, so a buffered RunCommand
+	// would block until the context timeout fired and then discard everything it
+	// had read. Use a streaming session and scan stdout line by line as entries
+	// arrive.
+	stream, err := client.StartStreaming(cmd)
 	if err != nil {
-		return fmt.Errorf("run stream command: %w", err)
+		return fmt.Errorf("start stream command: %w", err)
 	}
+	defer stream.Close()
 
-	// Determine which source this line belongs to (heuristic by path presence).
-	scanner := bufio.NewScanner(strings.NewReader(result.Stdout))
+	// Close the stream when the context is cancelled or a stop is requested so
+	// the blocking scanner read below unblocks promptly.
+	stopWatch := make(chan struct{})
+	defer close(stopWatch)
+	go func() {
+		select {
+		case <-ctx.Done():
+		case <-w.stopCh:
+		case <-stopWatch:
+			return
+		}
+		_ = stream.Close()
+	}()
+
+	scanner := bufio.NewScanner(stream.Stdout)
+	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
 	for scanner.Scan() {
 		select {
 		case <-ctx.Done():
@@ -231,12 +223,17 @@ func (w *Worker) streamCommand(ctx context.Context, cmd string) error {
 		if line == "" {
 			continue
 		}
+		// tail -F prints "==> /path <==" headers when switching files; skip them
+		// so they are not stored as bogus log entries.
+		if strings.HasPrefix(line, "==> ") && strings.HasSuffix(line, " <==") {
+			continue
+		}
 
 		source := w.inferSource(line)
 		w.processLine(ctx, line, source)
 	}
 
-	return nil
+	return scanner.Err()
 }
 
 // runCommandOutput executes a command and returns combined stdout as a string.
