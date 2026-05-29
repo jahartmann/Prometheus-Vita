@@ -300,7 +300,9 @@ func (h *NodeHandler) GetPorts(c echo.Context) error {
 	if nodeErr != nil {
 		slog.Warn("node port scan failed", slog.Any("error", nodeErr))
 		nodeGroup.ScanStatus = "error"
-		nodeGroup.ScanError = "SSH-Verbindung fehlgeschlagen"
+		// RunSSHCommand already classifies the failure into an actionable message
+		// (no credentials / host-key changed / unreachable / auth failed).
+		nodeGroup.ScanError = nodeErr.Error()
 	} else {
 		nodeGroup.Ports = parseSSOutput(nodeResult.Stdout)
 	}
@@ -318,10 +320,17 @@ func (h *NodeHandler) GetPorts(c echo.Context) error {
 	if len(running) > 0 {
 		vmGroups := make([]VMPortGroup, len(running))
 		var wg sync.WaitGroup
+		// Cap concurrency: all VM scans share the node's single pooled SSH
+		// connection. Too many parallel sessions trip OpenSSH's MaxSessions
+		// (default 10) and race the pool's liveness check, which surfaced as
+		// "Befehlsausführung fehlgeschlagen" on the ports/network views.
+		sem := make(chan struct{}, 4)
 		for i, vm := range running {
 			wg.Add(1)
 			go func(idx int, v proxmox.VMInfo) {
 				defer wg.Done()
+				sem <- struct{}{}
+				defer func() { <-sem }()
 				scanCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
 				defer cancel()
 				vmGroups[idx] = h.scanVMPorts(scanCtx, id, v)
@@ -374,7 +383,7 @@ func (h *NodeHandler) scanLXCPorts(ctx context.Context, nodeID uuid.UUID, group 
 	if err != nil {
 		slog.Warn("lxc port scan failed", slog.Int("vmid", group.VMID), slog.Any("error", err))
 		group.ScanStatus = "error"
-		group.ScanError = "pct exec fehlgeschlagen"
+		group.ScanError = err.Error()
 		return group
 	}
 	group.Ports = parseSSOutput(result.Stdout)

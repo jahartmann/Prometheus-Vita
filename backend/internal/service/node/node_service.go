@@ -1103,19 +1103,23 @@ func (s *Service) RunSSHCommand(ctx context.Context, nodeID uuid.UUID, command s
 
 	sshCfg, err := s.buildSSHConfig(node)
 	if err != nil {
-		return nil, fmt.Errorf("build ssh config: %w", err)
+		return nil, errors.New(classifySSHError(err))
 	}
 
 	client, err := s.sshPool.Get(nodeID.String(), sshCfg)
 	if err != nil {
-		return nil, fmt.Errorf("get ssh client: %w", err)
+		return nil, errors.New(classifySSHError(err))
 	}
 	defer s.sshPool.Return(nodeID.String(), client)
 
 	// Persist host key on first successful connection (TOFU).
 	s.saveSSHHostKeyIfNew(ctx, node, client)
 
-	return client.RunCommand(ctx, command)
+	result, err := client.RunCommand(ctx, command)
+	if err != nil {
+		return result, errors.New(classifySSHError(err))
+	}
+	return result, nil
 }
 
 func (s *Service) BulkVMAction(ctx context.Context, nodeID uuid.UUID, req model.BulkVMRequest) ([]model.BulkVMResult, error) {
@@ -1387,6 +1391,13 @@ func (s *Service) GetVMRRDData(ctx context.Context, nodeID uuid.UUID, vmid int, 
 }
 
 func (s *Service) buildSSHConfig(node *model.Node) (ssh.SSHConfig, error) {
+	// A node added by API token only (no onboarding) has no SSH key. Fail early
+	// with an actionable message instead of a cryptic "no authentication method"
+	// from deep inside the SSH client.
+	if node.SSHPrivateKey == "" {
+		return ssh.SSHConfig{}, fmt.Errorf("keine SSH-Zugangsdaten für diese Node hinterlegt — bitte die Node per Onboarding (mit Root-Passwort) einrichten, damit ein SSH-Schlüssel deployt wird")
+	}
+
 	cfg := ssh.SSHConfig{
 		Host:    node.Hostname,
 		Port:    node.SSHPort,
@@ -1394,15 +1405,41 @@ func (s *Service) buildSSHConfig(node *model.Node) (ssh.SSHConfig, error) {
 		HostKey: node.SSHHostKey,
 	}
 
-	if node.SSHPrivateKey != "" {
-		decrypted, err := s.encryptor.Decrypt(node.SSHPrivateKey)
-		if err != nil {
-			return ssh.SSHConfig{}, fmt.Errorf("decrypt ssh private key: %w", err)
-		}
-		cfg.PrivateKey = decrypted
+	decrypted, err := s.encryptor.Decrypt(node.SSHPrivateKey)
+	if err != nil {
+		return ssh.SSHConfig{}, fmt.Errorf("decrypt ssh private key: %w", err)
 	}
+	cfg.PrivateKey = decrypted
 
 	return cfg, nil
+}
+
+// classifySSHError maps a low-level SSH failure to an actionable German message
+// so the UI shows WHY SSH failed (and how to fix it) instead of a generic
+// "SSH-Verbindung fehlgeschlagen".
+func classifySSHError(err error) string {
+	if err == nil {
+		return ""
+	}
+	msg := err.Error()
+	low := strings.ToLower(msg)
+	switch {
+	case strings.Contains(low, "host key mismatch"):
+		return "SSH-Host-Key der Node hat sich geändert (z. B. nach Neuinstallation). Node löschen und neu onboarden, um den Schlüssel zu aktualisieren."
+	case strings.Contains(low, "keine ssh-zugangsdaten"):
+		return msg // already actionable
+	case strings.Contains(low, "unable to authenticate"),
+		strings.Contains(low, "no supported methods"),
+		strings.Contains(low, "no authentication method"):
+		return "SSH-Authentifizierung fehlgeschlagen — der hinterlegte Schlüssel wird vom Node nicht akzeptiert. Node neu onboarden."
+	case strings.Contains(low, "i/o timeout"),
+		strings.Contains(low, "connection refused"),
+		strings.Contains(low, "no route to host"),
+		strings.Contains(low, "dial tcp"):
+		return "Node per SSH nicht erreichbar — Host, SSH-Port und Firewall prüfen."
+	default:
+		return msg
+	}
 }
 
 // saveSSHHostKeyIfNew persists the SSH host key from a client connection when the node
