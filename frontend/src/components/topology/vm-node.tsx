@@ -24,14 +24,14 @@ function getHeatmapBg(cpu?: number, mem?: number): string {
   if (val >= 90) return "bg-red-500/10 dark:bg-red-500/15";
   if (val >= 75) return "bg-amber-500/8 dark:bg-amber-500/12";
   if (val >= 50) return "bg-yellow-500/6 dark:bg-yellow-500/10";
-  if (val > 0) return "bg-green-500/5 dark:bg-green-500/8";
+  if (val > 0) return "bg-emerald-500/5 dark:bg-emerald-500/8";
   return "";
 }
 
 function getStatusBorderClass(status: string): string {
   switch (status) {
     case "running":
-      return "border-green-500/50";
+      return "border-emerald-500/50";
     case "paused":
     case "suspended":
       return "border-amber-500/50";
@@ -45,7 +45,7 @@ function getStatusBorderClass(status: string): string {
 function getStatusDotClass(status: string): string {
   switch (status) {
     case "running":
-      return "bg-green-500";
+      return "bg-emerald-500";
     case "paused":
     case "suspended":
       return "bg-amber-500";

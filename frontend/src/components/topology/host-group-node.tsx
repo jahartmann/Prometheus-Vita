@@ -28,20 +28,20 @@ interface HostGroupNodeData {
 function getStatusBorderClass(status: string): string {
   switch (status) {
     case "online":
-      return "border-green-500/40 dark:border-green-500/30";
+      return "border-emerald-500/40 dark:border-emerald-500/30";
     case "warning":
       return "border-amber-500/40 dark:border-amber-500/30";
     case "critical":
       return "border-red-500/40 dark:border-red-500/30";
     default:
-      return "border-zinc-300/60 dark:border-zinc-700/60";
+      return "border-border dark:border-border";
   }
 }
 
 function getStatusGlow(status: string): string {
   switch (status) {
     case "online":
-      return "shadow-green-500/5 dark:shadow-green-500/8";
+      return "shadow-emerald-500/5 dark:shadow-emerald-500/8";
     case "warning":
       return "shadow-amber-500/5 dark:shadow-amber-500/8";
     case "critical":
@@ -54,7 +54,7 @@ function getStatusGlow(status: string): string {
 function getStatusDotClass(status: string): string {
   switch (status) {
     case "online":
-      return "bg-green-500";
+      return "bg-emerald-500";
     case "warning":
       return "bg-amber-500";
     case "critical":
@@ -88,7 +88,7 @@ function HostGroupNodeComponent({ data, id }: NodeProps) {
           <div className={cn(
             "h-3 w-3 rounded-full shrink-0 ring-2 ring-offset-1 ring-offset-card",
             getStatusDotClass(d.status),
-            online ? "ring-green-500/30 animate-pulse" : "ring-transparent"
+            online ? "ring-emerald-500/30 animate-pulse" : "ring-transparent"
           )} />
           <Server className="h-4.5 w-4.5 text-muted-foreground shrink-0" />
           <span className="font-bold text-sm truncate flex-1">{d.label}</span>

@@ -70,7 +70,7 @@ function GroupIcon({ type }: { type: string }) {
     case "node":
       return <Server className="h-4 w-4 text-blue-500" />;
     case "qemu":
-      return <Monitor className="h-4 w-4 text-green-500" />;
+      return <Monitor className="h-4 w-4 text-emerald-500" />;
     case "lxc":
       return <Box className="h-4 w-4 text-orange-500" />;
     default:
@@ -345,7 +345,7 @@ export function NodePorts({ nodeId }: NodePortsProps) {
         {/* Summary */}
         <div className="grid gap-3 sm:grid-cols-4">
           <div className="flex items-center gap-3 rounded-lg border p-3">
-            <ArrowDownToLine className="h-5 w-5 text-green-500" />
+            <ArrowDownToLine className="h-5 w-5 text-emerald-500" />
             <div>
               <p className="text-sm text-muted-foreground">Lauschend</p>
               <p className="text-lg font-bold">{listening.length}</p>
@@ -359,7 +359,7 @@ export function NodePorts({ nodeId }: NodePortsProps) {
             </div>
           </div>
           <div className="flex items-center gap-3 rounded-lg border p-3">
-            <Radio className="h-5 w-5 text-zinc-500" />
+            <Radio className="h-5 w-5 text-muted-foreground" />
             <div>
               <p className="text-sm text-muted-foreground">Gesamt</p>
               <p className="text-lg font-bold">{totalPorts}</p>

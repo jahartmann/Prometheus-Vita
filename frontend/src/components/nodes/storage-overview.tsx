@@ -187,8 +187,8 @@ export function StorageOverview({ nodeId, status }: StorageOverviewProps) {
         <Card hover>
           <CardContent className="p-5">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100 dark:bg-zinc-800">
-                <Database className="h-5 w-5 text-zinc-600 dark:text-zinc-400" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100 dark:bg-muted">
+                <Database className="h-5 w-5 text-muted-foreground dark:text-muted-foreground" />
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Gesamt-Speicher</p>
@@ -202,8 +202,8 @@ export function StorageOverview({ nodeId, status }: StorageOverviewProps) {
         <Card hover>
           <CardContent className="p-5">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100 dark:bg-zinc-800">
-                <HardDrive className="h-5 w-5 text-zinc-600 dark:text-zinc-400" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100 dark:bg-muted">
+                <HardDrive className="h-5 w-5 text-muted-foreground dark:text-muted-foreground" />
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Belegt</p>
@@ -217,8 +217,8 @@ export function StorageOverview({ nodeId, status }: StorageOverviewProps) {
         <Card hover>
           <CardContent className="p-5">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100 dark:bg-zinc-800">
-                <HardDrive className="h-5 w-5 text-zinc-600 dark:text-zinc-400" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100 dark:bg-muted">
+                <HardDrive className="h-5 w-5 text-muted-foreground dark:text-muted-foreground" />
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Verfügbar</p>

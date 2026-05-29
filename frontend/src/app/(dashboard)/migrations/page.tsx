@@ -80,8 +80,8 @@ const MODE_CONFIG: {
     description: "Live-Backup ohne Downtime",
     icon: Camera,
     accent: "text-green-600 dark:text-green-400",
-    border: "border-green-500/50",
-    bg: "bg-green-500/10",
+    border: "border-emerald-500/50",
+    bg: "bg-emerald-500/10",
   },
   {
     value: "suspend",
@@ -270,7 +270,7 @@ export default function MigrationsPage() {
   const statusColor = (status: string) => {
     switch (status) {
       case "running":
-        return "bg-green-500";
+        return "bg-emerald-500";
       case "stopped":
         return "bg-red-500";
       case "paused":
@@ -307,7 +307,7 @@ export default function MigrationsPage() {
                   isActive &&
                     "border-primary bg-primary text-primary-foreground",
                   isCompleted &&
-                    "border-primary bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100",
+                    "border-primary bg-zinc-100 dark:bg-muted text-zinc-900 dark:text-foreground",
                   !isActive &&
                     !isCompleted &&
                     "border-muted-foreground/30 text-muted-foreground"
@@ -594,7 +594,7 @@ export default function MigrationsPage() {
                               ? "bg-red-500"
                               : usedPercent > 70
                               ? "bg-amber-500"
-                              : "bg-green-500"
+                              : "bg-emerald-500"
                           )}
                           style={{ width: `${usedPercent}%` }}
                         />
@@ -739,8 +739,8 @@ export default function MigrationsPage() {
         </Card>
 
         <div className="flex flex-col items-center gap-1">
-          <div className="h-10 w-10 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center">
-            <ChevronRight className="h-5 w-5 text-zinc-600 dark:text-zinc-400" />
+          <div className="h-10 w-10 rounded-full bg-zinc-100 dark:bg-muted flex items-center justify-center">
+            <ChevronRight className="h-5 w-5 text-muted-foreground dark:text-muted-foreground" />
           </div>
           <span className="text-xs text-muted-foreground">Migration</span>
         </div>
