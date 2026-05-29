@@ -74,7 +74,7 @@ export function NetworkAnomalyList({ nodeId }: AnomalyListProps) {
 
   if (anomalies.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 text-zinc-500">
+      <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
         <ShieldAlert className="h-8 w-8 mb-3 opacity-30" />
         <p className="text-sm">Keine Netzwerk-Anomalien erkannt.</p>
       </div>
@@ -88,26 +88,26 @@ export function NetworkAnomalyList({ nodeId }: AnomalyListProps) {
     <div className="space-y-3">
       {unacked.length > 0 && (
         <div className="space-y-2">
-          <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
             Aktiv ({unacked.length})
           </p>
           {unacked.map((a) => (
-            <Card key={a.id} className="border-zinc-800 bg-zinc-900/60">
+            <Card key={a.id} className="border-border bg-card">
               <CardContent className="py-3 px-4">
                 <div className="flex items-start gap-3">
                   <ShieldAlert className="h-4 w-4 mt-0.5 text-orange-400 shrink-0" />
                   <div className="flex-1 min-w-0 space-y-1.5">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-medium text-zinc-200">
+                      <span className="text-sm font-medium text-foreground">
                         {formatAnomalyType(a.anomaly_type)}
                       </span>
                       {riskBadge(a.risk_score)}
-                      <span className="text-xs text-zinc-600 ml-auto">
+                      <span className="text-xs text-muted-foreground ml-auto">
                         {new Date(a.created_at).toLocaleString("de-DE")}
                       </span>
                     </div>
                     {a.details_json != null && (
-                      <p className="text-xs text-zinc-500 truncate">
+                      <p className="text-xs text-muted-foreground truncate">
                         {renderDetails(a.details_json)}
                       </p>
                     )}
@@ -130,19 +130,19 @@ export function NetworkAnomalyList({ nodeId }: AnomalyListProps) {
 
       {acked.length > 0 && (
         <div className="space-y-2">
-          <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
             Bestätigt ({acked.length})
           </p>
           {acked.map((a) => (
             <div
               key={a.id}
-              className="flex items-center gap-3 rounded-md border border-zinc-800/50 bg-zinc-900/30 px-4 py-2.5 opacity-50"
+              className="flex items-center gap-3 rounded-md border border-border bg-card px-4 py-2.5 opacity-50"
             >
-              <CheckCircle2 className="h-3.5 w-3.5 text-zinc-600 shrink-0" />
-              <span className="text-xs text-zinc-500 line-through">
+              <CheckCircle2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <span className="text-xs text-muted-foreground line-through">
                 {formatAnomalyType(a.anomaly_type)}
               </span>
-              <span className="text-[10px] text-zinc-700 ml-auto">
+              <span className="text-[10px] text-muted-foreground ml-auto">
                 {new Date(a.created_at).toLocaleString("de-DE")}
               </span>
             </div>

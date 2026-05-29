@@ -33,7 +33,7 @@ const PORT_RISK_CLASSES: Record<PortRisk, string> = {
   high: "text-red-400",
   medium: "text-yellow-400",
   low: "text-green-400",
-  info: "text-zinc-500",
+  info: "text-muted-foreground",
 };
 
 const RISK_SORT_ORDER: Record<PortRisk, number> = {
@@ -106,18 +106,18 @@ function PortGroup({ label, ports, filter, sortKey, sortDir }: PortGroupProps) {
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
-      <CollapsibleTrigger className="flex items-center gap-2 w-full px-3 py-2 rounded-md bg-zinc-800/50 hover:bg-zinc-800 text-sm font-medium text-zinc-300 transition-colors">
+      <CollapsibleTrigger className="flex items-center gap-2 w-full px-3 py-2 rounded-md bg-muted hover:bg-muted text-sm font-medium text-foreground transition-colors">
         {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
         {label}
         <Badge variant="secondary" className="ml-auto text-xs">{filtered.length}</Badge>
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <div className="rounded-lg border border-zinc-800 mt-1 overflow-hidden">
+        <div className="rounded-lg border border-border mt-1 overflow-hidden">
           <Table>
             <TableBody>
               {filtered.map((p, i) => {
                 return (
-                  <TableRow key={p.id || `${p.port}-${p.protocol}-${i}`} className="border-zinc-800/50">
+                  <TableRow key={p.id || `${p.port}-${p.protocol}-${i}`} className="border-border">
                     <TableCell className="font-mono font-bold text-sm w-24">
                       <span className={PORT_RISK_CLASSES[p.risk]}>
                         {p.port}
@@ -133,17 +133,17 @@ function PortGroup({ label, ports, filter, sortKey, sortDir }: PortGroupProps) {
                         variant="outline"
                         className={`text-xs ${
                           p.state === "open" ? "text-green-400 border-green-400/30" :
-                          p.state === "closed" ? "text-zinc-500 border-zinc-700" :
+                          p.state === "closed" ? "text-muted-foreground border-border" :
                           "text-yellow-400 border-yellow-400/30"
                         }`}
                       >
                         {p.state}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-sm text-zinc-300">{p.service ?? "-"}</TableCell>
-                    <TableCell className="text-xs text-zinc-500">{p.version ?? "-"}</TableCell>
-                    <TableCell className="text-xs text-zinc-500">{p.process ?? "-"}</TableCell>
-                    <TableCell className="text-xs text-zinc-500 font-mono">{endpointText(p)}</TableCell>
+                    <TableCell className="text-sm text-foreground">{p.service ?? "-"}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{p.version ?? "-"}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{p.process ?? "-"}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground font-mono">{endpointText(p)}</TableCell>
                     <TableCell className="w-28">
                       <ServiceRiskBadge risk={p.risk} reason={p.riskReason} />
                     </TableCell>
@@ -195,7 +195,7 @@ export function PortTable({ nodeId }: PortTableProps) {
 
   if (!latestScan) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 text-zinc-500">
+      <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
         <p className="text-sm">Noch kein Scan durchgeführt.</p>
         <p className="text-xs mt-1">Starte einen Quick Scan oder Full Scan.</p>
       </div>
@@ -210,16 +210,16 @@ export function PortTable({ nodeId }: PortTableProps) {
           placeholder="Port, Service, Prozess, Endpunkt filtern..."
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
-          className="max-w-xs bg-zinc-900 border-zinc-700 text-sm h-8"
+          className="max-w-xs bg-card border-border text-sm h-8"
         />
-        <div className="flex items-center gap-1 ml-auto text-xs text-zinc-500">
+        <div className="flex items-center gap-1 ml-auto text-xs text-muted-foreground">
           <span>Sortierung:</span>
           {(["port", "protocol", "state", "service", "risk"] as SortKey[]).map((k) => (
             <Button
               key={k}
               variant="ghost"
               size="sm"
-              className={`h-6 px-2 text-xs gap-1 ${sortKey === k ? "text-zinc-200" : "text-zinc-500"}`}
+              className={`h-6 px-2 text-xs gap-1 ${sortKey === k ? "text-foreground" : "text-muted-foreground"}`}
               onClick={() => toggleSort(k)}
             >
               {k.charAt(0).toUpperCase() + k.slice(1)}
@@ -230,7 +230,7 @@ export function PortTable({ nodeId }: PortTableProps) {
       </div>
 
       {/* Table header labels (visual only) */}
-      <div className="hidden md:grid grid-cols-[96px_80px_96px_1fr_1fr_1fr_1.25fr_112px] gap-0 px-4 text-[10px] uppercase tracking-wide text-zinc-600">
+      <div className="hidden md:grid grid-cols-[96px_80px_96px_1fr_1fr_1fr_1.25fr_112px] gap-0 px-4 text-[10px] uppercase tracking-wide text-muted-foreground">
         <span>Port</span>
         <span>Proto</span>
         <span>State</span>
@@ -243,7 +243,7 @@ export function PortTable({ nodeId }: PortTableProps) {
 
       {/* Grouped sections */}
       {groups.size === 0 ? (
-        <div className="text-center py-8 text-zinc-600 text-sm">Keine Ports gefunden</div>
+        <div className="text-center py-8 text-muted-foreground text-sm">Keine Ports gefunden</div>
       ) : (
         Array.from(groups.entries()).map(([label, ports]) => (
           <PortGroup
@@ -257,7 +257,7 @@ export function PortTable({ nodeId }: PortTableProps) {
         ))
       )}
 
-      <p className="text-xs text-zinc-600">
+      <p className="text-xs text-muted-foreground">
         {allPorts.length} Ports total · Letzter Scan:{" "}
         {latestScan.started_at
           ? new Date(latestScan.started_at).toLocaleString("de-DE")

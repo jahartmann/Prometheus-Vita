@@ -75,7 +75,7 @@ export function BaselineManager({ nodeId }: BaselineManagerProps) {
           placeholder="Label (optional)..."
           value={newLabel}
           onChange={(e) => setNewLabel(e.target.value)}
-          className="max-w-xs bg-zinc-900 border-zinc-700 text-sm h-8"
+          className="max-w-xs bg-card border-border text-sm h-8"
           onKeyDown={(e) => e.key === "Enter" && handleCreate()}
         />
         <Button
@@ -92,7 +92,7 @@ export function BaselineManager({ nodeId }: BaselineManagerProps) {
 
       {/* Baseline list */}
       {baselines.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-10 text-zinc-600">
+        <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">
           <BookMarked className="h-7 w-7 mb-2 opacity-40" />
           <p className="text-sm">Keine Baselines vorhanden.</p>
         </div>
@@ -101,12 +101,12 @@ export function BaselineManager({ nodeId }: BaselineManagerProps) {
           {baselines.map((b) => (
             <Card
               key={b.id}
-              className={`border-zinc-800 ${b.is_active ? "bg-blue-950/20 border-blue-800/40" : "bg-zinc-900/40"}`}
+              className={`border-border ${b.is_active ? "bg-blue-950/20 border-blue-800/40" : "bg-card"}`}
             >
               <CardContent className="py-2.5 px-4">
                 <div className="flex items-center gap-3">
                   <BookMarked
-                    className={`h-4 w-4 shrink-0 ${b.is_active ? "text-blue-400" : "text-zinc-600"}`}
+                    className={`h-4 w-4 shrink-0 ${b.is_active ? "text-blue-400" : "text-muted-foreground"}`}
                   />
 
                   {/* Label */}
@@ -116,7 +116,7 @@ export function BaselineManager({ nodeId }: BaselineManagerProps) {
                         <Input
                           value={editLabel}
                           onChange={(e) => setEditLabel(e.target.value)}
-                          className="h-6 text-xs bg-zinc-800 border-zinc-700 max-w-[200px]"
+                          className="h-6 text-xs bg-muted border-border max-w-[200px]"
                           onKeyDown={(e) => {
                             if (e.key === "Enter") handleSaveLabel(b.id);
                             if (e.key === "Escape") setEditingId(null);
@@ -134,8 +134,8 @@ export function BaselineManager({ nodeId }: BaselineManagerProps) {
                       </div>
                     ) : (
                       <div className="flex items-center gap-2">
-                        <span className="text-sm text-zinc-300 truncate">
-                          {b.label || <span className="text-zinc-600 italic">Kein Label</span>}
+                        <span className="text-sm text-foreground truncate">
+                          {b.label || <span className="text-muted-foreground italic">Kein Label</span>}
                         </span>
                         {b.is_active && (
                           <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30 text-[10px]">
@@ -144,7 +144,7 @@ export function BaselineManager({ nodeId }: BaselineManagerProps) {
                         )}
                       </div>
                     )}
-                    <p className="text-[10px] text-zinc-600 mt-0.5">
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
                       {new Date(b.created_at).toLocaleString("de-DE")}
                     </p>
                   </div>
@@ -165,7 +165,7 @@ export function BaselineManager({ nodeId }: BaselineManagerProps) {
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="h-7 w-7 p-0 text-zinc-500 hover:text-zinc-200"
+                      className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
                       onClick={() => {
                         setEditingId(b.id);
                         setEditLabel(b.label ?? "");
@@ -176,7 +176,7 @@ export function BaselineManager({ nodeId }: BaselineManagerProps) {
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="h-7 w-7 p-0 text-zinc-500 hover:text-red-400"
+                      className="h-7 w-7 p-0 text-muted-foreground hover:text-red-400"
                       disabled={deletingId === b.id}
                       onClick={() => handleDelete(b.id)}
                     >

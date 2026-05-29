@@ -42,7 +42,7 @@ export function ScanStatusBar({
   ].filter((message): message is string => Boolean(message));
 
   return (
-    <div className="flex flex-wrap items-center gap-4 rounded-lg border border-zinc-800 bg-zinc-900/60 px-4 py-3">
+    <div className="flex flex-wrap items-center gap-4 rounded-lg border border-border bg-card px-4 py-3">
       {/* Scan info */}
       <div className="flex items-center gap-6 flex-1 min-w-0">
         <div className="flex flex-col">
@@ -53,7 +53,7 @@ export function ScanStatusBar({
             </Badge>
           </div>
           {lastQuick ? (
-            <span className="text-sm text-zinc-300 font-mono">
+            <span className="text-sm text-foreground font-mono">
               {new Date(lastQuick).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}{" "}
               <span className="text-muted-foreground text-xs">({relativeTime(lastQuick)})</span>
             </span>
@@ -62,7 +62,7 @@ export function ScanStatusBar({
           )}
         </div>
 
-        <div className="w-px h-8 bg-zinc-800" />
+        <div className="w-px h-8 bg-muted" />
 
         <div className="flex flex-col">
           <div className="flex items-center gap-2">
@@ -72,7 +72,7 @@ export function ScanStatusBar({
             </Badge>
           </div>
           {lastFull ? (
-            <span className="text-sm text-zinc-300 font-mono">
+            <span className="text-sm text-foreground font-mono">
               {new Date(lastFull).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}{" "}
               <span className="text-muted-foreground text-xs">({relativeTime(lastFull)})</span>
             </span>
@@ -85,7 +85,7 @@ export function ScanStatusBar({
 
         {isScanning && (
           <>
-            <div className="w-px h-8 bg-zinc-800" />
+            <div className="w-px h-8 bg-muted" />
             <div className="flex items-center gap-2 text-sm text-blue-400">
               <Loader2 className="h-4 w-4 animate-spin" />
               Scan läuft...
