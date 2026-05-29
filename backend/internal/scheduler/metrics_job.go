@@ -195,23 +195,16 @@ func (j *MetricsCollectionJob) Run(ctx context.Context) error {
 			mu.Lock()
 			activeKeys[nodeKey] = true
 			mu.Unlock()
-			netInRate, netOutRate, _, _, valid := j.cache.calculateDelta(
-				nodeKey, status.NetIn, status.NetOut, 0, 0, now,
-			)
+			// Node network rates come from RRD: the Proxmox /status endpoint does
+			// not return netin/netout (status.NetIn/NetOut are always 0), so a
+			// delta over them produced permanently-zero traffic. RRD net_in/
+			// net_out are already per-second rates.
+			netInRate, netOutRate := nodeNetRatesFromRRD(ctx, client, pveNode)
 
-			// If first reading (no previous), store 0 rates
-			if !valid {
-				netInRate = 0
-				netOutRate = 0
-			}
-
-			slog.Debug("metrics: node delta calculated",
+			slog.Debug("metrics: node net rates from RRD",
 				slog.String("node", node.Name),
-				slog.Int64("raw_netin", status.NetIn),
-				slog.Int64("raw_netout", status.NetOut),
 				slog.Int64("rate_in", netInRate),
 				slog.Int64("rate_out", netOutRate),
-				slog.Bool("valid", valid),
 			)
 
 			record := &model.MetricsRecord{
