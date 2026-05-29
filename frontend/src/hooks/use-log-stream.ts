@@ -35,9 +35,16 @@ export function useLogStream({
     if (wsRef.current?.readyState === WebSocket.OPEN || wsRef.current?.readyState === WebSocket.CONNECTING) return;
     shouldReconnectRef.current = true;
 
+    // Next.js cannot proxy WebSocket upgrades; on the direct frontend port (3000)
+    // target the backend's published port (8080). Same-origin behind a proxy.
+    const wsProto = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const wsHost =
+      window.location.port === "3000"
+        ? `${window.location.hostname}:8080`
+        : window.location.host;
     const wsUrl = process.env.NEXT_PUBLIC_WS_URL
       ? `${process.env.NEXT_PUBLIC_WS_URL}/api/v1/ws/logs?token=${accessToken}`
-      : `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/api/v1/ws/logs?token=${accessToken}`;
+      : `${wsProto}//${wsHost}/api/v1/ws/logs?token=${accessToken}`;
 
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;

@@ -66,7 +66,15 @@ export function useWebSocket({
       wsUrl = `${wsOverride}${url}?token=${freshToken}`;
     } else {
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      wsUrl = `${protocol}//${window.location.host}${url}?token=${freshToken}`;
+      // Next.js cannot proxy WebSocket upgrades. When the app is opened directly
+      // on the frontend port (3000), target the backend's published port (8080)
+      // on the same host. Behind a reverse proxy (Caddy/TLS on 80/443) the WS
+      // works same-origin. Set NEXT_PUBLIC_WS_URL for any non-default topology.
+      const host =
+        window.location.port === "3000"
+          ? `${window.location.hostname}:8080`
+          : window.location.host;
+      wsUrl = `${protocol}//${host}${url}?token=${freshToken}`;
     }
 
     const ws = new WebSocket(wsUrl);
