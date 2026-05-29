@@ -54,7 +54,7 @@ export default function KnowledgeGraphPage() {
     <div className="space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Wissensgraph</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Wissensgraph</h1>
           <p className="text-sm text-muted-foreground">Serverseitig aggregierte Beziehungen zwischen Nodes, VMs, Diensten, Ports und Abhängigkeiten.</p>
         </div>
         <Button variant="outline" size="sm" onClick={load} disabled={isLoading}>

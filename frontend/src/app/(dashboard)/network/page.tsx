@@ -101,7 +101,7 @@ export default function ClusterNetworkPage() {
           <Network className="h-5 w-5 text-blue-500" />
         </div>
         <div className="flex-1 min-w-0">
-          <h1 className="text-2xl font-bold tracking-tight">Netzwerk-Analyse</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Netzwerk-Analyse</h1>
           <p className="text-sm text-muted-foreground">Cluster-weite Port- und Geräteerkennung</p>
         </div>
       </div>

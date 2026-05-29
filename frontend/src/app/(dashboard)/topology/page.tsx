@@ -80,7 +80,7 @@ export default function TopologyPage() {
     return (
       <div className="space-y-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Cluster-Topologie</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Cluster-Topologie</h1>
           <p className="text-sm text-muted-foreground">
             Nodes und VMs im Cluster auf einen Blick.
           </p>
@@ -103,7 +103,7 @@ export default function TopologyPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Cluster-Topologie</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Cluster-Topologie</h1>
         <p className="text-sm text-muted-foreground">
           Nodes und VMs im Cluster auf einen Blick.
         </p>

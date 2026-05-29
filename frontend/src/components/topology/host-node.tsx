@@ -25,7 +25,7 @@ interface HostNodeData {
 function getStatusBorderClass(status: string): string {
   switch (status) {
     case "online":
-      return "border-green-500/60";
+      return "border-emerald-500/60";
     case "warning":
       return "border-amber-500/60";
     case "critical":
@@ -38,7 +38,7 @@ function getStatusBorderClass(status: string): string {
 function getStatusDotClass(status: string): string {
   switch (status) {
     case "online":
-      return "bg-green-500";
+      return "bg-emerald-500";
     case "warning":
       return "bg-amber-500";
     case "critical":
@@ -58,14 +58,14 @@ function HostNodeComponent({ data }: NodeProps) {
       className={cn(
         "rounded-2xl border-2 bg-card shadow-lg min-w-[200px] transition-all duration-300",
         getStatusBorderClass(d.status),
-        online && "shadow-green-500/5 dark:shadow-green-500/10"
+        online && "shadow-emerald-500/5 dark:shadow-emerald-500/10"
       )}
     >
       <Handle type="target" position={Position.Top} className="!bg-muted-foreground !w-2.5 !h-2.5 !border-2 !border-background" />
 
       <div className="px-4 py-3">
         <div className="flex items-center gap-2.5 mb-1">
-          <div className={cn("h-2.5 w-2.5 rounded-full shrink-0 ring-2 ring-offset-1 ring-offset-card", getStatusDotClass(d.status), online ? "ring-green-500/30" : "ring-transparent")} />
+          <div className={cn("h-2.5 w-2.5 rounded-full shrink-0 ring-2 ring-offset-1 ring-offset-card", getStatusDotClass(d.status), online ? "ring-emerald-500/30" : "ring-transparent")} />
           <Server className="h-4 w-4 text-muted-foreground shrink-0" />
           <span className="font-semibold text-sm truncate flex-1">{d.label}</span>
           {d.onToggleExpand && (
@@ -98,7 +98,7 @@ function HostNodeComponent({ data }: NodeProps) {
                   <div
                     className={cn(
                       "h-full rounded-full transition-all duration-500",
-                      d.cpuUsage >= 90 ? "bg-red-500" : d.cpuUsage >= 75 ? "bg-amber-500" : "bg-blue-500"
+                      d.cpuUsage >= 90 ? "bg-red-500" : d.cpuUsage >= 75 ? "bg-amber-500" : "bg-emerald-500"
                     )}
                     style={{ width: `${Math.min(d.cpuUsage, 100)}%` }}
                   />
@@ -113,7 +113,7 @@ function HostNodeComponent({ data }: NodeProps) {
                   <div
                     className={cn(
                       "h-full rounded-full transition-all duration-500",
-                      d.memoryPercent >= 90 ? "bg-red-500" : d.memoryPercent >= 75 ? "bg-amber-500" : "bg-purple-500"
+                      d.memoryPercent >= 90 ? "bg-red-500" : d.memoryPercent >= 75 ? "bg-amber-500" : "bg-emerald-500"
                     )}
                     style={{ width: `${Math.min(d.memoryPercent, 100)}%` }}
                   />

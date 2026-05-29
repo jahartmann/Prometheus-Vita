@@ -28,37 +28,39 @@ export function formatPercentage(value: number, decimals = 1): string {
   return `${value.toFixed(decimals)}%`;
 }
 
-// Status color classes for consistent usage across the app
+// Canonical severity palette — kept in sync with Badge/StatusBadge so a colour
+// means the same thing everywhere: emerald = ok/healthy, amber = warning,
+// red = critical/error, sky = info.
 export const statusColors = {
-  success: "text-green-500 dark:text-green-400",
+  success: "text-emerald-500 dark:text-emerald-400",
   error: "text-red-500 dark:text-red-400",
   warning: "text-amber-500 dark:text-amber-400",
-  info: "text-blue-500 dark:text-blue-400",
+  info: "text-sky-500 dark:text-sky-400",
   neutral: "text-muted-foreground",
 } as const;
 
 export const statusBgColors = {
-  success: "bg-green-500/10 text-green-600 dark:text-green-400",
+  success: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
   error: "bg-red-500/10 text-red-600 dark:text-red-400",
   warning: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-  info: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+  info: "bg-sky-500/10 text-sky-600 dark:text-sky-400",
   neutral: "bg-muted text-muted-foreground",
 } as const;
 
 export function getStatusColor(isOnline: boolean): string {
-  return isOnline ? "text-green-500" : "text-red-500";
+  return isOnline ? "text-emerald-500" : "text-red-500";
 }
 
 export function getUsageColor(percentage: number): string {
   if (percentage >= 90) return "text-red-500";
   if (percentage >= 75) return "text-amber-500";
-  return "text-green-500";
+  return "text-emerald-500";
 }
 
 export function getUsageBgColor(percentage: number): string {
   if (percentage >= 90) return "bg-red-500";
   if (percentage >= 75) return "bg-amber-500";
-  return "bg-green-500";
+  return "bg-emerald-500";
 }
 
 /**

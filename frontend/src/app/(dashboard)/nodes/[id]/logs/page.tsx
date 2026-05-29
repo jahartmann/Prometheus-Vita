@@ -138,7 +138,7 @@ export default function NodeLogsPage() {
           </Button>
         </Link>
         <div className="flex-1 min-w-0">
-          <h1 className="text-2xl font-bold tracking-tight truncate">
+          <h1 className="text-2xl font-semibold tracking-tight truncate">
             Log Viewer{node ? ` — ${node.name}` : ""}
           </h1>
           <p className="text-sm text-zinc-400">

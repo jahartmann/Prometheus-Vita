@@ -195,7 +195,7 @@ export default function BriefingPage() {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">{getGreeting()}</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{getGreeting()}</h1>
           <p className="text-muted-foreground">Lade Briefing...</p>
         </div>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -215,7 +215,7 @@ export default function BriefingPage() {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">{getGreeting()}</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{getGreeting()}</h1>
           <p className="text-muted-foreground">Infrastruktur-Lagebrief</p>
         </div>
         <EmptyState
@@ -302,7 +302,7 @@ export default function BriefingPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">{getGreeting()}</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{getGreeting()}</h1>
           <p className="text-muted-foreground">
             {new Date().toLocaleDateString("de-DE", {
               weekday: "long",
