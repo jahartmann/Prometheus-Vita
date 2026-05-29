@@ -35,7 +35,7 @@ function inferSeverity(line: string): string {
 const SEVERITY_COLORS: Record<string, string> = {
   critical: "text-red-500 animate-pulse font-bold",
   error: "text-red-400",
-  warning: "text-yellow-400",
+  warning: "text-amber-400",
   info: "text-zinc-300",
   debug: "text-zinc-500",
 };

@@ -30,7 +30,7 @@ const LINE_COUNTS = [50, 100, 200, 500, 1000];
 const SEVERITY_COLORS: Record<string, string> = {
   critical: "text-red-500 animate-pulse font-bold",
   error: "text-red-400",
-  warning: "text-yellow-400",
+  warning: "text-amber-400",
   info: "text-zinc-300",
   debug: "text-zinc-500",
 };
@@ -162,33 +162,33 @@ export default function NodeLogsPage() {
         </Card>
         <Card>
           <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-yellow-500/10">
-              <AlertTriangle className="h-4 w-4 text-yellow-500" />
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/10">
+              <AlertTriangle className="h-4 w-4 text-amber-500" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-yellow-500">{counts.warnings}</p>
+              <p className="text-2xl font-bold text-amber-500">{counts.warnings}</p>
               <p className="text-xs text-zinc-400">Warnings</p>
             </div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-orange-500/10">
-              <Activity className="h-4 w-4 text-orange-500" />
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/10">
+              <Activity className="h-4 w-4 text-amber-500" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-orange-400">{counts.critical}</p>
+              <p className="text-2xl font-bold text-amber-400">{counts.critical}</p>
               <p className="text-xs text-zinc-400">Critical</p>
             </div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-500/10">
-              <Zap className="h-4 w-4 text-blue-500" />
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sky-500/10">
+              <Zap className="h-4 w-4 text-sky-500" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-blue-400">{filteredLines.length}</p>
+              <p className="text-2xl font-bold text-sky-400">{filteredLines.length}</p>
               <p className="text-xs text-zinc-400">Sichtbar</p>
             </div>
           </CardContent>
@@ -246,7 +246,7 @@ export default function NodeLogsPage() {
           <span className="text-xs text-zinc-400">
             Live-Stream
             {liveMode && (
-              <span className={isConnected ? "text-green-500" : "text-yellow-500"}>
+              <span className={isConnected ? "text-green-500" : "text-amber-500"}>
                 {" "}{isConnected ? "● verbunden" : "○ verbinde…"}
               </span>
             )}
@@ -302,7 +302,7 @@ export default function NodeLogsPage() {
             <div
               key={i}
               className={`px-1 py-0.5 leading-relaxed break-all ${colorClass} ${
-                isHighlighted && filter ? "bg-yellow-500/10" : ""
+                isHighlighted && filter ? "bg-amber-500/10" : ""
               }`}
             >
               {line}
