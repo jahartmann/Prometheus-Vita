@@ -88,6 +88,13 @@ function ScanStatusBadge({ group }: { group: VMPortGroup }) {
       </Badge>
     );
   }
+  if (group.scan_status === "external") {
+    return (
+      <Badge variant="outline" className="text-[10px] text-sky-600 border-sky-300 shrink-0">
+        Extern gescannt
+      </Badge>
+    );
+  }
   return (
     <Badge variant="outline" className="text-[10px] text-red-600 border-red-300 shrink-0">
       <AlertTriangle className="mr-1 h-3 w-3" />
@@ -125,7 +132,10 @@ function PortGroup({
     (p) => p.state === "ESTAB" || p.state === "ESTABLISHED"
   ).length;
 
-  const hasError = group.scan_status !== "ok";
+  const isExternal = group.scan_status === "external";
+  // An "external" scan is a successful, agent-free result — render its ports
+  // like "ok" rather than as an error.
+  const hasError = group.scan_status !== "ok" && !isExternal;
 
   if (filter && filteredPorts.length === 0 && !hasError) return null;
 
@@ -188,6 +198,9 @@ function PortGroup({
 
       {expanded && !hasError && filteredPorts.length > 0 && (
         <div className="border-t">
+          {isExternal && group.scan_error && (
+            <p className="px-4 pt-3 text-xs text-sky-600 dark:text-sky-400">{group.scan_error}</p>
+          )}
           <Table>
             <TableHeader>
               <TableRow>

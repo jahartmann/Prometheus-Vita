@@ -1068,6 +1068,15 @@ func (s *Service) GetGuestOSFamily(ctx context.Context, nodeID uuid.UUID, vmid i
 	return family
 }
 
+// GetVMConfig returns the raw Proxmox VM/CT configuration map (net0, etc.).
+func (s *Service) GetVMConfig(ctx context.Context, nodeID uuid.UUID, vmid int, vmType string) (map[string]interface{}, error) {
+	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
+	if err != nil {
+		return nil, err
+	}
+	return client.GetVMConfig(ctx, pveNode, vmid, vmType)
+}
+
 func (s *Service) GetTermProxy(ctx context.Context, nodeID uuid.UUID, vmid int, vmType string) (*proxmox.VNCProxyResponse, error) {
 	_, client, pveNode, err := s.getClientAndNode(ctx, nodeID)
 	if err != nil {

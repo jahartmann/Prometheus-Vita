@@ -360,7 +360,7 @@ export interface VMPortGroup {
   vmid: number;
   name: string;
   type: "node" | "qemu" | "lxc";
-  scan_status: "ok" | "no_agent" | "error";
+  scan_status: "ok" | "no_agent" | "error" | "external";
   scan_error?: string;
   ports: NodePort[];
 }
