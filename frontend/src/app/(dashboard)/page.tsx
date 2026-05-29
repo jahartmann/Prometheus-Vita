@@ -2,7 +2,6 @@
 
 import { useEffect, useRef } from "react";
 import { AgentActivityFeed } from "@/components/dashboard/agent-activity-feed";
-import { AttentionBanner } from "@/components/dashboard/attention-banner";
 import { BriefingWidget } from "@/components/dashboard/briefing-widget";
 import { DashboardOverview } from "@/components/dashboard/dashboard-overview";
 import { SecurityWidget } from "@/components/dashboard/security-widget";
@@ -52,7 +51,6 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      <AttentionBanner />
       <DashboardOverview />
 
       <section className="grid gap-4 xl:grid-cols-2">
